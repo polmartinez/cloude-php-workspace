@@ -33,6 +33,7 @@ cloude-php-workspace/
     Arr.php              # Array helpers with dot-notation access
     Bootstrap.php        # One-call front-controller bootstrap
     Cli.php              # Argv parsing + colored output for app/cli/ scripts
+    Collection.php       # Fluent, chainable wrapper around an array
     Config.php
     EventLog.php
     Format.php           # Yaml / json / xml / markdown encode-decode dispatcher
@@ -64,6 +65,7 @@ cloude-php-workspace/
 | Class | Responsibility |
 |---|---|
 | `Cloude\Arr` | Array helpers with dot-notation: `get/set/has/forget/pluck/only/except/dot/undot/merge` |
+| `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
 | `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, route groups, and `get/post/put/patch/delete/any` helpers |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
@@ -266,15 +268,39 @@ $html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");
 ### `Cloude\Str`
 
 ```php
+// Basic manipulation
 Str::upTo('hello world', ' ');           // 'hello'
 Str::truncate('long text', 4);           // 'long...'
+Str::words('a b c d e', 3);              // 'a b c...'
+Str::after('foo.bar.baz', '.');          // 'bar.baz'
+Str::afterLast('foo.bar.baz', '.');      // 'baz'
+Str::between('hi [there] go', '[', ']'); // 'there'
+Str::squish("  a\n  b\t  c ");           // 'a b c'
+Str::mask('pedro@example.com', '*', 2);  // 'pe***************'
+Str::mask('+34600123456', '*', 4, -3);   // '+346*****456'
+
+// Slugs / transliteration
 Str::slug('Hello World');                // 'hello-world'
 Str::ascii('Análisis Político');         // 'Analisis Politico'
 Str::ascii('Москва');                    // 'Moskva'
+
+// Case conversion
+Str::camel('user_profile_id');           // 'userProfileId'
+Str::pascal('user_profile_id');          // 'UserProfileId'
+Str::snake('userProfileId');             // 'user_profile_id'
+Str::kebab('userProfileId');             // 'user-profile-id'
+
+// Random / hash
+Str::random();                           // 22-char URL-safe token
+Str::random(32);                         // 43-char URL-safe token
+Str::uuid();                             // RFC 4122 v4
+Str::hash('hola');                       // sha256 hex
+Str::hash('hola', 'sha1');               // any hash_algos() entry
 ```
 
 `ascii()` transliterates without lowercasing or stripping punctuation —
 useful for fuzzy matching and search indexes. For URL slugs use `slug()`.
+`random()` and `uuid()` use `random_bytes` (cryptographically strong).
 
 ### `Cloude\Arr`
 
@@ -310,6 +336,60 @@ Arr::merge(['db' => ['host' => 'a', 'port' => 1]], ['db' => ['port' => 2]]);
 Convention: associative arrays are walked recursively, list arrays
 (numeric `0..n` keys) are treated as leaves — matching how JSON decodes
 objects vs arrays.
+
+### `Cloude\Collection`
+
+Fluent, chainable wrapper around an array. The 80% subset of
+doctrine/collections / Laravel Collection that you actually use,
+without becoming the framework.
+
+```php
+use Cloude\Collection;
+
+$top = Collection::make($users)
+    ->filter(fn ($u) => $u['active'])
+    ->sortBy('score', descending: true)
+    ->take(3)
+    ->pluck('name', 'id')
+    ->all();
+```
+
+**Terminals** (return scalars / arrays):
+
+```php
+$c->all();                    // array
+$c->count();                  // int
+$c->isEmpty(); $c->isNotEmpty();
+$c->first(); $c->first(fn ($v) => ...);
+$c->last();
+$c->contains($value);
+$c->every(callable);  $c->some(callable);
+$c->reduce(callable, $initial);
+$c->sum('column'); $c->avg('column'); $c->min('col'); $c->max('col');
+```
+
+**Chainable** (return a new Collection):
+
+```php
+$c->map(fn ($v, $k) => ...);
+$c->filter(?callable);  $c->reject(callable);
+$c->each(callable);                        // returns $this; false stops
+$c->pluck('column', 'key');                // dot-paths supported
+$c->keyBy('column' | callable);
+$c->groupBy('column' | callable);
+$c->sortBy('column' | callable, descending: false);
+$c->sort(?callable);
+$c->reverse();
+$c->take(int);  $c->slice($offset, $length);
+$c->chunk(int);
+$c->unique(?'column');
+$c->values();  $c->keys();
+$c->merge(...$others);
+```
+
+`Collection` implements `ArrayAccess`, `Countable` and is iterable, so
+`$c[0]`, `count($c)` and `foreach ($c as ...)` all work as expected.
+Use `make()` to construct from arrays, generators, or other collections.
 
 ### `Cloude\Bootstrap`
 
@@ -691,8 +771,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.9.0 -m "v0.9.0"
-   git push origin v0.9.0
+   git tag -a v0.10.0 -m "v0.10.0"
+   git push origin v0.10.0
    ```
 
 After publication, any project can install it with:
