@@ -30,6 +30,7 @@ cloude-php-workspace/
       Parser.php         # In-house markdown → HTML parser (no deps)
       File.php           # Disk I/O with transparent gzip
       Server.php         # HTTP serve with 304 / canonical / gzip
+    Arr.php              # Array helpers with dot-notation access
     Bootstrap.php        # One-call front-controller bootstrap
     Cli.php              # Argv parsing + colored output for app/cli/ scripts
     Config.php
@@ -62,7 +63,8 @@ cloude-php-workspace/
 
 | Class | Responsibility |
 |---|---|
-| `Cloude\Router` | Router with `/{param}` patterns and `get/post/put/patch/delete/any` helpers |
+| `Cloude\Arr` | Array helpers with dot-notation: `get/set/has/forget/pluck/only/except/dot/undot/merge` |
+| `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, route groups, and `get/post/put/patch/delete/any` helpers |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
 | `Cloude\Markdown` | Frontmatter + body parser. Body rendered via `Markdown\Parser` by default; swappable with `useParser()` |
@@ -157,7 +159,38 @@ $router->setNotFound(fn() => ...);            // custom 404
 $router->dispatch();
 ```
 
-`{name}` segments are extracted into an associative array and passed as the first handler argument.
+`{name}` segments are extracted into an associative array and passed as the
+first handler argument.
+
+**Pattern syntax:**
+
+| Form | Meaning |
+|---|---|
+| `/{name}` | captures any non-slash segment as `$params['name']` |
+| `/{name?}` | optional — the segment **and its leading `/`** can be absent |
+| `/{name:regex}` | constrains the capture to `regex` (e.g. `\d+`, `[a-z]{2}`) |
+| `/{name?:regex}` | optional + constrained |
+
+Examples:
+
+```php
+$router->get('/users/{id:\d+}',     $h);   // matches /users/42, not /users/abc
+$router->get('/posts/{slug?}',      $h);   // matches /posts AND /posts/hello
+$router->get('/{lang:(es|en)}/...', $h);   // enforces 'es' or 'en' in URL
+```
+
+**Route groups** stack a URL prefix onto a block of routes. Nestable.
+
+```php
+$router->group('/api/v1', function (Router $r) {
+    $r->get('/parties',          $list);     // → /api/v1/parties
+    $r->get('/parties/{slug}',   $show);     // → /api/v1/parties/{slug}
+
+    $r->group('/admin', function (Router $r) {
+        $r->get('/stats', $stats);           // → /api/v1/admin/stats
+    });
+});
+```
 
 ### `Cloude\Input`
 
@@ -242,6 +275,41 @@ Str::ascii('Москва');                    // 'Moskva'
 
 `ascii()` transliterates without lowercasing or stripping punctuation —
 useful for fuzzy matching and search indexes. For URL slugs use `slug()`.
+
+### `Cloude\Arr`
+
+Array helpers with dot-notation access. The handful of methods you actually
+reach for when working with deeply-nested PHP arrays.
+
+```php
+use Cloude\Arr;
+
+Arr::get($cfg, 'db.read.host', 'localhost');     // dot-path with default
+Arr::set($cfg, 'db.read.port', 5432);            // creates intermediates
+Arr::has($cfg, 'db.read');                       // bool
+Arr::forget($cfg, 'db.read.port');               // unset
+
+// Working with row lists
+Arr::pluck($users, 'name');                      // [0 => 'Ana', 1 => 'Bea']
+Arr::pluck($users, 'name', 'id');                // [42 => 'Ana', 51 => 'Bea']
+Arr::pluck($events, 'meta.title');               // dot-path supported
+
+// Subset / inverse
+Arr::only($row, ['id', 'name']);
+Arr::except($row, ['password', 'salt']);
+
+// Flatten / inflate
+Arr::dot(['a' => ['b' => 1]]);                   // ['a.b' => 1]
+Arr::undot(['a.b' => 1]);                        // ['a' => ['b' => 1]]
+
+// Recursive merge — later overrides earlier; lists replaced wholesale
+Arr::merge(['db' => ['host' => 'a', 'port' => 1]], ['db' => ['port' => 2]]);
+// => ['db' => ['host' => 'a', 'port' => 2]]
+```
+
+Convention: associative arrays are walked recursively, list arrays
+(numeric `0..n` keys) are treated as leaves — matching how JSON decodes
+objects vs arrays.
 
 ### `Cloude\Bootstrap`
 
@@ -623,8 +691,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.7.0 -m "v0.7.0"
-   git push origin v0.7.0
+   git tag -a v0.9.0 -m "v0.9.0"
+   git push origin v0.9.0
    ```
 
 After publication, any project can install it with:
