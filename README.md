@@ -24,6 +24,16 @@ cloude-php-workspace/
     View.php
     Str.php
     Markdown.php
+    Config.php
+    EventLog.php
+    Http/
+      Cache.php
+      AssetUrl.php
+      ErrorHandler.php
+    Md/
+      File.php
+      Server.php
+    views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   example/               # Runnable sample app (see example/README.md)
   composer.json          # Package manifest (name: cloude/framework)
@@ -38,10 +48,17 @@ cloude-php-workspace/
 | Class | Responsibility |
 |---|---|
 | `Cloude\Router` | Router with `/{param}` patterns and `get/post/put/patch/delete/any` helpers |
-| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
+| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON; `langPrefix()` for `/es`, `/en` URLs |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
 | `Cloude\Markdown` | Markdown parser with YAML frontmatter (requires `erusev/parsedown`) |
 | `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()` |
+| `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
+| `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
+| `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
+| `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
+| `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
+| `Cloude\Md\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
+| `Cloude\Md\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
 
 ## Quick start
 
@@ -169,6 +186,105 @@ Str::truncate('long text', 4);        // 'long...'
 Str::slug('Hello World');             // 'hello-world'
 ```
 
+### `Cloude\Config`
+
+Bootstrap helpers for `app/config.php`. Reads from `$_ENV / $_SERVER / getenv()`.
+
+```php
+Config::env('OPENAI_API_KEY');                 // ?string
+Config::boolEnv('DEBUG', false);               // bool
+
+Config::defineBaseUrl([                        // → defines BASE_URL
+    'www.example.com',
+    'example.com',
+    'localhost',
+]);
+Config::defineDebug();                         // → defines DEBUG
+```
+
+`defineBaseUrl()` validates `$_SERVER['HTTP_HOST']` against the allowlist
+(matching hostname only, port preserved) to prevent host-header injection.
+A non-allowed host falls back to `localhost`.
+
+### `Cloude\Http\ErrorHandler`
+
+Drop-in 503 handler. Treats unhandled exceptions as temporary unavailability
+(crawlers retry instead of deindexing). Negotiates HTML / JSON / `.md`
+based on `Accept` and URL extension.
+
+```php
+ob_start();
+\Cloude\Http\ErrorHandler::register(
+    debug:    DEBUG,
+    viewBase: dirname(__DIR__) . '/app/views', // optional override
+);
+```
+
+In debug mode, HTML responses include source snippet and stack trace.
+The HTML response uses `500.html.php` (or `500-debug.html.php` in debug);
+if `viewBase` is set and the file exists there, it overrides the framework default.
+
+### `Cloude\Http\Cache`
+
+```php
+Cache::ok();                          // long CDN TTL on 200
+Cache::notFound();                    // short CDN TTL on 404
+Cache::unavailable();                 // no-store + Retry-After on 5xx
+
+if (Cache::conditionalGet(filemtime($path))) {
+    return; // 304 sent
+}
+```
+
+### `Cloude\Http\AssetUrl`
+
+```php
+AssetUrl::configure(BASE_URL, __DIR__ . '/../www/assets');
+echo AssetUrl::get('css/styles.css');
+// → "{BASE_URL}/{mtime}/assets/css/styles.css"
+```
+
+Apache rewrite required:
+
+```apacheconf
+RewriteRule ^[0-9]+/assets/(.*)$ /assets/$1 [L]
+```
+
+### `Cloude\Md\File`
+
+Disk I/O for markdown with transparent gzip. Pass plain `.md` paths;
+the class prefers `.md.gz` if it exists.
+
+```php
+File::exists($path);                   // bool — .md or .md.gz
+File::read($path);                     // string — auto-decompressed
+File::readPrefix($path, 4096);         // first N bytes (for frontmatter)
+File::mtime($path);                    // int
+File::write($path, $content);          // writes .md.gz, removes .md
+```
+
+### `Cloude\Md\Server`
+
+Serves a markdown file with proper HTTP semantics (404 / 304 / canonical /
+gzip passthrough when the client supports it).
+
+```php
+\Cloude\Md\Server::serve($path, BASE_URL . '/articles/foo');
+```
+
+### `Cloude\EventLog`
+
+Fire-and-forget webhook POST for usage analytics. Reads from `EVENT_LOG_WEBHOOK`
+constant if defined, or from `EventLog::configure()`.
+
+```php
+EventLog::configure('https://webhook.site/<uuid>');
+EventLog::send(['event' => 'page_view', 'path' => '/foo']);
+```
+
+Network call is deferred to `register_shutdown_function` and uses
+`fastcgi_finish_request()` when available — zero latency to the user.
+
 ## Development
 
 ```bash
@@ -186,8 +302,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.1.0 -m "Initial release"
-   git push origin v0.1.0
+   git tag -a v0.2.0 -m "v0.2.0"
+   git push origin v0.2.0
    ```
 
 After publication, any project can install it with:

@@ -86,4 +86,20 @@ class Input
         }
         return $_SERVER['REMOTE_ADDR'] ?? '';
     }
+
+    /**
+     * Returns the URI's leading segment if it matches one of $allowed.
+     * Useful for sites with a /{lang}/... prefix. Returns null when the
+     * leading segment is not in the list.
+     *
+     *   Input::langPrefix(['es','en']) // /en/foo → 'en' ; / → null
+     *
+     * @param array<int,string> $allowed
+     */
+    public static function langPrefix(array $allowed): ?string
+    {
+        $parts = explode('/', trim(self::uri(), '/'));
+        $first = $parts[0] ?? '';
+        return in_array($first, $allowed, true) ? $first : null;
+    }
 }
