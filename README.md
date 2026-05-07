@@ -10,6 +10,26 @@ A minimalist PHP micro-framework. No magic, no service container, no database. D
   done in-house. `ext-intl` improves slug quality when present, otherwise an
   iconv-based fallback is used.
 
+## Built with Claude Code
+
+Cloude is shaped while pair-coding with [**Claude Code**](https://claude.com/claude-code) —
+Anthropic's terminal-native AI coding agent. The "one file per class, no magic,
+no DSL, no annotations" rules aren't aesthetic preferences: they exist so the
+agent (and you) can reason about any piece of the framework without loading a
+runtime in your head.
+
+Try it:
+
+```bash
+composer require cloude/framework
+claude
+```
+
+Then ask Claude Code to scaffold a front controller with `Cloude\Bootstrap`,
+expose an MCP server with `Cloude\Mcp\Server`, or migrate a routes file into
+nested groups. The surface area is small enough that the agent usually nails
+it in one prompt.
+
 ## Installation
 
 ```bash
@@ -810,9 +830,10 @@ composer require cloude/framework
 ## Philosophy
 
 - **No magic**: the code you read is the code that runs. No generators, annotations or proxies.
-- **Small classes**: each class fits in a file you can read in one sitting.
+- **Small classes**: each class fits in a file you can read in one sitting — and so can [Claude Code](https://claude.com/claude-code).
 - **No required dependencies**: the core pulls nothing in. `ext-intl` is recommended for slug transliteration but not required.
 - **No global state**: no container, no singletons. Static classes are just namespaces for functions.
+- **AI-readable by design**: explicit APIs, no DSL, no inheritance webs. The framework is small on purpose so an agent can edit any piece without missing context.
 
 ## License
 
