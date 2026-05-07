@@ -50,6 +50,10 @@ cloude-php-workspace/
       Parser.php         # In-house markdown → HTML parser (no deps)
       File.php           # Disk I/O with transparent gzip
       Server.php         # HTTP serve with 304 / canonical / gzip
+    Data/
+      Repository.php     # Abstract base for "directory of files" repositories
+      JsonRepository.php # One .json per entity, slug-addressed
+      MarkdownRepository.php # One .md(.gz) per entity, slug-addressed
     Arr.php              # Array helpers with dot-notation access
     Bootstrap.php        # One-call front-controller bootstrap
     Cli.php              # Argv parsing + colored output for app/cli/ scripts
@@ -111,6 +115,14 @@ cloude-php-workspace/
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / `.md` negotiation, debug mode |
 | `Cloude\Http\Response` | One-call response helpers: `json`, `html`, `xml`, `markdown`, `redirect`, `notFound`, `noContent` |
+
+### `Cloude\Data\…`
+
+| Class | Responsibility |
+|---|---|
+| `Cloude\Data\Repository` | Abstract base for directory-of-files repositories. Subclasses implement `find` / `slugs` / `path`; `exists`, `findOr`, `all` and the `transform()` hook come for free |
+| `Cloude\Data\JsonRepository` | One `.json` per entity. Atomic writes, per-request read cache via `JsonFile` |
+| `Cloude\Data\MarkdownRepository` | One `.md` (or `.md.gz`) per entity. Read returns frontmatter + parsed HTML via `Markdown::parse` |
 
 ### `Cloude\Markdown\…`
 
@@ -387,9 +399,9 @@ objects vs arrays.
 
 ### `Cloude\Collection`
 
-Fluent, chainable wrapper around an array. The 80% subset of
-doctrine/collections / Laravel Collection that you actually use,
-without becoming the framework.
+Fluent, chainable wrapper around an array — the small set of pipeline
+operations (`map`, `filter`, `pluck`, `groupBy`, `sortBy`, …) that turn
+data shuffling from nested loops into a one-line read.
 
 ```php
 use Cloude\Collection;
@@ -438,6 +450,69 @@ $c->merge(...$others);
 `Collection` implements `ArrayAccess`, `Countable` and is iterable, so
 `$c[0]`, `count($c)` and `foreach ($c as ...)` all work as expected.
 Use `make()` to construct from arrays, generators, or other collections.
+
+### `Cloude\Data\Repository` and friends
+
+A "directory of files" data layer for the typical Cloude project: every
+entity is one file (`.json` or `.md`), addressed by slug. The framework
+ships an abstract base plus two ready-to-use concretes; projects subclass
+the concrete that fits their format and add domain finders on top.
+
+```php
+class PartiesRepo extends \Cloude\Data\JsonRepository
+{
+    public function __construct(string $country)
+    {
+        parent::__construct(DATA_DIR . "/scopes/{$country}/parties");
+    }
+
+    /** Normalize each row into a stable shape, slug included. */
+    protected function transform(array $data, string $slug): array
+    {
+        return [
+            'slug'   => $slug,
+            'name'   => $data['nombre']             ?? $slug,
+            'family' => $data['familia_ideologica'] ?? null,
+        ] + $data;
+    }
+
+    public function byFamily(string $family): \Cloude\Collection
+    {
+        return $this->all()->filter(fn ($p) => $p['family'] === $family);
+    }
+}
+
+$parties = new PartiesRepo('espana');
+
+$parties->slugs();                     // ['psoe', 'pp', 'vox', ...]
+$parties->exists('psoe');              // bool
+$parties->find('psoe');                // ?array (null if missing)
+$parties->findOr('psoe', []);          // array (default if missing)
+$parties->all();                       // Cloude\Collection keyed by slug
+$parties->byFamily('left');            // Cloude\Collection
+$parties->write('new', [...]);         // atomic write (.json)
+```
+
+**Inherited from `Repository`:**
+`exists`, `findOr`, `all`, and the `transform($data, $slug)` hook for
+shape normalization. The default `transform()` attaches `_slug` so that
+`pluck`/`groupBy` results keep the slug accessible.
+
+**Implementations provided:**
+
+| Class | Path | Read | Write |
+|---|---|---|---|
+| `JsonRepository` | `{baseDir}/{slug}.json` | `JsonFile::read` (per-request cache) | `JsonFile::write` (atomic) |
+| `MarkdownRepository` | `{baseDir}/{slug}.md` (also reads `.md.gz`) | `Markdown::parse` (frontmatter + body) | `Markdown\File::write` (gzipped) |
+
+`MarkdownRepository::raw($slug)` returns the unparsed markdown source if
+you want to serve it verbatim. Both classes accept a custom file
+extension via the constructor; override `path()` to change the layout
+entirely (e.g. sharded sub-directories).
+
+`all()` returns a `Cloude\Collection`, so once you have a Repository
+the chainable pipeline is one method call away — see the
+[recipe](example/recipes/data.php) for the full pattern.
 
 ### `Cloude\Bootstrap`
 
@@ -860,6 +935,7 @@ deliberately doesn't wrap in a class:
 | [`jsonld.php`](example/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
 | [`mcp.php`](example/recipes/mcp.php) | Tiny MCP server with two tools and a resource catalogue using `Mcp\Server` |
 | [`tasks.php`](example/recipes/tasks.php) | CLI task runner with one inline task and one task class using `TaskRunner` |
+| [`data.php`](example/recipes/data.php) | Custom `JsonRepository` and `MarkdownRepository` subclasses with `transform()` and domain finders |
 
 Each recipe is a single self-contained file with comments — copy, paste, edit.
 
@@ -880,8 +956,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.11.0 -m "v0.11.0"
-   git push origin v0.11.0
+   git tag -a v0.12.0 -m "v0.12.0"
+   git push origin v0.12.0
    ```
 
 After publication, any project can install it with:
