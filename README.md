@@ -33,6 +33,7 @@ cloude-php-workspace/
     Bootstrap.php        # One-call front-controller bootstrap
     Config.php
     EventLog.php
+    Format.php           # Yaml / json / markdown encode-decode dispatcher
     JsonFile.php
     Http/
       Cache.php
@@ -64,6 +65,7 @@ cloude-php-workspace/
 | `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + ob_start + ErrorHandler + view base) |
 | `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
+| `Cloude\Format` | Yaml / json / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
@@ -371,6 +373,36 @@ gzip passthrough when the client supports it).
 \Cloude\Markdown\Server::serve($path, BASE_URL . '/articles/foo');
 ```
 
+### `Cloude\Format`
+
+One-stop conversion between strings and PHP arrays. Each top-level method
+dispatches by input type — string is decoded, array is encoded.
+
+```php
+use Cloude\Format;
+
+// JSON
+Format::json('{"a":1}');                   // ['a' => 1]
+Format::json(['a' => 1]);                  // '{"a":1}'
+Format::json(['a' => 1], pretty: true);    // pretty-printed
+
+// YAML (flat key:value, frontmatter-compatible)
+Format::yaml("title: Hi\nflag: true");     // ['title' => 'Hi', 'flag' => true]
+Format::yaml(['title' => 'Hi']);           // "title: Hi\n"
+
+// Markdown → HTML
+Format::markdown('# Hello **world**');     // "<h1>Hello <strong>world</strong></h1>\n"
+```
+
+Explicit helpers when you want a fixed return type or DI-friendly call:
+`Format::jsonDecode`, `Format::jsonEncode`, `Format::yamlDecode`,
+`Format::yamlEncode`. JSON helpers throw `\JsonException` on errors. YAML
+encoding throws `\InvalidArgumentException` for nested arrays or non-identifier
+keys (the YAML support is intentionally minimal — for nested data use JSON).
+
+`Cloude\Markdown::parse` (frontmatter + body) and `Cloude\JsonFile`
+delegate to `Format` internally, so behaviour stays consistent.
+
 ### `Cloude\JsonFile`
 
 Per-request cached, atomic-write helper for JSON files.
@@ -415,8 +447,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.4.0 -m "v0.4.0"
-   git push origin v0.4.0
+   git tag -a v0.5.0 -m "v0.5.0"
+   git push origin v0.5.0
    ```
 
 After publication, any project can install it with:

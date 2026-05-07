@@ -51,7 +51,7 @@ class Markdown
         if (str_starts_with(trim($content), '---')) {
             $parts = preg_split('/^---\s*$/m', $content, 3);
             if (count($parts) >= 3) {
-                $meta = self::parseYaml(trim($parts[1]));
+                $meta = Format::yamlDecode(trim($parts[1]));
                 $body = trim($parts[2]);
             }
         }
@@ -92,27 +92,4 @@ class Markdown
         return Markdown\Parser::toHtml($md);
     }
 
-    /**
-     * Minimal YAML parser: only supports single-line "key: value" pairs.
-     * Handles booleans true/false and single/double-quoted values.
-     *
-     * @return array<string,mixed>
-     */
-    private static function parseYaml(string $yaml): array
-    {
-        $result = [];
-        foreach (explode("\n", $yaml) as $line) {
-            if (preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/', trim($line), $m)) {
-                $value = trim($m[2], "\"'");
-                if ($value === 'true') {
-                    $value = true;
-                }
-                if ($value === 'false') {
-                    $value = false;
-                }
-                $result[$m[1]] = $value;
-            }
-        }
-        return $result;
-    }
 }

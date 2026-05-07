@@ -38,11 +38,11 @@ class JsonFile
         if ($raw === false) {
             return self::$cache[$path] = null;
         }
-        $decoded = json_decode($raw, true);
-        if (!is_array($decoded)) {
+        try {
+            return self::$cache[$path] = Format::jsonDecode($raw);
+        } catch (\JsonException) {
             return self::$cache[$path] = null;
         }
-        return self::$cache[$path] = $decoded;
     }
 
     /**
@@ -69,12 +69,9 @@ class JsonFile
      */
     public static function write(string $path, array $data, bool $pretty = false): bool
     {
-        $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-        if ($pretty) {
-            $flags |= JSON_PRETTY_PRINT;
-        }
-        $json = json_encode($data, $flags);
-        if ($json === false) {
+        try {
+            $json = Format::jsonEncode($data, $pretty);
+        } catch (\JsonException) {
             return false;
         }
 
