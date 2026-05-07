@@ -8,14 +8,11 @@
         "php": ">=8.3"
     },
     "require-dev": {
-        "erusev/parsedown": "^1.7",
-        "jbroadway/urlify": "dev-master",
         "phpunit/phpunit": "^11.0",
         "friendsofphp/php-cs-fixer": "^3.60"
     },
     "suggest": {
-        "erusev/parsedown": "Required to use Cloude\\Markdown.",
-        "jbroadway/urlify": "Improves slug transliteration in Cloude\\Str::slug() (an iconv-based fallback is used when missing)."
+        "ext-intl": "Improves transliteration in Cloude\\Str::slug() (an iconv-based fallback is used when missing)."
     },
     "autoload": {
         "psr-4": {

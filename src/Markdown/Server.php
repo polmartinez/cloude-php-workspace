@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cloude\Md;
+namespace Cloude\Markdown;
 
 use Cloude\Http\Cache;
 

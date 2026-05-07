@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cloude\Md;
+namespace Cloude\Markdown;
 
 /**
  * Disk I/O helper for Markdown content with transparent gzip support.

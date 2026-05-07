@@ -5,12 +5,32 @@ declare(strict_types=1);
 namespace Cloude;
 
 /**
- * Parsedown wrapper with support for a simple "key: value" YAML frontmatter.
+ * Markdown front-end: parses an optional "key: value" YAML frontmatter and
+ * converts the body to HTML.
  *
- * Required dependency: composer require erusev/parsedown
+ * The body is rendered with the in-house parser at `Cloude\Markdown\Parser`,
+ * which covers the editorial subset (headings, paragraphs, lists, code,
+ * blockquotes, bold/italic, links, images). No external dependency required.
+ *
+ * If you specifically need Parsedown's behaviour, install it and call
+ * `Markdown::useParser(fn($md) => (new \Parsedown())->text($md))` once at boot.
  */
 class Markdown
 {
+    /** @var (callable(string): string)|null */
+    private static $parser = null;
+
+    /**
+     * Override the body parser. Receives the raw markdown body, must return
+     * the rendered HTML. Pass null to restore the default in-house parser.
+     *
+     * @param (callable(string): string)|null $parser
+     */
+    public static function useParser(?callable $parser): void
+    {
+        self::$parser = $parser;
+    }
+
     /**
      * Parses YAML frontmatter + Markdown body.
      *
@@ -61,18 +81,15 @@ class Markdown
     }
 
     /**
-     * Markdown -> HTML via Parsedown.
-     *
-     * @throws \RuntimeException if Parsedown is not installed.
+     * Markdown → HTML. Uses the parser registered via `useParser()`, falling
+     * back to `Cloude\Markdown\Parser` (in-house, no dependencies).
      */
     public static function toHtml(string $md): string
     {
-        if (!class_exists(\Parsedown::class)) {
-            throw new \RuntimeException(
-                'Cloude\\Markdown requires erusev/parsedown. Install it: composer require erusev/parsedown'
-            );
+        if (self::$parser !== null) {
+            return (self::$parser)($md);
         }
-        return (new \Parsedown())->text($md);
+        return Markdown\Parser::toHtml($md);
     }
 
     /**

@@ -6,7 +6,9 @@ A minimalist PHP micro-framework. No magic, no service container, no database. D
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style
 - `declare(strict_types=1)` everywhere
-- Zero required runtime dependencies (Parsedown and URLify are optional)
+- Zero runtime dependencies. Markdown rendering and slug transliteration are
+  done in-house. `ext-intl` improves slug quality when present, otherwise an
+  iconv-based fallback is used.
 
 ## Installation
 
@@ -24,15 +26,17 @@ cloude-php-workspace/
     View.php
     Str.php
     Markdown.php
+    Markdown/
+      Parser.php         # In-house markdown → HTML parser (no deps)
+      File.php           # Disk I/O with transparent gzip
+      Server.php         # HTTP serve with 304 / canonical / gzip
     Config.php
     EventLog.php
+    JsonFile.php
     Http/
       Cache.php
       AssetUrl.php
       ErrorHandler.php
-    Md/
-      File.php
-      Server.php
     views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   example/               # Runnable sample app (see example/README.md)
@@ -50,15 +54,17 @@ cloude-php-workspace/
 | `Cloude\Router` | Router with `/{param}` patterns and `get/post/put/patch/delete/any` helpers |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON; `langPrefix()` for `/es`, `/en` URLs |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
-| `Cloude\Markdown` | Markdown parser with YAML frontmatter (requires `erusev/parsedown`) |
-| `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()` |
+| `Cloude\Markdown` | Frontmatter + body parser. Body rendered via `Markdown\Parser` by default; swappable with `useParser()` |
+| `Cloude\Markdown\Parser` | In-house markdown → HTML parser. No external dependency |
+| `Cloude\Markdown\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
+| `Cloude\Markdown\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
+| `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()` (uses `Transliterator` when available) |
 | `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
+| `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
 | `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
-| `Cloude\Md\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
-| `Cloude\Md\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
 
 ## Quick start
 
@@ -178,6 +184,34 @@ description: Short summary
 # Body...
 ```
 
+The body is rendered with the in-house `Cloude\Markdown\Parser`. To swap in a
+different engine (e.g. Parsedown if you want its full feature set):
+
+```php
+\Cloude\Markdown::useParser(fn (string $md) => (new \Parsedown())->text($md));
+```
+
+### `Cloude\Markdown\Parser`
+
+Minimalist Markdown → HTML parser. Covers the editorial subset:
+
+| Block | Inline |
+|---|---|
+| ATX headings (`#`–`######`) | `**bold**` / `__bold__` |
+| Paragraphs | `*italic*` / `_italic_` |
+| Unordered / ordered lists | `` `inline code` `` |
+| Fenced code blocks (` ``` `) | `[link](url "title")` |
+| Blockquotes (`>`) | `![img](src "title")` |
+| Horizontal rules (`---`, `***`) | Hard line break (`  \n` or `\\\n`) |
+
+Not supported (by design): tables, footnotes, definition lists, reference-style
+links, setext headings, nested lists. If you need any of these, plug Parsedown
+in via `Markdown::useParser()`.
+
+```php
+$html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");
+```
+
 ### `Cloude\Str`
 
 ```php
@@ -250,12 +284,14 @@ Apache rewrite required:
 RewriteRule ^[0-9]+/assets/(.*)$ /assets/$1 [L]
 ```
 
-### `Cloude\Md\File`
+### `Cloude\Markdown\File`
 
 Disk I/O for markdown with transparent gzip. Pass plain `.md` paths;
 the class prefers `.md.gz` if it exists.
 
 ```php
+use Cloude\Markdown\File;
+
 File::exists($path);                   // bool — .md or .md.gz
 File::read($path);                     // string — auto-decompressed
 File::readPrefix($path, 4096);         // first N bytes (for frontmatter)
@@ -263,13 +299,27 @@ File::mtime($path);                    // int
 File::write($path, $content);          // writes .md.gz, removes .md
 ```
 
-### `Cloude\Md\Server`
+### `Cloude\Markdown\Server`
 
 Serves a markdown file with proper HTTP semantics (404 / 304 / canonical /
 gzip passthrough when the client supports it).
 
 ```php
-\Cloude\Md\Server::serve($path, BASE_URL . '/articles/foo');
+\Cloude\Markdown\Server::serve($path, BASE_URL . '/articles/foo');
+```
+
+### `Cloude\JsonFile`
+
+Per-request cached, atomic-write helper for JSON files.
+
+```php
+use Cloude\JsonFile;
+
+JsonFile::read($path);                 // ?array — cached, null if missing/invalid
+JsonFile::readOr($path, []);           // array — never null
+JsonFile::write($path, $data);         // atomic (temp + rename); UNESCAPED_UNICODE | UNESCAPED_SLASHES
+JsonFile::write($path, $data, true);   // pretty-print
+JsonFile::clearCache();                // clear all, or pass a path
 ```
 
 ### `Cloude\EventLog`
@@ -302,8 +352,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.2.0 -m "v0.2.0"
-   git push origin v0.2.0
+   git tag -a v0.3.0 -m "v0.3.0"
+   git push origin v0.3.0
    ```
 
 After publication, any project can install it with:
@@ -316,7 +366,7 @@ composer require cloude/framework
 
 - **No magic**: the code you read is the code that runs. No generators, annotations or proxies.
 - **Small classes**: each class fits in a file you can read in one sitting.
-- **No required dependencies**: the core pulls nothing in. Parsedown and URLify are optional.
+- **No required dependencies**: the core pulls nothing in. `ext-intl` is recommended for slug transliteration but not required.
 - **No global state**: no container, no singletons. Static classes are just namespaces for functions.
 
 ## License

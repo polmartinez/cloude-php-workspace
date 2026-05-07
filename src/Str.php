@@ -30,25 +30,36 @@ class Str
     /**
      * Converts text into a URL-safe slug.
      *
-     * When jbroadway/urlify is installed, delegates to it (better
-     * transliteration). Otherwise falls back to a simple iconv-based
-     * transliteration.
+     * Transliteration order of preference:
+     *   1. ext-intl Transliterator (best Unicode coverage, handles Cyrillic,
+     *      Greek, CJK romanisation, etc.)
+     *   2. iconv ASCII//TRANSLIT//IGNORE (handles common Latin diacritics)
+     *   3. raw lowercase + regex strip (last resort)
      */
     public static function slug(string $text, int $maxLength = 128, string $separator = '-'): string
     {
-        if (class_exists(\URLify::class)) {
-            return \URLify::slug($text, $maxLength, $separator);
-        }
+        $text = trim($text);
 
-        $text = mb_strtolower(trim($text), 'UTF-8');
-        if (function_exists('iconv')) {
-            $translit = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-            if ($translit !== false) {
-                $text = $translit;
+        if (class_exists(\Transliterator::class)) {
+            $tr = \Transliterator::create('Any-Latin; Latin-ASCII; Lower()');
+            if ($tr !== null) {
+                $latin = $tr->transliterate($text);
+                if ($latin !== false) {
+                    $text = $latin;
+                }
+            }
+        } else {
+            $text = mb_strtolower($text, 'UTF-8');
+            if (function_exists('iconv')) {
+                $translit = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+                if ($translit !== false) {
+                    $text = $translit;
+                }
             }
         }
-        $text = preg_replace('/[^a-z0-9]+/i', $separator, $text);
-        $text = trim((string) $text, $separator);
+
+        $text = (string) preg_replace('/[^a-z0-9]+/i', $separator, $text);
+        $text = trim($text, $separator);
         if ($maxLength > 0 && strlen($text) > $maxLength) {
             $text = substr($text, 0, $maxLength);
             $text = rtrim($text, $separator);
