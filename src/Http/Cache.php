@@ -20,6 +20,12 @@ class Cache
     public static function ok(int $timeout = 86400): void
     {
         header(sprintf(
+            'Cache-Control: max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            $timeout,
+            $timeout,
+            $timeout,
+        ));
+        header(sprintf(
             'CDN-Cache-Control: max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
             $timeout,
             $timeout,
@@ -33,6 +39,7 @@ class Cache
      */
     public static function notFound(int $timeout = 120): void
     {
+        header('Cache-Control: max-age=' . $timeout);
         header('CDN-Cache-Control: max-age=' . $timeout);
     }
 
