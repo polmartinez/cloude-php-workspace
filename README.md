@@ -62,68 +62,94 @@ cloude-php-workspace/
 
 ## Components
 
+### Core
+
 | Class | Responsibility |
 |---|---|
 | `Cloude\Arr` | Array helpers with dot-notation: `get/set/has/forget/pluck/only/except/dot/undot/merge` |
-| `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
-| `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, route groups, and `get/post/put/patch/delete/any` helpers |
-| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
-| `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
-| `Cloude\Markdown` | Frontmatter + body parser. Body rendered via `Markdown\Parser` by default; swappable with `useParser()` |
-| `Cloude\Markdown\Parser` | In-house markdown → HTML parser. No external dependency |
-| `Cloude\Markdown\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
-| `Cloude\Markdown\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
-| `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()`, `ascii()` (uses `Transliterator` when available) |
-| `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + ob_start + ErrorHandler + view base) |
-| `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
+| `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + `ob_start` + `ErrorHandler` + view base) |
 | `Cloude\Cli` | Argv parsing + colored output for `app/cli/` scripts |
+| `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
+| `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
+| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
 | `Cloude\JsonSchema` | In-house JSON Schema subset validator (no external deps) |
 | `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
-| `Cloude\Mcp\Server` | MCP server (Model Context Protocol) over HTTP / JSON-RPC 2.0, with auto input validation |
-| `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
+| `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, nested route groups, and `get/post/put/patch/delete/any` helpers |
+| `Cloude\Str` | String utilities: `upTo`/`truncate`/`words`/`after`/`afterLast`/`between`/`squish`/`mask`, `slug`/`ascii`, `camel`/`pascal`/`snake`/`kebab`, `random`/`uuid`/`hash` |
+| `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
+
+### `Cloude\Http\…`
+
+| Class | Responsibility |
+|---|---|
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
-| `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
-| `Cloude\Http\Response` | One-call response helpers: `json()`, `html()`, `xml()`, `markdown()`, `redirect()`, `notFound()`, `noContent()` |
+| `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
+| `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / `.md` negotiation, debug mode |
+| `Cloude\Http\Response` | One-call response helpers: `json`, `html`, `xml`, `markdown`, `redirect`, `notFound`, `noContent` |
+
+### `Cloude\Markdown\…`
+
+| Class | Responsibility |
+|---|---|
+| `Cloude\Markdown` | Frontmatter + body parser. Body rendered via `Markdown\Parser` by default; swappable with `useParser()` |
+| `Cloude\Markdown\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
+| `Cloude\Markdown\Parser` | In-house markdown → HTML parser. No external dependency |
+| `Cloude\Markdown\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
+
+### `Cloude\Mcp\…`
+
+| Class | Responsibility |
+|---|---|
+| `Cloude\Mcp\Server` | MCP server (Model Context Protocol) over HTTP / JSON-RPC 2.0, with auto `inputSchema` validation |
+| `Cloude\Mcp\JsonRpc` | Constants for JSON-RPC 2.0 + MCP error codes |
+| `Cloude\Mcp\McpException` | Structured-error throwable for tool / resource handlers |
 
 ## Quick start
+
+A typical `www/index.php` looks like this:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/../app/config.php';   // defines BASE_URL, DEBUG, ...
 
+if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
+    return false;   // dev-server static-file passthrough
+}
+
+\Cloude\Bootstrap::run(
+    debug:    DEBUG,
+    viewBase: __DIR__ . '/../app/views',
+);
+
+use Cloude\Http\Response;
 use Cloude\Input;
 use Cloude\Router;
 use Cloude\View;
 
-View::setBasePath(__DIR__ . '/views');
+$router = new Router(BASE_URL);
 
-$router = new Router();
+$router->get('/', fn () => View::render('home.php', ['title' => 'Hello']));
 
-$router->get('/', function (): void {
-    View::render('home.php', ['title' => 'Hello']);
+$router->get('/users/{id:\d+}', fn (array $p) => Response::json(['id' => $p['id']]));
+
+$router->group('/api/v1', function (Router $r) {
+    $r->post('/echo', fn () => Response::json(Input::json() ?? []));
 });
 
-$router->get('/users/{id}', function (array $params): void {
-    echo 'User #' . $params['id'];
-});
-
-$router->post('/api/echo', function (): void {
-    header('Content-Type: application/json');
-    echo json_encode(Input::json());
-});
-
-$router->setNotFound(function (): void {
-    View::render('404.php');
-});
-
+$router->setNotFound(fn () => View::render('404.php'));
 $router->dispatch();
 ```
+
+`Bootstrap::run` wires up `ob_start`, the global 503 error handler, and the
+view base path in one call. Drop in `app/config.php` and you have a complete
+front controller in ~15 lines.
 
 ## Example project
 
