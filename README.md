@@ -63,7 +63,7 @@ cloude-php-workspace/
 | Class | Responsibility |
 |---|---|
 | `Cloude\Router` | Router with `/{param}` patterns and `get/post/put/patch/delete/any` helpers |
-| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON; `langPrefix()` for `/es`, `/en` URLs |
+| `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
 | `Cloude\Markdown` | Frontmatter + body parser. Body rendered via `Markdown\Parser` by default; swappable with `useParser()` |
 | `Cloude\Markdown\Parser` | In-house markdown → HTML parser. No external dependency |
