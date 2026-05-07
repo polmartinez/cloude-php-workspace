@@ -165,6 +165,130 @@ class Format
         return $value;
     }
 
+    // ── XML ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Dispatch: string → array (decode), array → XML string (encode).
+     *
+     * Encoding conventions (apply to both directions when sensible):
+     *   - Keys prefixed with '@' are attributes:    ['@xmlns' => '...']
+     *   - Key '#text' is the node's text content:   ['#text' => 'hi']
+     *   - List arrays repeat the element:           ['url' => [['loc' => 'a'], ['loc' => 'b']]]
+     *                                                → <url><loc>a</loc></url><url><loc>b</loc></url>
+     *
+     * @return array<mixed>|string
+     */
+    public static function xml(string|array $input, string $rootElement = 'root', bool $pretty = false): array|string
+    {
+        return is_array($input) ? self::xmlEncode($input, $rootElement, $pretty) : self::xmlDecode($input);
+    }
+
+    /**
+     * Decodes an XML string into an array via SimpleXMLElement → JSON
+     * round-trip. Attributes are merged into the element body; mixed
+     * content (text + children) is approximated. Throws RuntimeException
+     * on malformed XML.
+     *
+     * @return array<mixed>
+     */
+    public static function xmlDecode(string $xml): array
+    {
+        $prev = libxml_use_internal_errors(true);
+        try {
+            $sx = simplexml_load_string($xml);
+            if ($sx === false) {
+                $err = libxml_get_last_error();
+                throw new \RuntimeException(
+                    'Invalid XML' . ($err !== false ? ': ' . trim($err->message) : ''),
+                );
+            }
+            $json = json_encode($sx);
+            if ($json === false) {
+                throw new \RuntimeException('XML → array conversion failed');
+            }
+            $arr = json_decode($json, true);
+            return is_array($arr) ? $arr : [];
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+        }
+    }
+
+    /**
+     * Encodes an array as an XML document. If the array has exactly one
+     * top-level key and that key is a string, it becomes the root element
+     * name; $rootElement is used as a fallback otherwise.
+     *
+     * @param array<mixed> $data
+     */
+    public static function xmlEncode(array $data, string $rootElement = 'root', bool $pretty = false): string
+    {
+        $rootName = $rootElement;
+        $rootValue = $data;
+        if (count($data) === 1) {
+            $first = array_key_first($data);
+            if (is_string($first)) {
+                $rootName = $first;
+                $rootValue = $data[$first];
+            }
+        }
+
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $dom->formatOutput = $pretty;
+        $root = $dom->createElement($rootName);
+        $dom->appendChild($root);
+
+        if (is_array($rootValue)) {
+            self::xmlFillElement($dom, $root, $rootValue);
+        } else {
+            $root->appendChild($dom->createTextNode((string) $rootValue));
+        }
+
+        return $dom->saveXML() ?: '';
+    }
+
+    /**
+     * @param array<mixed> $data
+     */
+    private static function xmlFillElement(\DOMDocument $dom, \DOMElement $parent, array $data): void
+    {
+        foreach ($data as $key => $value) {
+            if (is_string($key) && str_starts_with($key, '@')) {
+                $parent->setAttribute(substr($key, 1), (string) $value);
+                continue;
+            }
+            if ($key === '#text') {
+                $parent->appendChild($dom->createTextNode((string) $value));
+                continue;
+            }
+            if (!is_string($key)) {
+                throw new \InvalidArgumentException(
+                    'XML encoding requires string keys at every level (got int key under <' . $parent->tagName . '>)',
+                );
+            }
+            self::xmlAppend($dom, $parent, $key, $value);
+        }
+    }
+
+    private static function xmlAppend(\DOMDocument $dom, \DOMElement $parent, string $name, mixed $value): void
+    {
+        if (is_array($value) && array_is_list($value)) {
+            foreach ($value as $item) {
+                self::xmlAppend($dom, $parent, $name, $item);
+            }
+            return;
+        }
+        $child = $dom->createElement($name);
+        $parent->appendChild($child);
+        if (is_array($value)) {
+            self::xmlFillElement($dom, $child, $value);
+            return;
+        }
+        if ($value !== null) {
+            $child->appendChild($dom->createTextNode((string) $value));
+        }
+    }
+
     // ── Markdown ────────────────────────────────────────────────────────────
 
     /**

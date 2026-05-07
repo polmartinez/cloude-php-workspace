@@ -2,7 +2,7 @@
 
 A minimalist PHP micro-framework. No magic, no service container, no database. Designed for small and medium web projects running on Apache + PHP.
 
-- **PHP 8.3+**
+- **PHP 8.4+**
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style
 - `declare(strict_types=1)` everywhere
@@ -31,10 +31,12 @@ cloude-php-workspace/
       File.php           # Disk I/O with transparent gzip
       Server.php         # HTTP serve with 304 / canonical / gzip
     Bootstrap.php        # One-call front-controller bootstrap
+    Cli.php              # Argv parsing + colored output for app/cli/ scripts
     Config.php
     EventLog.php
-    Format.php           # Yaml / json / markdown encode-decode dispatcher
+    Format.php           # Yaml / json / xml / markdown encode-decode dispatcher
     JsonFile.php
+    Logger.php           # File-backed logger with daily rotation
     Http/
       Cache.php
       AssetUrl.php
@@ -43,6 +45,7 @@ cloude-php-workspace/
     views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   example/               # Runnable sample app (see example/README.md)
+    recipes/             # Cookbook snippets for sitemap, JSON-LD, ...
   composer.json          # Package manifest (name: cloude/framework)
   phpunit.xml.dist
   .php-cs-fixer.dist.php
@@ -64,9 +67,11 @@ cloude-php-workspace/
 | `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()`, `ascii()` (uses `Transliterator` when available) |
 | `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + ob_start + ErrorHandler + view base) |
 | `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
+| `Cloude\Cli` | Argv parsing + colored output for `app/cli/` scripts |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
-| `Cloude\Format` | Yaml / json / markdown encode-decode dispatcher (string ↔ array) |
+| `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
+| `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
 | `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
@@ -390,15 +395,23 @@ Format::json(['a' => 1], pretty: true);    // pretty-printed
 Format::yaml("title: Hi\nflag: true");     // ['title' => 'Hi', 'flag' => true]
 Format::yaml(['title' => 'Hi']);           // "title: Hi\n"
 
+// XML — keys with '@' become attributes, '#text' is text content,
+// list arrays repeat the element. See example/recipes/sitemap.php.
+Format::xml(['urlset' => [
+    '@xmlns' => 'http://www.sitemaps.org/schemas/sitemap/0.9',
+    'url'    => [['loc' => 'a'], ['loc' => 'b']],
+]], pretty: true);
+
 // Markdown → HTML
 Format::markdown('# Hello **world**');     // "<h1>Hello <strong>world</strong></h1>\n"
 ```
 
 Explicit helpers when you want a fixed return type or DI-friendly call:
 `Format::jsonDecode`, `Format::jsonEncode`, `Format::yamlDecode`,
-`Format::yamlEncode`. JSON helpers throw `\JsonException` on errors. YAML
-encoding throws `\InvalidArgumentException` for nested arrays or non-identifier
-keys (the YAML support is intentionally minimal — for nested data use JSON).
+`Format::yamlEncode`, `Format::xmlDecode`, `Format::xmlEncode`. JSON helpers
+throw `\JsonException` on errors. YAML encoding throws
+`\InvalidArgumentException` for nested arrays or non-identifier keys (YAML
+support is intentionally minimal — for nested data use JSON or XML).
 
 `Cloude\Markdown::parse` (frontmatter + body) and `Cloude\JsonFile`
 delegate to `Format` internally, so behaviour stays consistent.
@@ -430,6 +443,63 @@ EventLog::send(['event' => 'page_view', 'path' => '/foo']);
 Network call is deferred to `register_shutdown_function` and uses
 `fastcgi_finish_request()` when available — zero latency to the user.
 
+### `Cloude\Cli`
+
+Tiny helper for scripts under `app/cli/`: argv parsing + colored output
+with TTY detection.
+
+```php
+#!/usr/bin/env php
+<?php
+require __DIR__ . '/../../vendor/autoload.php';
+
+use Cloude\Cli;
+
+$args   = Cli::parseArgs($argv);          // ['_' => [...], 'dry-run' => true, 'limit' => '100', ...]
+$dryRun = Cli::flag($args, 'dry-run');    // bool
+$limit  = (int) (Cli::option($args, 'limit') ?? 100);
+$path   = Cli::positional($args, 0);      // first non-flag argument
+
+Cli::info("processing $limit items" . ($dryRun ? ' (dry run)' : ''));
+if ($errors > 0) {
+    Cli::abort(1, "$errors items failed");
+}
+Cli::success('done');
+```
+
+The `--` token stops flag parsing — anything after goes to positional. Colors
+are emitted only when STDOUT is a TTY, so piping to a file produces clean
+plain text.
+
+### `Cloude\Logger`
+
+File-backed logger with daily rotation.
+
+```php
+$log = new \Cloude\Logger('/var/log/myapp.log', minLevel: 'info');
+$log->info('http request', ['path' => '/foo']);
+$log->error('db unreachable', ['code' => 503]);
+// → /var/log/myapp-2026-05-07.log:
+//   [2026-05-07T08:30:12Z] [INFO] http request {"path":"/foo"}
+//   [2026-05-07T08:30:12Z] [ERROR] db unreachable {"code":503}
+```
+
+Levels: `debug` < `info` < `warn` < `error`. Messages below `minLevel` are
+dropped. Pass `rotation: 'none'` to disable rotation and always write to the
+configured path. Context arrays are appended as compact JSON.
+
+## Recipes (cookbook snippets)
+
+`example/recipes/` ships drop-in snippets for common patterns the framework
+deliberately doesn't wrap in a class:
+
+| Recipe | What it does |
+|---|---|
+| [`sitemap.php`](example/recipes/sitemap.php) | XML sitemap (and sitemap index) using `Format::xml` + `Http\Response::xml` |
+| [`jsonld.php`](example/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
+
+Each recipe is a single self-contained file with comments — copy, paste, edit.
+
 ## Development
 
 ```bash
@@ -447,8 +517,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.5.0 -m "v0.5.0"
-   git push origin v0.5.0
+   git tag -a v0.6.0 -m "v0.6.0"
+   git push origin v0.6.0
    ```
 
 After publication, any project can install it with:
