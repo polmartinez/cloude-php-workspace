@@ -60,6 +60,7 @@ cloude-php-workspace/
     JsonFile.php
     JsonSchema.php       # In-house JSON Schema subset validator
     Logger.php           # File-backed logger with daily rotation
+    TaskRunner.php       # CLI task runner: prefix:method dispatch over a class
     Http/
       Cache.php
       AssetUrl.php
@@ -97,6 +98,7 @@ cloude-php-workspace/
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
 | `Cloude\JsonSchema` | In-house JSON Schema subset validator (no external deps) |
 | `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
+| `Cloude\TaskRunner` | CLI task runner. `prefix:method` dispatch over registered callables or static class methods, with auto `list` / `help` |
 | `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, nested route groups, and `get/post/put/patch/delete/any` helpers |
 | `Cloude\Str` | String utilities: `upTo`/`truncate`/`words`/`after`/`afterLast`/`between`/`squish`/`mask`, `slug`/`ascii`, `camel`/`pascal`/`snake`/`kebab`, `random`/`uuid`/`hash` |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
@@ -787,6 +789,66 @@ Levels: `debug` < `info` < `warn` < `error`. Messages below `minLevel` are
 dropped. Pass `rotation: 'none'` to disable rotation and always write to the
 configured path. Context arrays are appended as compact JSON.
 
+### `Cloude\TaskRunner`
+
+Tiny CLI task runner — Artisan / Rake without the framework. Drop a single
+entry-point script (`app/cli/tasks.php`), register callables or static class
+methods, and you get `list` / `help` / dispatch for free.
+
+```php
+use Cloude\Cli;
+use Cloude\TaskRunner;
+
+class ContentTasks
+{
+    /** Rebuild the search index for $country (default es). */
+    public static function rebuildIndex(array $args): int
+    {
+        $country = Cli::option($args, 'country', 'es');
+        $dryRun  = Cli::flag($args, 'dry-run');
+        Cli::info("rebuilding index for {$country}" . ($dryRun ? ' (dry run)' : ''));
+        return 0;
+    }
+
+    /** Drop content older than N days (default 90). */
+    public static function purgeOld(array $args): int
+    {
+        $days = (int) (Cli::option($args, 'days') ?? 90);
+        Cli::info("purging content older than {$days} days");
+        return 0;
+    }
+}
+
+$runner = new TaskRunner();
+$runner->register('ping', fn () => Cli::out('pong'), 'Connectivity check.');
+$runner->registerClass('content', ContentTasks::class);
+
+exit($runner->run($argv));
+```
+
+Then from the shell:
+
+```bash
+php app/cli/tasks.php                                  # list every task
+php app/cli/tasks.php help content:rebuild-index       # describe one
+php app/cli/tasks.php content:rebuild-index --country=fr --dry-run
+php app/cli/tasks.php content:purge-old --days=30
+```
+
+`registerClass()` walks the public-static methods of a class. Method names
+are kebab-cased (`rebuildIndex` → `rebuild-index`), and the first non-blank
+line of each method's docblock becomes the description shown in `list`.
+Inherited methods are skipped, so you can compose multiple task classes
+without surprises.
+
+Each handler receives the parsed `$args` array (`Cli::parseArgs($argv)`) and
+may return `int` (exit code), `null`/`true`/`void` (exit 0), or `false`
+(exit 1). Uncaught exceptions are reported via `Cli::error()` and the runner
+exits 1.
+
+See [`example/recipes/tasks.php`](example/recipes/tasks.php) for a runnable
+template.
+
 ## Recipes (cookbook snippets)
 
 `example/recipes/` ships drop-in snippets for common patterns the framework
@@ -797,6 +859,7 @@ deliberately doesn't wrap in a class:
 | [`sitemap.php`](example/recipes/sitemap.php) | XML sitemap (and sitemap index) using `Format::xml` + `Http\Response::xml` |
 | [`jsonld.php`](example/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
 | [`mcp.php`](example/recipes/mcp.php) | Tiny MCP server with two tools and a resource catalogue using `Mcp\Server` |
+| [`tasks.php`](example/recipes/tasks.php) | CLI task runner with one inline task and one task class using `TaskRunner` |
 
 Each recipe is a single self-contained file with comments — copy, paste, edit.
 
@@ -817,8 +880,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.10.0 -m "v0.10.0"
-   git push origin v0.10.0
+   git tag -a v0.11.0 -m "v0.11.0"
+   git push origin v0.11.0
    ```
 
 After publication, any project can install it with:
