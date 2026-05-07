@@ -30,6 +30,7 @@ cloude-php-workspace/
       Parser.php         # In-house markdown → HTML parser (no deps)
       File.php           # Disk I/O with transparent gzip
       Server.php         # HTTP serve with 304 / canonical / gzip
+    Bootstrap.php        # One-call front-controller bootstrap
     Config.php
     EventLog.php
     JsonFile.php
@@ -37,6 +38,7 @@ cloude-php-workspace/
       Cache.php
       AssetUrl.php
       ErrorHandler.php
+      Response.php
     views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   example/               # Runnable sample app (see example/README.md)
@@ -59,12 +61,14 @@ cloude-php-workspace/
 | `Cloude\Markdown\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
 | `Cloude\Markdown\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
 | `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()`, `ascii()` (uses `Transliterator` when available) |
+| `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + ob_start + ErrorHandler + view base) |
 | `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
 | `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
+| `Cloude\Http\Response` | One-call response helpers: `json()`, `html()`, `xml()`, `markdown()`, `redirect()`, `notFound()`, `noContent()` |
 
 ## Quick start
 
@@ -225,6 +229,60 @@ Str::ascii('Москва');                    // 'Moskva'
 `ascii()` transliterates without lowercasing or stripping punctuation —
 useful for fuzzy matching and search indexes. For URL slugs use `slug()`.
 
+### `Cloude\Bootstrap`
+
+Folds the canonical front-controller boilerplate (cli-server static-file
+passthrough + `ob_start()` + `ErrorHandler::register()` + `View::setBasePath`)
+into one call.
+
+```php
+require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/app/config.php';
+
+if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
+    return false;
+}
+
+\Cloude\Bootstrap::run(
+    debug:    DEBUG,
+    viewBase: dirname(__DIR__) . '/app/views',
+);
+
+$router = new \Cloude\Router(BASE_URL);
+// ...routes...
+$router->dispatch();
+```
+
+`serveStaticIfExists()` returns `true` only under the PHP built-in dev server
+when the request hits a real file inside `$docroot`. The caller MUST
+`return false;` from the router script in that case (cli-server's documented
+convention to delegate to its static handler). Production Apache uses
+`.htaccess`, so this is a no-op there.
+
+If `$viewBase` is omitted, `Bootstrap::run()` reads `View::getBasePath()` as a
+fallback — handy when the project sets the view base in `app/config.php`.
+
+### `Cloude\Http\Response`
+
+One-call response helpers — set status + Content-Type + body, then return.
+
+```php
+use Cloude\Http\Response;
+
+Response::json(['ok' => true]);                  // 200 + application/json
+Response::json(['error' => 'nope'], 422);
+Response::html('<h1>Hi</h1>');
+Response::xml('<?xml version="1.0"?><root/>');
+Response::markdown("# Title\n\nBody.");
+Response::redirect('/login', 302);
+Response::notFound('# 404', 'text/markdown');
+Response::noContent();                            // 204
+```
+
+JSON is encoded with `UNESCAPED_UNICODE | UNESCAPED_SLASHES`. Pass
+`pretty: true` for indented output. `redirect()` strips CRLF from the URL to
+prevent header injection.
+
 ### `Cloude\Config`
 
 Bootstrap helpers for `app/config.php`. Reads from `$_ENV / $_SERVER / getenv()`.
@@ -357,8 +415,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.3.0 -m "v0.3.0"
-   git push origin v0.3.0
+   git tag -a v0.4.0 -m "v0.4.0"
+   git push origin v0.4.0
    ```
 
 After publication, any project can install it with:

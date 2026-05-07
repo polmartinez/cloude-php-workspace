@@ -23,6 +23,14 @@ class View
     }
 
     /**
+     * Returns the configured base directory, or '' if none has been set.
+     */
+    public static function getBasePath(): string
+    {
+        return self::$basePath;
+    }
+
+    /**
      * Renders a template file with the given variables.
      * If $templatePath is relative and a base path is configured, the base
      * path is prepended.
