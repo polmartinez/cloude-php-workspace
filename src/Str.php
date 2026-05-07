@@ -28,6 +28,36 @@ class Str
     }
 
     /**
+     * Transliterates a string to ASCII, preserving separators and punctuation.
+     * "Análisis Político" → "Analisis Politico"; "Москва" → "Moskva".
+     *
+     * Use this for fuzzy matching, search indexing, etc. For URL slugs use
+     * `slug()` instead, which also lowercases and strips punctuation.
+     *
+     * Uses ext-intl Transliterator when available, otherwise falls back to
+     * iconv ASCII//TRANSLIT//IGNORE, otherwise returns the input unchanged.
+     */
+    public static function ascii(string $text): string
+    {
+        if (class_exists(\Transliterator::class)) {
+            $tr = \Transliterator::create('Any-Latin; Latin-ASCII');
+            if ($tr !== null) {
+                $r = $tr->transliterate($text);
+                if ($r !== false) {
+                    return $r;
+                }
+            }
+        }
+        if (function_exists('iconv')) {
+            $r = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+            if ($r !== false) {
+                return $r;
+            }
+        }
+        return $text;
+    }
+
+    /**
      * Converts text into a URL-safe slug.
      *
      * Transliteration order of preference:

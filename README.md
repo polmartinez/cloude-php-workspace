@@ -58,7 +58,7 @@ cloude-php-workspace/
 | `Cloude\Markdown\Parser` | In-house markdown → HTML parser. No external dependency |
 | `Cloude\Markdown\File` | Disk I/O for markdown with transparent gzip (`.md` + `.md.gz`) |
 | `Cloude\Markdown\Server` | Serves a markdown file with 304 / canonical / gzip passthrough |
-| `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()` (uses `Transliterator` when available) |
+| `Cloude\Str` | Utilities: `upTo()`, `truncate()`, `slug()`, `ascii()` (uses `Transliterator` when available) |
 | `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
@@ -215,10 +215,15 @@ $html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");
 ### `Cloude\Str`
 
 ```php
-Str::upTo('hello world', ' ');       // 'hello'
-Str::truncate('long text', 4);        // 'long...'
-Str::slug('Hello World');             // 'hello-world'
+Str::upTo('hello world', ' ');           // 'hello'
+Str::truncate('long text', 4);           // 'long...'
+Str::slug('Hello World');                // 'hello-world'
+Str::ascii('Análisis Político');         // 'Analisis Politico'
+Str::ascii('Москва');                    // 'Moskva'
 ```
+
+`ascii()` transliterates without lowercasing or stripping punctuation —
+useful for fuzzy matching and search indexes. For URL slugs use `slug()`.
 
 ### `Cloude\Config`
 
