@@ -36,12 +36,17 @@ cloude-php-workspace/
     EventLog.php
     Format.php           # Yaml / json / xml / markdown encode-decode dispatcher
     JsonFile.php
+    JsonSchema.php       # In-house JSON Schema subset validator
     Logger.php           # File-backed logger with daily rotation
     Http/
       Cache.php
       AssetUrl.php
       ErrorHandler.php
       Response.php
+    Mcp/
+      Server.php         # MCP (Model Context Protocol) server, HTTP transport
+      JsonRpc.php        # JSON-RPC 2.0 + MCP error codes
+      McpException.php
     views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   example/               # Runnable sample app (see example/README.md)
@@ -71,7 +76,9 @@ cloude-php-workspace/
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\JsonFile` | Per-request cached, atomic-write helper for JSON files |
+| `Cloude\JsonSchema` | In-house JSON Schema subset validator (no external deps) |
 | `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
+| `Cloude\Mcp\Server` | MCP server (Model Context Protocol) over HTTP / JSON-RPC 2.0, with auto input validation |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
 | `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / .md negotiation, debug mode |
@@ -443,6 +450,104 @@ EventLog::send(['event' => 'page_view', 'path' => '/foo']);
 Network call is deferred to `register_shutdown_function` and uses
 `fastcgi_finish_request()` when available — zero latency to the user.
 
+### `Cloude\JsonSchema`
+
+Pragmatic, dependency-free JSON Schema validator. Covers the subset that
+matters for MCP tool inputs, REST request bodies, and config validation:
+`type`, `required`, `properties`, `additionalProperties`, `enum`, `items`,
+`minItems`/`maxItems`, `minimum`/`maximum`, `minLength`/`maxLength`, `pattern`.
+
+```php
+$schema = [
+    'type' => 'object',
+    'properties' => [
+        'country' => ['type' => 'string', 'pattern' => '^[a-z]{2}$'],
+        'limit'   => ['type' => 'integer', 'minimum' => 1, 'maximum' => 1000],
+    ],
+    'required' => ['country'],
+    'additionalProperties' => false,
+];
+
+$errors = \Cloude\JsonSchema::validate($args, $schema);
+if ($errors !== []) {
+    throw new \InvalidArgumentException(implode('; ', $errors));
+}
+
+\Cloude\JsonSchema::isValid($args, $schema);   // bool shortcut
+```
+
+Errors are human-readable strings prefixed with the JSON pointer of the
+offending node — e.g. `$.country: value does not match pattern '^[a-z]{2}$'`.
+
+Out of scope (and probably forever): `$ref`, `allOf`/`oneOf`/`anyOf`, `not`,
+`if`/`then`/`else`, `format`, `patternProperties`, schema meta-validation.
+If you need any of those, install `opis/json-schema` and use it directly.
+
+### `Cloude\Mcp\Server`
+
+A minimal MCP (Model Context Protocol) server: HTTP transport, JSON-RPC 2.0,
+input validation auto-wired against each tool's `inputSchema` via
+`Cloude\JsonSchema`.
+
+```php
+use Cloude\Mcp\JsonRpc;
+use Cloude\Mcp\McpException;
+use Cloude\Mcp\Server;
+
+$mcp = new Server(
+    name:        'my-data',
+    version:     '1.0',
+    description: 'Public dataset.',
+    endpoint:    BASE_URL . '/mcp',
+);
+
+$mcp->tool(
+    name:        'echo',
+    description: 'Echoes the message.',
+    inputSchema: [
+        'type'       => 'object',
+        'properties' => ['message' => ['type' => 'string', 'minLength' => 1]],
+        'required'   => ['message'],
+    ],
+    handler: function (array $args): array {
+        if ($args['message'] === 'forbidden') {
+            // Structured errors → JSON-RPC error response with the right code.
+            throw new McpException(JsonRpc::INVALID_PARAMS, 'forbidden message');
+        }
+        return ['content' => [['type' => 'text', 'text' => $args['message']]]];
+    },
+);
+
+// Optional resource provider + reader.
+$mcp->resourceProvider(fn() => [['uri' => 'mem://hi', 'name' => 'Hi', 'mimeType' => 'text/plain']]);
+$mcp->resourceReader(fn($uri) => $uri === 'mem://hi'
+    ? ['uri' => $uri, 'mimeType' => 'text/plain', 'text' => 'world']
+    : null);
+
+// Wire up routes.
+$router->get('/.well-known/mcp.json', fn () => $mcp->respondManifest());
+$router->any(['/mcp', '/mcp-server'], fn () => $mcp->dispatch());
+```
+
+What it handles for you:
+
+- CORS headers + `OPTIONS` preflight (204).
+- JSON-RPC parse + dispatch with the right error codes (`-32700`,
+  `-32600`, `-32601`, `-32602`, `-32603`, `-32002`).
+- Standard methods with sane defaults: `initialize`, `ping`,
+  `notifications/initialized`, `notifications/cancelled`, `prompts/list`,
+  `prompts/get`, `resources/list`, `resources/read`,
+  `resources/templates/list`, `logging/setLevel`, `tools/list`, `tools/call`.
+- `tools/call` validates `arguments` against the tool's `inputSchema` before
+  the handler runs — bad input becomes a `-32602` response.
+- `/.well-known/mcp.json` discovery manifest auto-generated from registered
+  capabilities.
+
+Out of scope: stdio transport, SSE/streaming, auth (do that in a route
+middleware before calling `dispatch()`).
+
+See [`example/recipes/mcp.php`](example/recipes/mcp.php) for a runnable server.
+
 ### `Cloude\Cli`
 
 Tiny helper for scripts under `app/cli/`: argv parsing + colored output
@@ -497,6 +602,7 @@ deliberately doesn't wrap in a class:
 |---|---|
 | [`sitemap.php`](example/recipes/sitemap.php) | XML sitemap (and sitemap index) using `Format::xml` + `Http\Response::xml` |
 | [`jsonld.php`](example/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
+| [`mcp.php`](example/recipes/mcp.php) | Tiny MCP server with two tools and a resource catalogue using `Mcp\Server` |
 
 Each recipe is a single self-contained file with comments — copy, paste, edit.
 
@@ -517,8 +623,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.6.0 -m "v0.6.0"
-   git push origin v0.6.0
+   git tag -a v0.7.0 -m "v0.7.0"
+   git push origin v0.7.0
    ```
 
 After publication, any project can install it with:
