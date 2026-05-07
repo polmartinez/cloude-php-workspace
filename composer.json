@@ -12,7 +12,7 @@
         "friendsofphp/php-cs-fixer": "^3.60"
     },
     "suggest": {
-        "ext-intl": "Improves transliteration in Cloude\\Str::slug() (an iconv-based fallback is used when missing)."
+        "ext-intl": "Required for accent-aware Cloude\\Str::slug() / ascii(). Without it, non-ASCII characters are dropped instead of transliterated."
     },
     "autoload": {
         "psr-4": {

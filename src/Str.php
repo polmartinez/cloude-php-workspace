@@ -34,8 +34,11 @@ class Str
      * Use this for fuzzy matching, search indexing, etc. For URL slugs use
      * `slug()` instead, which also lowercases and strips punctuation.
      *
-     * Uses ext-intl Transliterator when available, otherwise falls back to
-     * iconv ASCII//TRANSLIT//IGNORE, otherwise returns the input unchanged.
+     * Uses ext-intl Transliterator when available — that's the only path
+     * with a real character mapping. When ext-intl is missing, falls back
+     * to a single regex that drops every non-ASCII byte; it doesn't
+     * "translate" anything (no built-in tables), so "Cataluña" becomes
+     * "Catalua" instead of "Cataluna". Install ext-intl for proper output.
      */
     public static function ascii(string $text): string
     {
@@ -48,23 +51,21 @@ class Str
                 }
             }
         }
-        if (function_exists('iconv')) {
-            $r = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-            if ($r !== false) {
-                return $r;
-            }
-        }
-        return $text;
+        return (string) preg_replace('/[^\x00-\x7f]+/u', '', $text);
     }
 
     /**
      * Converts text into a URL-safe slug.
      *
-     * Transliteration order of preference:
-     *   1. ext-intl Transliterator (best Unicode coverage, handles Cyrillic,
-     *      Greek, CJK romanisation, etc.)
-     *   2. iconv ASCII//TRANSLIT//IGNORE (handles common Latin diacritics)
-     *   3. raw lowercase + regex strip (last resort)
+     * When ext-intl is installed, `Transliterator` handles diacritics and
+     * non-Latin scripts (Cyrillic, Greek, CJK romanisation, …) so
+     * "Cataluña" → "cataluna" and "Москва" → "moskva".
+     *
+     * Without ext-intl there is no transliteration step (no built-in
+     * tables) — the trailing regex simply collapses every non-`[a-z0-9]`
+     * run into the separator, which means "Cataluña" → "catalu-a" and
+     * "Москва" → "" (everything dropped). Install ext-intl for sites that
+     * need proper non-ASCII slugs.
      */
     public static function slug(string $text, int $maxLength = 128, string $separator = '-'): string
     {
@@ -80,12 +81,6 @@ class Str
             }
         } else {
             $text = mb_strtolower($text, 'UTF-8');
-            if (function_exists('iconv')) {
-                $translit = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-                if ($translit !== false) {
-                    $text = $translit;
-                }
-            }
         }
 
         $text = (string) preg_replace('/[^a-z0-9]+/i', $separator, $text);

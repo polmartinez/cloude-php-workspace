@@ -6,9 +6,10 @@ A minimalist PHP micro-framework. No magic, no service container, no database. D
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style
 - `declare(strict_types=1)` everywhere
-- Zero runtime dependencies. Markdown rendering and slug transliteration are
-  done in-house. `ext-intl` improves slug quality when present, otherwise an
-  iconv-based fallback is used.
+- Zero runtime dependencies. Markdown rendering is in-house. Slug
+  transliteration uses `ext-intl` when present (Cyrillic, Greek and other
+  scripts romanise correctly). Without `ext-intl` non-ASCII characters are
+  dropped — install it for sites that need accent-aware slugs.
 
 ## Built with Claude Code
 
@@ -956,8 +957,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.12.0 -m "v0.12.0"
-   git push origin v0.12.0
+   git tag -a v0.13.0 -m "v0.13.0"
+   git push origin v0.13.0
    ```
 
 After publication, any project can install it with:
