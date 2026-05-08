@@ -31,6 +31,11 @@ expose an MCP server with `Cloude\Mcp\Server`, or migrate a routes file into
 nested groups. The surface area is small enough that the agent usually nails
 it in one prompt.
 
+> **For agents:** see [`AGENTS.md`](AGENTS.md) — a tight reference card with
+> the decision matrix, idioms and anti-patterns. AI tools (Claude Code,
+> Cursor, Codex, …) pick it up automatically when they see the file at the
+> repo root.
+
 ## Installation
 
 ```bash
