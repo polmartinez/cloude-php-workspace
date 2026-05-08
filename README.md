@@ -962,8 +962,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.13.0 -m "v0.13.0"
-   git push origin v0.13.0
+   git tag -a v0.14.0 -m "v0.14.0"
+   git push origin v0.14.0
    ```
 
 After publication, any project can install it with:
