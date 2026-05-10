@@ -121,7 +121,7 @@ abstract class Model
      * Rows are plain arrays. Lift them back into Model instances with
      * `User::hydrate($row)` if you want typed objects.
      */
-    public static function query(): \Cloude\Db\Query
+    public static function query(): \Cloude\Storage\Query
     {
         $storage = static::storage();
         if (!$storage instanceof \Cloude\Model\Storage\PdoStorage) {

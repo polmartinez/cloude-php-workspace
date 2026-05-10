@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Cloude\Db;
+namespace Cloude\Storage;
 
 /**
  * Minimal SQL query builder. SELECT / INSERT / UPDATE / DELETE plus
- * WHERE, ORDER BY, LIMIT, OFFSET. Auto-detects identifier quoting per
- * driver (backticks for MySQL/SQLite, double quotes for Postgres).
+ * WHERE, ORDER BY, LIMIT, OFFSET. Defaults to backtick identifier
+ * quoting (MySQL / SQLite) — pass `'"'` as the third constructor arg
+ * for Postgres (or `Identifier::quoteCharFor($pdo)` to auto-detect).
  *
  * Designed to cover the 80% of queries you write by hand without
  * re-implementing a full SQL grammar. **Does not** ship:
@@ -95,15 +96,12 @@ final class Query
     private ?int $limit = null;
     private ?int $offset = null;
 
-    private string $quoteChar;
-
     public function __construct(
         private \PDO $pdo,
         private string $table,
-        ?string $quoteChar = null,
+        private string $quoteChar = '`',
     ) {
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $this->quoteChar = $quoteChar ?? Identifier::quoteCharFor($pdo);
     }
 
     public function pdo(): \PDO
@@ -307,21 +305,7 @@ final class Query
         if ($data === []) {
             return 0;
         }
-        $set = [];
-        $params = [];
-        foreach ($data as $col => $val) {
-            $set[] = $this->q($col) . ' = ?';
-            $params[] = $val;
-        }
-        [$where, $whereParams] = $this->buildWhere();
-        $params = array_merge($params, $whereParams);
-
-        $sql = 'UPDATE ' . $this->q($this->table)
-            . ' SET ' . implode(', ', $set)
-            . $where
-            . $this->buildOrderBy()
-            . $this->buildLimit();
-
+        [$sql, $params] = $this->buildUpdate($data);
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->rowCount();
@@ -334,11 +318,7 @@ final class Query
      */
     public function delete(): int
     {
-        [$where, $params] = $this->buildWhere();
-        $sql = 'DELETE FROM ' . $this->q($this->table)
-            . $where
-            . $this->buildOrderBy()
-            . $this->buildLimit();
+        [$sql, $params] = $this->buildDelete();
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->rowCount();
@@ -347,8 +327,8 @@ final class Query
     // ── debug helpers ─────────────────────────────────────────────────────
 
     /**
-     * Returns the SELECT SQL string the current builder would issue.
-     * Useful for `echo $q->toSql()` while iterating.
+     * Returns the SELECT SQL with parameter placeholders (`?`). Pair with
+     * `getBindings()` to see the bound values separately.
      */
     public function toSql(): string
     {
@@ -363,6 +343,45 @@ final class Query
     {
         [, $params] = $this->buildSelect();
         return $params;
+    }
+
+    /**
+     * Returns the SELECT SQL with bindings inlined as SQL literals — the
+     * single string you'd run in a SQL client to reproduce the query.
+     *
+     * **For debugging only.** Never feed the output back through
+     * `PDO::exec()` or `query()`: prepared statements are the only safe
+     * path. The escaping here is good enough to read with your eyes;
+     * it's not a hardening boundary.
+     *
+     *   echo $q->where('age', '>', 18)->compile();
+     *   // → SELECT * FROM `users` WHERE `age` > 18
+     */
+    public function compile(): string
+    {
+        [$sql, $params] = $this->buildSelect();
+        return self::inlineBindings($sql, $params);
+    }
+
+    /**
+     * Like `compile()`, but for the UPDATE that `update($data)` would
+     * issue. Pure inspection — doesn't execute anything.
+     *
+     * @param array<string,mixed> $data
+     */
+    public function compileUpdate(array $data): string
+    {
+        [$sql, $params] = $this->buildUpdate($data);
+        return self::inlineBindings($sql, $params);
+    }
+
+    /**
+     * Like `compile()`, but for the DELETE that `delete()` would issue.
+     */
+    public function compileDelete(): string
+    {
+        [$sql, $params] = $this->buildDelete();
+        return self::inlineBindings($sql, $params);
     }
 
     // ── internals ─────────────────────────────────────────────────────────
@@ -401,6 +420,71 @@ final class Query
 
         $this->wheres[] = ['conn' => $conn, 'col' => $column, 'op' => $op, 'val' => $val];
         return $this;
+    }
+
+    /**
+     * @param  array<string,mixed> $data
+     * @return array{0:string, 1:list<mixed>}
+     */
+    private function buildUpdate(array $data): array
+    {
+        $set = [];
+        $params = [];
+        foreach ($data as $col => $val) {
+            $set[] = $this->q($col) . ' = ?';
+            $params[] = $val;
+        }
+        [$where, $whereParams] = $this->buildWhere();
+        $sql = 'UPDATE ' . $this->q($this->table)
+            . ' SET ' . implode(', ', $set)
+            . $where
+            . $this->buildOrderBy()
+            . $this->buildLimit();
+        return [$sql, array_merge($params, $whereParams)];
+    }
+
+    /**
+     * @return array{0:string, 1:list<mixed>}
+     */
+    private function buildDelete(): array
+    {
+        [$where, $params] = $this->buildWhere();
+        $sql = 'DELETE FROM ' . $this->q($this->table)
+            . $where
+            . $this->buildOrderBy()
+            . $this->buildLimit();
+        return [$sql, $params];
+    }
+
+    /**
+     * Substitutes each `?` in $sql with a SQL-literal rendering of the
+     * matching $param. For debug output only — see compile()'s warning.
+     *
+     * @param list<mixed> $params
+     */
+    private static function inlineBindings(string $sql, array $params): string
+    {
+        if ($params === []) {
+            return $sql;
+        }
+        $i = 0;
+        return (string) preg_replace_callback('/\?/', static function () use (&$i, $params): string {
+            if (!array_key_exists($i, $params)) {
+                return '?';                                 // shouldn't happen if buildX was well-formed
+            }
+            return self::quoteLiteral($params[$i++]);
+        }, $sql);
+    }
+
+    private static function quoteLiteral(mixed $value): string
+    {
+        return match (true) {
+            $value === null      => 'NULL',
+            is_bool($value)      => $value ? '1' : '0',
+            is_int($value),
+            is_float($value)     => (string) $value,
+            default              => "'" . str_replace("'", "''", (string) $value) . "'",
+        };
     }
 
     /**

@@ -42,23 +42,25 @@ class User extends Model
     }
 }
 
-// ── Wire it to MySQL (production) ────────────────────────────────────────────
+// ── Wire it to a configured PDO connection ───────────────────────────────────
+//
+// The recommended pattern: declare connections once in app/config/db.php
+// (see examples/recipes/config.php) and ask Connection by name. This keeps
+// credentials out of the source and lets each Model pick its own connection.
 
-$pdo = new PDO(
-    'mysql:host=localhost;dbname=app;charset=utf8mb4',
-    $user ?? 'app',
-    $pass ?? 'secret',
-    [
-        PDO::ATTR_ERRMODE          => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ],
-);
+\Cloude\Config::configure(__DIR__ . '/../app/config');           // once at boot
+User::configure(new PdoStorage(\Cloude\Storage\Connection::pdo('default'), 'users'));
 
-User::configure(new PdoStorage($pdo, 'users'));
-
-// SQLite, Postgres or any PDO driver: same call, different DSN.
-//   new PdoStorage(new PDO('sqlite:/path/to/app.sqlite'), 'users');
-//   new PdoStorage(new PDO('pgsql:host=...;dbname=app'), 'users');   ← auto-detects double-quote identifiers
+// Or, for one-off scripts that build the PDO inline (no config files):
+//
+//   $pdo = new PDO('mysql:host=localhost;dbname=app;charset=utf8mb4', $u, $p, [
+//       PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+//   ]);
+//   User::configure(new PdoStorage($pdo, 'users'));
+//
+// PdoStorage defaults to backtick identifier quoting (MySQL / SQLite —
+// the common case). For Postgres, pass '"' as the 4th constructor arg
+// or use Identifier::quoteCharFor($pdo) for explicit auto-detection.
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,11 @@ $deleted  = User::query()->where('created_at', '<', '2020-01-01')->delete();  //
 // Debug what the builder is about to issue:
 echo User::query()->where('age', '>', 18)->orderBy('name')->limit(5)->toSql();
 // → SELECT * FROM `users` WHERE `age` > ? ORDER BY `name` ASC LIMIT 5
+
+// Full SQL with values inlined — paste into a SQL client to reproduce.
+// **Debug only**: never feed this back through PDO::exec() / query().
+echo User::query()->where('age', '>', 18)->compile();
+// → SELECT * FROM `users` WHERE `age` > 18
 
 // ── Beyond the builder: drop to PDO ──────────────────────────────────────────
 //

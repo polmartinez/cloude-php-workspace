@@ -5,25 +5,55 @@ declare(strict_types=1);
 namespace Cloude;
 
 /**
- * Config bootstrap helpers.
+ * Config bootstrap helpers + environment-aware file loader.
  *
- * Designed to be called from a project's app/config.php to define BASE_URL,
- * DEBUG and similar globals. Reads values from $_ENV / $_SERVER / getenv()
- * and falls back to sensible defaults.
+ * Two responsibilities living in one place:
  *
- * Typical usage:
+ * 1. **Env-var helpers + global constants** — the original API:
+ *    `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()`.
  *
- *   require_once __DIR__ . '/config.local.php';
+ * 2. **Multi-environment file loader** — added in v0.19. Configs live
+ *    under a single directory, with optional per-environment overrides:
  *
- *   \Cloude\Config::defineBaseUrl([
- *       'www.example.com',
- *       'example.com',
- *       'localhost',
- *   ]);
- *   \Cloude\Config::defineDebug();
+ *      app/config/
+ *      ├── app.php          # base config (always loaded)
+ *      ├── db.php
+ *      ├── dev/             # active when environment is 'dev'
+ *      │   ├── app.php      # overrides merged into base
+ *      │   └── db.php
+ *      └── prod/
+ *          ├── app.php
+ *          └── db.php
+ *
+ *    Each file `return`s a flat or nested associative array. Base + env
+ *    overrides are deep-merged via `Cloude\Arr::merge`.
+ *
+ *    Bootstrap:
+ *
+ *      \Cloude\Config::configure(
+ *          configPath: dirname(__DIR__) . '/app/config',
+ *          environment: getenv('APP_ENV') ?: 'dev',
+ *      );
+ *
+ *    Access:
+ *
+ *      $cacheTtl = \Cloude\Config::get('app.cache.ttl');   // dot-path
+ *      $db       = \Cloude\Config::get('db.default');      // sub-tree
+ *      $loaded   = \Cloude\Config::load('db');             // whole file's merged array
+ *
+ * Environment names are free-form strings. "dev" and "prod" are
+ * conventional starting points; nothing stops you adding `staging`,
+ * `test`, `ci`, `local`, or anything else.
  */
 class Config
 {
+    private static string $environment = 'dev';
+    private static ?string $configPath = null;
+
+    /** @var array<string, array<mixed>> */
+    private static array $loaded = [];
+
+
     /**
      * Reads an env var. Empty string is treated as missing.
      */
@@ -77,5 +107,136 @@ class Config
             return;
         }
         define('DEBUG', self::boolEnv($envKey, $default));
+    }
+
+    // ── multi-environment file loader ─────────────────────────────────────
+
+    /**
+     * One-shot setup. Equivalent to `setConfigPath()` + `setEnvironment()`.
+     * If `$environment` is null, auto-detect from `APP_ENV` /
+     * `ENVIRONMENT` env vars (falling back to the current value, or 'dev').
+     */
+    public static function configure(string $configPath, ?string $environment = null): void
+    {
+        self::setConfigPath($configPath);
+        if ($environment !== null) {
+            self::setEnvironment($environment);
+        } else {
+            $detected = self::env('APP_ENV') ?? self::env('ENVIRONMENT');
+            if ($detected !== null) {
+                self::setEnvironment($detected);
+            }
+        }
+    }
+
+    public static function setConfigPath(string $path): void
+    {
+        self::$configPath = rtrim($path, '/');
+        self::$loaded = [];
+    }
+
+    public static function setEnvironment(string $environment): void
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $environment)) {
+            throw new \InvalidArgumentException(
+                "Environment name '$environment' has invalid chars (allowed: A-Za-z0-9_-)",
+            );
+        }
+        self::$environment = $environment;
+        self::$loaded = [];
+    }
+
+    public static function environment(): string
+    {
+        return self::$environment;
+    }
+
+    /**
+     * Loads `$name.php` from the config directory, merges the per-env
+     * override if one exists, and caches the result for the rest of the
+     * request. Returns an empty array when neither file is present.
+     *
+     * @return array<mixed>
+     */
+    public static function load(string $name): array
+    {
+        if (isset(self::$loaded[$name])) {
+            return self::$loaded[$name];
+        }
+        if (self::$configPath === null) {
+            throw new \RuntimeException(
+                'Config path not set; call Config::setConfigPath() or Config::configure() first',
+            );
+        }
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $name)) {
+            throw new \InvalidArgumentException(
+                "Config name '$name' has invalid chars (allowed: A-Za-z0-9_-)",
+            );
+        }
+
+        $base     = self::readFile(self::$configPath . '/' . $name . '.php');
+        $override = self::readFile(self::$configPath . '/' . self::$environment . '/' . $name . '.php');
+
+        $merged = $base === [] ? $override : Arr::merge($base, $override);
+        return self::$loaded[$name] = $merged;
+    }
+
+    /**
+     * Convenience accessor: first segment is the config-file name,
+     * remaining segments walk the array with `Arr::get`.
+     *
+     *   Config::get('db.default.dsn')
+     *      → Arr::get(Config::load('db'), 'default.dsn')
+     */
+    public static function get(string $path, mixed $default = null): mixed
+    {
+        if ($path === '') {
+            return $default;
+        }
+        [$name, $rest] = self::splitPath($path);
+        $loaded = self::load($name);
+        if ($rest === '') {
+            return $loaded === [] ? $default : $loaded;
+        }
+        return Arr::get($loaded, $rest, $default);
+    }
+
+    /**
+     * Drops every cached config — handy in tests / long-running scripts
+     * that need to re-read updated files.
+     */
+    public static function reset(): void
+    {
+        self::$loaded = [];
+    }
+
+    /**
+     * @return array{0:string, 1:string}
+     */
+    private static function splitPath(string $path): array
+    {
+        $dot = strpos($path, '.');
+        if ($dot === false) {
+            return [$path, ''];
+        }
+        return [substr($path, 0, $dot), substr($path, $dot + 1)];
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    private static function readFile(string $path): array
+    {
+        if (!is_file($path)) {
+            return [];
+        }
+        /** @psalm-suppress UnresolvableInclude */
+        $data = require $path;
+        if (!is_array($data)) {
+            throw new \RuntimeException(
+                "Config file '$path' must return an array (got " . gettype($data) . ')',
+            );
+        }
+        return $data;
     }
 }

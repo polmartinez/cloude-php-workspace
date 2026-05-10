@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Cloude\Tests\Db;
+namespace Cloude\Tests\Storage;
 
-use Cloude\Db\Query;
+use Cloude\Storage\Query;
 use PHPUnit\Framework\TestCase;
 
 final class QueryTest extends TestCase
@@ -263,6 +263,60 @@ final class QueryTest extends TestCase
     {
         $q = $this->q()->whereIn('id', [1, 2, 3])->where('active', 1);
         self::assertSame([1, 2, 3, 1], $q->getBindings());
+    }
+
+    public function testCompileInlinesNumericValues(): void
+    {
+        $sql = $this->q()->where('age', '>', 18)->orderBy('name')->limit(5)->compile();
+        self::assertSame(
+            'SELECT * FROM `users` WHERE `age` > 18 ORDER BY `name` ASC LIMIT 5',
+            $sql,
+        );
+    }
+
+    public function testCompileEscapesStringLiterals(): void
+    {
+        $sql = $this->q()->where('name', "O'Brien")->compile();
+        self::assertSame(
+            "SELECT * FROM `users` WHERE `name` = 'O''Brien'",
+            $sql,
+        );
+    }
+
+    public function testCompileRendersNullAndBool(): void
+    {
+        $sql = $this->q()->where('age', '=', null)->compile();
+        self::assertSame('SELECT * FROM `users` WHERE `age` IS NULL', $sql);
+
+        $sql2 = $this->q()->where('active', true)->compile();
+        self::assertSame('SELECT * FROM `users` WHERE `active` = 1', $sql2);
+    }
+
+    public function testCompileInWithMultipleValues(): void
+    {
+        $sql = $this->q()->whereIn('id', [1, 2, 3])->compile();
+        self::assertSame(
+            'SELECT * FROM `users` WHERE `id` IN (1, 2, 3)',
+            $sql,
+        );
+    }
+
+    public function testCompileUpdate(): void
+    {
+        $sql = $this->q()->where('active', 0)->compileUpdate(['role' => 'guest']);
+        self::assertSame(
+            "UPDATE `users` SET `role` = 'guest' WHERE `active` = 0",
+            $sql,
+        );
+    }
+
+    public function testCompileDelete(): void
+    {
+        $sql = $this->q()->where('age', '<', 18)->compileDelete();
+        self::assertSame(
+            'DELETE FROM `users` WHERE `age` < 18',
+            $sql,
+        );
     }
 
     // ── identifier safety ────────────────────────────────────────────────

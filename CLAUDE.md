@@ -210,7 +210,10 @@ validate the same way, and `Response::redirect` on success.
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
-| Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Db/Query.php`](src/Db/Query.php), [`tests/Db/QueryTest.php`](tests/Db/QueryTest.php) |
+| Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
+| Multi-env config (dev / prod / anything) | `Config::configure($path, $env)` + `Config::get('db.default.dsn')` | [`examples/recipes/config.php`](examples/recipes/config.php), [`tests/ConfigTest.php`](tests/ConfigTest.php) |
+| Named DB connection pool | `Connection::pdo('default')` reads `db.default` from config, caches per name | [`src/Storage/Connection.php`](src/Storage/Connection.php) |
+| Inspect SQL with values inlined | `User::query()->where(...)->compile()` (debug only — never execute) | [`src/Storage/Query.php`](src/Storage/Query.php) |
 | Live search box | JSON route + `fetch()` with debounce | [`examples/contacts/www/assets/app.js`](examples/contacts/www/assets/app.js) |
 | MCP server | `new Mcp\Server(...)` + `tool()` | [`examples/recipes/mcp.php`](examples/recipes/mcp.php) |
 | CLI cron / batch job | `TaskRunner::register / registerClass` | [`examples/recipes/tasks.php`](examples/recipes/tasks.php) |

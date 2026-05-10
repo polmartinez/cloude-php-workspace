@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Cloude\Model\Storage;
 
-use Cloude\Db\Identifier;
-use Cloude\Db\Query;
 use Cloude\Model\Storage;
+use Cloude\Storage\Identifier;
+use Cloude\Storage\Query;
 
 /**
  * PDO-backed `Storage` adapter for MySQL, SQLite and Postgres.
@@ -33,16 +33,13 @@ use Cloude\Model\Storage;
  */
 final class PdoStorage implements Storage
 {
-    private string $quoteChar;
-
     public function __construct(
         private \PDO $pdo,
         private string $table,
         private string $primaryKey = 'id',
-        ?string $quoteChar = null,
+        private string $quoteChar = '`',
     ) {
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        $this->quoteChar = $quoteChar ?? Identifier::quoteCharFor($pdo);
     }
 
     /**
