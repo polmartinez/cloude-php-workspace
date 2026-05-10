@@ -35,6 +35,12 @@ it in one prompt.
 > the decision matrix, idioms and anti-patterns. AI tools (Claude Code,
 > Cursor, Codex, …) pick it up automatically when they see the file at the
 > repo root.
+>
+> **For Claude Code users specifically:** [`CLAUDE.md`](CLAUDE.md) is the
+> "from zero to running feature" playbook — quick start, project layout,
+> the standard add-a-feature workflow, common patterns, and how to brief
+> Claude effectively. Copy it into your own project root once you start
+> building on top of `cloude/framework`.
 
 ## Installation
 
