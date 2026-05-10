@@ -17,15 +17,24 @@ declare(strict_types=1);
  * They coexist; pick whichever fits each concern in your app.
  */
 
+use Cloude\Config;
 use Cloude\Model\Model;
 use Cloude\Model\Storage\ArrayStorage;
-use Cloude\Model\Storage\PdoStorage;
+
+// ── Bootstrap once: just point Config at your config dir ─────────────────────
+//
+// `app/config/storage.php` declares every connection (PDO, JSON, ...) once
+// (see examples/recipes/config.php). Models auto-resolve to the right
+// adapter from there.
+
+Config::configure(__DIR__ . '/../app/config');
 
 // ── Define an entity ─────────────────────────────────────────────────────────
 
 class User extends Model
 {
     protected static string $table       = 'users';
+    protected static string $connection  = 'default';     // → reads storage.default
     protected static string $primaryKey  = 'id';
     /** @var list<string> Whitelist guards against mass-assignment from form input. */
     protected static array  $properties  = ['id', 'email', 'name', 'active', 'created_at'];
@@ -42,25 +51,23 @@ class User extends Model
     }
 }
 
-// ── Wire it to a configured PDO connection ───────────────────────────────────
+// That's it. The first call to User::find() / User::query() / etc. asks
+// Cloude\Storage\Factory to build the right adapter from the 'default'
+// connection's `driver` key in storage.php — pdo, json or array, all
+// behind the same Model API.
 //
-// The recommended pattern: declare connections once in app/config/db.php
-// (see examples/recipes/config.php) and ask Connection by name. This keeps
-// credentials out of the source and lets each Model pick its own connection.
-
-\Cloude\Config::configure(__DIR__ . '/../app/config');           // once at boot
-User::configure(new PdoStorage(\Cloude\Storage\Connection::pdo('default'), 'users'));
-
-// Or, for one-off scripts that build the PDO inline (no config files):
+// For tests or one-off scripts you can still wire manually:
 //
-//   $pdo = new PDO('mysql:host=localhost;dbname=app;charset=utf8mb4', $u, $p, [
-//       PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-//   ]);
+//   User::configure(new ArrayStorage([
+//       ['id' => 1, 'email' => 'ada@example.com', 'name' => 'Ada'],
+//   ]));
+//
+// or:
+//
+//   $pdo = new PDO('mysql:host=localhost;dbname=app', $u, $p);
 //   User::configure(new PdoStorage($pdo, 'users'));
 //
-// PdoStorage defaults to backtick identifier quoting (MySQL / SQLite —
-// the common case). For Postgres, pass '"' as the 4th constructor arg
-// or use Identifier::quoteCharFor($pdo) for explicit auto-detection.
+// Explicit configure() always wins over the config-driven auto-resolve.
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 

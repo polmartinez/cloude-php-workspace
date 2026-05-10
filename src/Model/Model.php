@@ -53,6 +53,23 @@ abstract class Model
     /** Subclass: SQL table name (or any identifier the configured Storage uses). */
     protected static string $table = '';
 
+    /**
+     * Subclass: which connection (from `storage.php` config) backs this
+     * model. The factory dispatches on the connection's `driver` key
+     * (`pdo` / `json` / `array`) to build the right `Storage` adapter
+     * on first use.
+     *
+     * Override per-class to point models at different connections:
+     *
+     *   class User extends Model {
+     *       protected static string $connection = 'default';   // PDO
+     *   }
+     *   class Article extends Model {
+     *       protected static string $connection = 'content';   // JSON files
+     *   }
+     */
+    protected static string $connection = 'default';
+
     /** Subclass: name of the single-column primary key. */
     protected static string $primaryKey = 'id';
 
@@ -81,8 +98,14 @@ abstract class Model
     // ── configuration ──────────────────────────────────────────────────────
 
     /**
-     * Wire this model class to a storage backend. Call once at boot —
-     * typically from your routes or a small wiring file.
+     * Explicitly wire this model class to a storage backend.
+     *
+     * Most apps don't need to call this — `storage()` auto-resolves
+     * from the `static $connection` config on first use. Use it for:
+     *
+     *   - Tests: `User::configure(new ArrayStorage([...]))`
+     *   - One-off scripts that build the storage inline
+     *   - Override of the config-driven default
      */
     public static function configure(Storage $storage): void
     {
@@ -90,22 +113,34 @@ abstract class Model
     }
 
     /**
-     * Returns the storage configured for this class (or its closest
-     * configured ancestor). Throws if nothing is wired.
+     * Returns the storage for this class. Lazily resolved from config
+     * via `Cloude\Storage\Factory` if no explicit `configure()` call
+     * has been made — the factory dispatches on the connection's
+     * `driver` key (`pdo` / `json` / `array`).
      *
-     * Public on purpose: it's the canonical escape hatch for raw queries.
-     * `User::storage()->pdo()->query(...)` is the documented way to drop
-     * down to SQL when `findBy()` isn't enough.
+     * Public on purpose: it's the canonical escape hatch for raw
+     * queries. `User::storage()->pdo()->query(...)` drops down to SQL
+     * when `findBy()` / `query()` aren't enough.
      */
     public static function storage(): Storage
     {
         $class = static::class;
-        if (!isset(self::$storages[$class])) {
+        if (isset(self::$storages[$class])) {
+            return self::$storages[$class];
+        }
+        try {
+            return self::$storages[$class] = \Cloude\Storage\Factory::make(
+                static::$connection,
+                static::$table,
+            );
+        } catch (\Throwable $e) {
             throw new \RuntimeException(
-                "$class has no Storage configured; call $class::configure(new ...)",
+                "Could not auto-resolve storage for $class (connection '"
+                . static::$connection . "', table '" . static::$table . "'): "
+                . $e->getMessage(),
+                previous: $e,
             );
         }
-        return self::$storages[$class];
     }
 
     /**

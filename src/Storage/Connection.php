@@ -14,20 +14,26 @@ use Cloude\Config;
  * pick the connection it wants by name, without the app having to
  * thread `\PDO` instances through constructors.
  *
- * Configuration lives in `app/config/db.php` (with per-environment
- * overrides under `app/config/<env>/db.php`):
+ * Configuration lives in `app/config/storage.php` (with per-environment
+ * overrides under `app/config/<env>/storage.php`). Same file is used by
+ * `Cloude\Storage\Factory` to build the right adapter for each driver:
  *
  *   return [
  *       'default' => [
- *           'dsn'     => 'mysql:host=localhost;dbname=app;charset=utf8mb4',
- *           'user'    => 'app',
- *           'pass'    => '',
- *           'options' => [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+ *           'driver' => 'pdo',
+ *           'dsn'    => 'mysql:host=localhost;dbname=app;charset=utf8mb4',
+ *           'user'   => 'app',
+ *           'pass'   => '',
  *       ],
  *       'analytics' => [
- *           'dsn'  => 'mysql:host=warehouse;dbname=events',
- *           'user' => 'app_ro',
- *           'pass' => '',
+ *           'driver' => 'pdo',
+ *           'dsn'    => 'mysql:host=warehouse;dbname=events',
+ *           'user'   => 'app_ro',
+ *           'pass'   => '',
+ *       ],
+ *       'content' => [
+ *           'driver' => 'json',
+ *           'path'   => __DIR__ . '/../../data',
  *       ],
  *   ];
  *
@@ -36,31 +42,66 @@ use Cloude\Config;
  *   \Cloude\Config::configure(__DIR__ . '/../config');     // once at boot
  *   $pdo = \Cloude\Storage\Connection::pdo('default');     // lazy, cached
  *
- *   \App\User::configure(new PdoStorage($pdo, 'users'));
- *   \App\Event::configure(new PdoStorage(Connection::pdo('analytics'), 'events'));
+ *   // ...or just let Model auto-resolve from `static $connection`:
+ *   class User extends Model {
+ *       protected static string $table      = 'users';
+ *       protected static string $connection = 'default';
+ *   }
+ *   User::find(1);   // no configure() needed
  *
  * The pool is static (one per process). `set()` and `reset()` exist so
  * tests can inject a `:memory:` SQLite or wipe state between cases.
  *
  * Connection is intentionally PDO-only. File-based storages
- * (`JsonStorage`, etc.) take their config directly (a directory path
- * via `Config::get('paths.content')`) — there's no shared pool to
- * manage there.
+ * (`JsonStorage`, etc.) read their `path` directly from the same
+ * config — there's no shared pool to manage there.
+ *
+ * Backwards-compat for v0.19's `db.php` filename: call
+ * `Connection::setConfigName('db')` at boot and the loader uses
+ * `db.<name>` instead of `storage.<name>`.
  */
 final class Connection
 {
     /** @var array<string, \PDO> */
     private static array $pool = [];
 
+    private static string $configName = 'storage';
+
+    /**
+     * Override the config file name read by `pdo()` and the storage
+     * `Factory`. Default is 'storage' (matches the namespace name).
+     * Pass 'db' to keep the v0.19 convention.
+     */
+    public static function setConfigName(string $name): void
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $name)) {
+            throw new \InvalidArgumentException("Invalid config name: '$name'");
+        }
+        self::$configName = $name;
+        self::$pool = [];
+    }
+
+    public static function configName(): string
+    {
+        return self::$configName;
+    }
+
     public static function pdo(string $name = 'default'): \PDO
     {
         if (isset(self::$pool[$name])) {
             return self::$pool[$name];
         }
-        $config = Config::get("db.$name");
+        $config = Config::get(self::$configName . '.' . $name);
         if (!is_array($config) || $config === []) {
             throw new \RuntimeException(
-                "No database connection named '$name' in config (expected db.$name)",
+                "No connection named '$name' in " . self::$configName . ' config',
+            );
+        }
+        $driver = $config['driver'] ?? 'pdo';
+        if ($driver !== 'pdo') {
+            throw new \RuntimeException(
+                "Connection '$name' has driver '$driver' — Connection::pdo() only "
+                . "handles 'pdo'. Use Cloude\\Storage\\Factory::make() instead.",
             );
         }
         return self::$pool[$name] = self::makePdo($config, $name);

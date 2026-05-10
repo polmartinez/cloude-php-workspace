@@ -17,12 +17,14 @@ final class ConnectionTest extends TestCase
         $this->tmp = sys_get_temp_dir() . '/cloude-conn-' . bin2hex(random_bytes(4));
         mkdir($this->tmp, 0755, true);
 
-        file_put_contents($this->tmp . '/db.php', "<?php return [
-            'default'   => ['dsn' => 'sqlite::memory:'],
-            'analytics' => ['dsn' => 'sqlite::memory:'],
+        file_put_contents($this->tmp . '/storage.php', "<?php return [
+            'default'   => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+            'analytics' => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+            'not_pdo'   => ['driver' => 'json', 'path' => '/tmp'],
         ];");
 
         Connection::reset();
+        Connection::setConfigName('storage');
         Config::reset();
         Config::setConfigPath($this->tmp);
         Config::setEnvironment('dev');
@@ -92,9 +94,31 @@ final class ConnectionTest extends TestCase
 
     public function testMissingDsnThrows(): void
     {
-        file_put_contents($this->tmp . '/db.php', "<?php return ['broken' => ['user' => 'x']];");
+        file_put_contents($this->tmp . '/storage.php', "<?php return ['broken' => ['driver' => 'pdo', 'user' => 'x']];");
         Config::reset();
         $this->expectException(\RuntimeException::class);
         Connection::pdo('broken');
+    }
+
+    public function testNonPdoDriverIsRejected(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("driver 'json'");
+        Connection::pdo('not_pdo');
+    }
+
+    public function testConfigNameOverride(): void
+    {
+        // Drop a `db.php` and switch Connection to read from there
+        // (the v0.19 backward-compat path).
+        file_put_contents($this->tmp . '/db.php', "<?php return [
+            'legacy' => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+        ];");
+        Config::reset();
+        Connection::setConfigName('db');
+        self::assertInstanceOf(\PDO::class, Connection::pdo('legacy'));
+
+        // Reset back so other tests aren't affected.
+        Connection::setConfigName('storage');
     }
 }

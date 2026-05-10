@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Cloude\Tests\Model;
 
+use Cloude\Config;
 use Cloude\Model\Model;
 use Cloude\Model\Storage\ArrayStorage;
 use Cloude\Model\Storage\PdoStorage;
+use Cloude\Storage\Connection;
 use PHPUnit\Framework\TestCase;
 
 final class TestUser extends Model
@@ -19,6 +21,13 @@ final class TestUser extends Model
 final class UnconfiguredModel extends Model
 {
     protected static string $table = 'unconfigured';
+    protected static string $connection = 'definitely_not_in_config';
+}
+
+final class AutoResolvedModel extends Model
+{
+    protected static string $table = 'autoresolved';
+    protected static string $connection = 'fake';
 }
 
 final class ModelTest extends TestCase
@@ -109,10 +118,41 @@ final class ModelTest extends TestCase
         $u->bogus = 'nope';
     }
 
-    public function testStorageUnconfiguredThrows(): void
+    public function testStorageUnconfiguredAndUnresolvableThrows(): void
     {
+        // No explicit configure() AND no matching config entry → auto-resolve
+        // fails, which we re-throw as a RuntimeException with context.
+        Connection::reset();
+        Config::reset();
+        Config::setConfigPath(sys_get_temp_dir());      // path with no config files
         $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Could not auto-resolve storage for');
         UnconfiguredModel::find(1);
+    }
+
+    public function testStorageAutoResolvesFromConfig(): void
+    {
+        // Spin up a tmp config with an 'array' driver entry and confirm the
+        // model picks it up on first use without any configure() call.
+        $tmp = sys_get_temp_dir() . '/cloude-model-autoresolve-' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0755, true);
+        file_put_contents($tmp . '/storage.php', "<?php return [
+            'fake' => ['driver' => 'array', 'data' => [
+                ['id' => 99, 'email' => 'auto@x', 'name' => 'Auto', 'active' => 1],
+            ]],
+        ];");
+
+        Connection::reset();
+        Connection::setConfigName('storage');
+        Config::reset();
+        Config::setConfigPath($tmp);
+
+        $u = AutoResolvedModel::find(99);
+        self::assertNotNull($u);
+        self::assertSame('Auto', $u->name);
+
+        @unlink($tmp . '/storage.php');
+        @rmdir($tmp);
     }
 
     public function testStorageEscapeHatchIsPublic(): void
