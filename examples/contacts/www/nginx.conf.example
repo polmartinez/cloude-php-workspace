@@ -1,0 +1,33 @@
+# Example nginx server block for this demo.
+#
+# Drop-in equivalent of the bundled .htaccess: serve static files directly,
+# route everything else to index.php. Adjust paths and the fastcgi socket
+# for your environment.
+
+server {
+    listen 8080;
+    server_name localhost;
+
+    root /path/to/examples/contacts/www;
+    index index.php;
+
+    # Static files (CSS, JS, images): serve from disk if present.
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # Hand PHP to PHP-FPM. Adjust the socket / port to your install.
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/var/run/php/php-fpm.sock;
+        # fastcgi_pass 127.0.0.1:9000;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    # Long-lived cache for versioned assets, if you wire up Cloude\Http\AssetUrl.
+    # location ~ ^/[0-9]+/assets/(.*)$ {
+    #     try_files /assets/$1 =404;
+    #     expires 1y;
+    #     add_header Cache-Control "public, immutable";
+    # }
+}

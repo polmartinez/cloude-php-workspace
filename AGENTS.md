@@ -138,7 +138,7 @@ Don't:
 
 ## Recipes (read these before writing equivalents)
 
-Located at `vendor/cloude/framework/example/recipes/`. Each file is
+Located at `vendor/cloude/framework/examples/recipes/`. Each file is
 self-contained, runnable, and copy-pasteable.
 
 | File | Pattern |

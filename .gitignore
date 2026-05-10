@@ -1,5 +1,6 @@
 /vendor/
-/example/vendor/
+/examples/vendor/
+/examples/*/vendor/
 composer.lock
 composer.phar
 /.phpunit.cache/

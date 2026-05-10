@@ -18,11 +18,11 @@ Open <http://localhost:8000>.
 ## What it ships
 
 ```
-example/
+examples/
   composer.json          # depends on cloude/framework
   www/
     index.php            # entry point: bootstraps config, autoload and the router
-    .htaccess            # Apache rewrite rules (all non-files -> index.php)
+    .htaccess            # rewrite rules (Apache; see file header for nginx / Caddy)
   app/
     config.php           # BASE_URL, ROOT_DIR, DEBUG...
     routes.php           # App\Routes::register()

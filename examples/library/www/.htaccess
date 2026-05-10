@@ -1,0 +1,14 @@
+# Apache front-controller rules. The same routing works on:
+#   - php -S      → handled in code by Cloude\Bootstrap::serveStaticIfExists
+#   - nginx       → see ./nginx.conf.example (under examples/contacts/www/)
+#   - Caddy       → `try_files {path} index.php` in a Caddyfile site block
+#
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    RewriteRule ^ index.php [L]
+</IfModule>

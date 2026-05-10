@@ -82,8 +82,9 @@ cloude-php-workspace/
       McpException.php
     views/               # Default 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
-  example/               # Runnable sample app (see example/README.md)
+  examples/              # Runnable sample apps (see examples/README.md)
     recipes/             # Cookbook snippets for sitemap, JSON-LD, ...
+    contacts/            # Mini address-book: form + live search demo
   composer.json          # Package manifest (name: cloude/framework)
   phpunit.xml.dist
   .php-cs-fixer.dist.php
@@ -191,25 +192,30 @@ $router->dispatch();
 view base path in one call. Drop in `app/config.php` and you have a complete
 front controller in ~15 lines.
 
-## Example project
+## Example projects
 
-A complete, ready-to-run project lives in [`example/`](example/):
+Ready-to-run sample apps live in [`examples/`](examples/):
 
 ```bash
-cd example
+cd examples
 composer install
 php -S localhost:8000 -t www
 ```
 
 Open <http://localhost:8000>.
 
-The example ships:
+The basic sample ships:
 
-- `example/www/index.php` - entry point and bootstrap
-- `example/www/.htaccess` - Apache rewrite rules
-- `example/app/config.php` - base configuration
-- `example/app/routes.php` - route definitions
-- `example/views/` - layout and pages
+- `examples/www/index.php` - entry point and bootstrap
+- `examples/www/.htaccess` - rewrite rules (Apache; see the file's header
+  for nginx / Caddy / `php -S` equivalents)
+- `examples/app/config.php` - base configuration
+- `examples/app/routes.php` - route definitions
+- `examples/views/` - layout and pages
+
+Other apps under `examples/` (e.g. [`examples/contacts/`](examples/contacts/),
+a mini address-book with form + live JSON search) are self-contained — each
+has its own `www/index.php` and README with run instructions.
 
 ## Class reference
 
@@ -518,7 +524,7 @@ entirely (e.g. sharded sub-directories).
 
 `all()` returns a `Cloude\Collection`, so once you have a Repository
 the chainable pipeline is one method call away — see the
-[recipe](example/recipes/data.php) for the full pattern.
+[recipe](examples/recipes/data.php) for the full pattern.
 
 ### `Cloude\Bootstrap`
 
@@ -680,7 +686,7 @@ Format::yaml("title: Hi\nflag: true");     // ['title' => 'Hi', 'flag' => true]
 Format::yaml(['title' => 'Hi']);           // "title: Hi\n"
 
 // XML — keys with '@' become attributes, '#text' is text content,
-// list arrays repeat the element. See example/recipes/sitemap.php.
+// list arrays repeat the element. See examples/recipes/sitemap.php.
 Format::xml(['urlset' => [
     '@xmlns' => 'http://www.sitemaps.org/schemas/sitemap/0.9',
     'url'    => [['loc' => 'a'], ['loc' => 'b']],
@@ -823,7 +829,7 @@ What it handles for you:
 Out of scope: stdio transport, SSE/streaming, auth (do that in a route
 middleware before calling `dispatch()`).
 
-See [`example/recipes/mcp.php`](example/recipes/mcp.php) for a runnable server.
+See [`examples/recipes/mcp.php`](examples/recipes/mcp.php) for a runnable server.
 
 ### `Cloude\Cli`
 
@@ -927,21 +933,21 @@ may return `int` (exit code), `null`/`true`/`void` (exit 0), or `false`
 (exit 1). Uncaught exceptions are reported via `Cli::error()` and the runner
 exits 1.
 
-See [`example/recipes/tasks.php`](example/recipes/tasks.php) for a runnable
+See [`examples/recipes/tasks.php`](examples/recipes/tasks.php) for a runnable
 template.
 
 ## Recipes (cookbook snippets)
 
-`example/recipes/` ships drop-in snippets for common patterns the framework
+`examples/recipes/` ships drop-in snippets for common patterns the framework
 deliberately doesn't wrap in a class:
 
 | Recipe | What it does |
 |---|---|
-| [`sitemap.php`](example/recipes/sitemap.php) | XML sitemap (and sitemap index) using `Format::xml` + `Http\Response::xml` |
-| [`jsonld.php`](example/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
-| [`mcp.php`](example/recipes/mcp.php) | Tiny MCP server with two tools and a resource catalogue using `Mcp\Server` |
-| [`tasks.php`](example/recipes/tasks.php) | CLI task runner with one inline task and one task class using `TaskRunner` |
-| [`data.php`](example/recipes/data.php) | Custom `JsonRepository` and `MarkdownRepository` subclasses with `transform()` and domain finders |
+| [`sitemap.php`](examples/recipes/sitemap.php) | XML sitemap (and sitemap index) using `Format::xml` + `Http\Response::xml` |
+| [`jsonld.php`](examples/recipes/jsonld.php) | Schema.org JSON-LD blocks (Article, BreadcrumbList, FAQPage) using `Format::json` |
+| [`mcp.php`](examples/recipes/mcp.php) | Tiny MCP server with two tools and a resource catalogue using `Mcp\Server` |
+| [`tasks.php`](examples/recipes/tasks.php) | CLI task runner with one inline task and one task class using `TaskRunner` |
+| [`data.php`](examples/recipes/data.php) | Custom `JsonRepository` and `MarkdownRepository` subclasses with `transform()` and domain finders |
 
 Each recipe is a single self-contained file with comments — copy, paste, edit.
 
@@ -962,8 +968,8 @@ composer cs-fix      # apply fixes
 4. Tag a release:
 
    ```bash
-   git tag -a v0.14.0 -m "v0.14.0"
-   git push origin v0.14.0
+   git tag -a v0.15.0 -m "v0.15.0"
+   git push origin v0.15.0
    ```
 
 After publication, any project can install it with:
