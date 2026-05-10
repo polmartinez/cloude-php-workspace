@@ -7,6 +7,7 @@ namespace Cloude\Storage;
 use Cloude\Config;
 use Cloude\Model\Storage;
 use Cloude\Model\Storage\ArrayStorage;
+use Cloude\Model\Storage\JsonCollectionStorage;
 use Cloude\Model\Storage\JsonStorage;
 use Cloude\Model\Storage\PdoStorage;
 
@@ -40,16 +41,22 @@ use Cloude\Model\Storage\PdoStorage;
  *          options) are consumed by Connection.
  *
  *   json → reads `path` (required, the parent dir) and uses
- *          `$path/$table/` as the storage directory.
- *          Recognises `primary_key` (default 'id') and
+ *          `$path/$table/` as the storage directory — one .json
+ *          per record. Recognises `primary_key` (default 'id') and
  *          `auto_increment` (default false, otherwise UUIDs).
+ *
+ *   json_collection → ONE file IS the whole collection (a dict keyed
+ *          by PK). Reads `path` (parent dir) and uses
+ *          `$path/$table.json` as the storage file. Recognises
+ *          `primary_key` (default 'id'). Pick this when the data is
+ *          already shaped as one document with many entries.
  *
  *   array → starts empty unless `data` (a list of seed rows) is
  *           supplied. Recognises `primary_key` (default 'id').
  *
- * Unknown drivers throw — there's no plugin registry in v0.20. If you
- * need Redis / Mongo / something custom, subclass your Model and
- * override `storage()`, or wire the storage explicitly via
+ * Unknown drivers throw — there's no plugin registry. If you need
+ * Redis / Mongo / something custom, subclass your Model and override
+ * `storage()`, or wire the storage explicitly via
  * `Model::configure(new MyStorage(...))`.
  */
 final class Factory
@@ -67,12 +74,13 @@ final class Factory
         $driver = $config['driver'] ?? 'pdo';
 
         return match ($driver) {
-            'pdo'   => self::pdoStorage($connectionName, $table, $config),
-            'json'  => self::jsonStorage($table, $config),
-            'array' => self::arrayStorage($config),
-            default => throw new \RuntimeException(
+            'pdo'             => self::pdoStorage($connectionName, $table, $config),
+            'json'            => self::jsonStorage($table, $config),
+            'json_collection' => self::jsonCollectionStorage($table, $config),
+            'array'           => self::arrayStorage($config),
+            default           => throw new \RuntimeException(
                 "Unknown storage driver '$driver' for connection '$connectionName' "
-                . '(supported: pdo, json, array)',
+                . '(supported: pdo, json, json_collection, array)',
             ),
         };
     }
@@ -102,6 +110,22 @@ final class Factory
             rtrim((string) $config['path'], '/') . '/' . $table,
             (string) ($config['primary_key'] ?? 'id'),
             (bool) ($config['auto_increment'] ?? false),
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $config
+     */
+    private static function jsonCollectionStorage(string $table, array $config): JsonCollectionStorage
+    {
+        if (empty($config['path'])) {
+            throw new \RuntimeException(
+                "'json_collection' driver requires a 'path' key (parent directory; file = path/table.json)",
+            );
+        }
+        return new JsonCollectionStorage(
+            rtrim((string) $config['path'], '/') . '/' . $table . '.json',
+            (string) ($config['primary_key'] ?? 'id'),
         );
     }
 

@@ -6,6 +6,7 @@ namespace Cloude\Tests\Storage;
 
 use Cloude\Config;
 use Cloude\Model\Storage\ArrayStorage;
+use Cloude\Model\Storage\JsonCollectionStorage;
 use Cloude\Model\Storage\JsonStorage;
 use Cloude\Model\Storage\PdoStorage;
 use Cloude\Storage\Connection;
@@ -22,12 +23,14 @@ final class FactoryTest extends TestCase
         mkdir($this->tmp, 0755, true);
 
         file_put_contents($this->tmp . '/storage.php', "<?php return [
-            'default'  => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
-            'content'  => ['driver' => 'json', 'path' => '" . $this->tmp . "/data', 'auto_increment' => true],
-            'fake'     => ['driver' => 'array', 'data' => [['id' => 1, 'name' => 'Ada']]],
-            'weirdpk'  => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:', 'primary_key' => 'uuid'],
-            'broken'   => ['driver' => 'mongo'],
-            'no_path'  => ['driver' => 'json'],
+            'default'   => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+            'content'   => ['driver' => 'json', 'path' => '" . $this->tmp . "/data', 'auto_increment' => true],
+            'lookup'    => ['driver' => 'json_collection', 'path' => '" . $this->tmp . "/data', 'primary_key' => 'slug'],
+            'fake'      => ['driver' => 'array', 'data' => [['id' => 1, 'name' => 'Ada']]],
+            'weirdpk'   => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:', 'primary_key' => 'uuid'],
+            'broken'    => ['driver' => 'mongo'],
+            'no_path'   => ['driver' => 'json'],
+            'no_path_c' => ['driver' => 'json_collection'],
         ];");
 
         Connection::reset();
@@ -99,5 +102,24 @@ final class FactoryTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage("'json' driver requires a 'path' key");
         Factory::make('no_path', 'foo');
+    }
+
+    public function testJsonCollectionDriverYieldsJsonCollectionStorage(): void
+    {
+        $storage = Factory::make('lookup', 'parties');
+        self::assertInstanceOf(JsonCollectionStorage::class, $storage);
+        // Round-trip: insert + find through the factory-built adapter.
+        $storage->insert(['slug' => 'psoe', 'name' => 'PSOE']);
+        $row = $storage->find('psoe');
+        self::assertSame('PSOE', $row['name']);
+        self::assertSame('psoe', $row['slug']);
+        self::assertFileExists($this->tmp . '/data/parties.json');
+    }
+
+    public function testJsonCollectionDriverRequiresPath(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("'json_collection' driver requires a 'path' key");
+        Factory::make('no_path_c', 'foo');
     }
 }
