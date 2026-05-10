@@ -31,7 +31,6 @@ my-app/
 ├── composer.json              ← requires cloude/framework, maps App\ → app/
 ├── www/                       ← document root
 │   ├── index.php              ← front controller
-│   ├── .htaccess              ← Apache; nginx / Caddy / php -S also covered
 │   └── assets/                ← static CSS/JS/images
 ├── app/
 │   ├── config.php             ← BASE_URL, DEBUG, DATA_DIR
@@ -259,17 +258,15 @@ Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 
 ## Deployment
 
-The app is a plain front-controller PHP web app. Pick whichever stack
-matches your environment — header notes in
-[`examples/contacts/www/.htaccess`](examples/contacts/www/.htaccess)
-list every flavour:
+The app is a plain front-controller PHP web app — it runs identically
+under `php -S`, Apache, nginx + PHP-FPM, Caddy, Heroku, Fly.io, or
+anything else that speaks PHP 8.4. The bundled examples deliberately
+ship without any web-server config so the focus stays on what each
+demo illustrates.
 
-- **`php -S`** for development — `Bootstrap::serveStaticIfExists` handles asset passthrough.
-- **Apache** — drop the `.htaccess` and point at `www/`.
-- **nginx + PHP-FPM** — see [`examples/contacts/www/nginx.conf.example`](examples/contacts/www/nginx.conf.example).
-- **Caddy** — `php_fastcgi unix//run/php/php-fpm.sock` + `file_server`.
-
-The framework runs identically on all of them — no SAPI-specific code.
+For run-it-now options (`php -S` and Docker one-liners) plus the
+one-line rewrite recipe per server (Apache / nginx / Caddy), see
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Releasing a new version
 

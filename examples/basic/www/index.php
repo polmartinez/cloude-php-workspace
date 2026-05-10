@@ -23,7 +23,7 @@ $autoload = dirname(__DIR__) . '/vendor/autoload.php';
 if (file_exists($autoload)) {
     require_once $autoload;
 } else {
-    $frameworkSrc = dirname(__DIR__, 2) . '/src';
+    $frameworkSrc = dirname(__DIR__, 3) . '/src';
     if (is_dir($frameworkSrc)) {
         spl_autoload_register(function (string $class) use ($frameworkSrc): void {
             if (!str_starts_with($class, 'Cloude\\')) {

@@ -20,24 +20,17 @@ Infrastructure ─────────────►  Concrete repository a
 Dependencies point **inwards**: Infrastructure and Presentation know
 about Domain; Domain doesn't know about either.
 
-## Run it locally
+## Run
 
-From the **repository root**:
+From the repository root:
 
 ```bash
 php -S localhost:8002 -t examples/library/www
 ```
 
-Open <http://localhost:8002>.
+Open <http://localhost:8002>. No `composer install` needed.
 
-> No `composer install` needed — `www/index.php` falls back to autoloading
-> the framework directly from `../../../src/` when no Composer autoload
-> is present.
-
-For Apache / nginx / Caddy deployment, see the `.htaccess` header in
-[`www/.htaccess`](www/.htaccess) and the nginx example bundled with the
-`contacts` demo at
-[`examples/contacts/www/nginx.conf.example`](../contacts/www/nginx.conf.example).
+For Docker / `docker compose`, see [`../../DEPLOYMENT.md`](../../DEPLOYMENT.md).
 
 ## What you'll see
 
@@ -54,10 +47,9 @@ For Apache / nginx / Caddy deployment, see the `.htaccess` header in
 ## Layout
 
 ```
-examples/library/
+library/
 ├── www/
 │   ├── index.php                 ← front controller, autoload, manual wiring
-│   ├── .htaccess
 │   └── assets/app.css
 ├── app/
 │   ├── config.php                ← BASE_URL, DATA_DIR, DEBUG

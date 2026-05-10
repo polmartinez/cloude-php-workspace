@@ -1,59 +1,39 @@
-# Cloude - Example App
+# Examples
 
-A minimal, ready-to-run project built on top of [`cloude/framework`](../).
+Each subdirectory is an **independent** example. None of them depend on
+each other — only on the framework itself (one level up at `../src/`).
+You can copy any one out of the repo and treat it as a standalone
+project.
 
-## Run locally
+| Example | What it shows |
+|---------|---------------|
+| [`basic/`](basic/)       | The smallest possible front-controller app. Routing, dynamic params, a JSON echo endpoint, two views. |
+| [`contacts/`](contacts/) | Form handling with `JsonSchema` validation, file-per-entity storage via `JsonRepository`, accent-insensitive search, and a JSON endpoint consumed from JavaScript with debounced `fetch()`. |
+| [`library/`](library/)   | DDD-style layering — Domain (value objects, aggregates, domain service), Application (use cases), Infrastructure (Cloude-backed adapters), Presentation (HTTP controllers). |
+| [`recipes/`](recipes/)   | Standalone snippets — XML sitemap, Schema.org JSON-LD, MCP server, CLI task runner, custom JSON / Markdown repositories. Not full apps, just patterns to copy. |
 
-From this directory:
+## How to run them
 
-```bash
-composer install
-php -S localhost:8000 -t www
-```
+See [`DEPLOYMENT.md`](../DEPLOYMENT.md) at the repo root — covers
+`php -S` (one-line, no install), Docker (one-line, no PHP install),
+and `docker compose` for longer dev sessions.
 
-Open <http://localhost:8000>.
-
-> When running from inside this repository (without `composer install`), `www/index.php` falls back to autoloading the framework directly from `../src/`. You only need Composer for the optional dependencies (Parsedown).
-
-## What it ships
-
-```
-examples/
-  composer.json          # depends on cloude/framework
-  www/
-    index.php            # entry point: bootstraps config, autoload and the router
-    .htaccess            # rewrite rules (Apache; see file header for nginx / Caddy)
-  app/
-    config.php           # BASE_URL, ROOT_DIR, DEBUG...
-    routes.php           # App\Routes::register()
-  views/
-    layout.php           # base HTML layout
-    home.php             # landing page
-    hello.php            # dynamic-parameter example
-    about.php            # static page
-    404.php              # not-found page
-```
-
-## Routes
-
-| Method | Path              | Handler                                    |
-|--------|-------------------|--------------------------------------------|
-| GET    | `/`               | Renders `home.php`                         |
-| GET    | `/hello/{name}`   | Renders `hello.php` with `$name`           |
-| GET    | `/about`          | Renders `about.php`                        |
-| POST   | `/api/echo`       | Returns a JSON dump of the request         |
-
-## Try the JSON endpoint
+The shortest path:
 
 ```bash
-curl -X POST http://localhost:8000/api/echo \
-  -H 'Content-Type: application/json' \
-  -d '{"hello": "world"}'
+php -S localhost:8000 -t examples/basic/www
+php -S localhost:8001 -t examples/contacts/www
+php -S localhost:8002 -t examples/library/www
 ```
 
-## Use as a starting point
+## Independence rule
 
-1. Copy this directory into a new repo.
-2. Rename the namespace in `app/` (currently `App\`) if you want.
-3. `composer require cloude/framework` to pull the framework from Packagist.
-4. Add your routes in `app/routes.php` and your templates in `views/`.
+When adding a new example:
+
+- Keep everything inside its own directory.
+- The only allowed dependency is the framework, reached via the
+  fallback autoloader in `www/index.php`
+  (`dirname(__DIR__, 3) . '/src'`).
+- Do not link to files in sibling examples from your README, code or
+  config. If a snippet would be useful across examples, promote it to
+  [`recipes/`](recipes/) instead.

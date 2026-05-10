@@ -200,28 +200,26 @@ front controller in ~15 lines.
 
 ## Example projects
 
-Ready-to-run sample apps live in [`examples/`](examples/):
+Ready-to-run sample apps live in [`examples/`](examples/). Each one is
+fully self-contained — no cross-dependencies, no Apache or nginx
+required, no `composer install` needed when running from inside this
+repo. From the repository root:
 
 ```bash
-cd examples
-composer install
-php -S localhost:8000 -t www
+php -S localhost:8000 -t examples/basic/www       # smallest skeleton
+php -S localhost:8001 -t examples/contacts/www    # form + live JSON search
+php -S localhost:8002 -t examples/library/www     # DDD layering
 ```
 
-Open <http://localhost:8000>.
+| Folder | What it shows |
+|--------|---------------|
+| [`examples/basic/`](examples/basic/) | Front-controller skeleton: routing, dynamic params, JSON echo, plain-PHP views |
+| [`examples/contacts/`](examples/contacts/) | Form + `JsonSchema` validation + accent-insensitive search + `fetch()` from JS |
+| [`examples/library/`](examples/library/) | DDD layering: Domain / Application / Infrastructure / Presentation |
+| [`examples/recipes/`](examples/recipes/) | Standalone snippets — sitemap, JSON-LD, MCP, CLI tasks, repos |
 
-The basic sample ships:
-
-- `examples/www/index.php` - entry point and bootstrap
-- `examples/www/.htaccess` - rewrite rules (Apache; see the file's header
-  for nginx / Caddy / `php -S` equivalents)
-- `examples/app/config.php` - base configuration
-- `examples/app/routes.php` - route definitions
-- `examples/views/` - layout and pages
-
-Other apps under `examples/` (e.g. [`examples/contacts/`](examples/contacts/),
-a mini address-book with form + live JSON search) are self-contained — each
-has its own `www/index.php` and README with run instructions.
+Run via Docker without installing PHP locally — see
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Class reference
 
