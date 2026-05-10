@@ -90,13 +90,47 @@ $activeUsers = User::findBy(
 $activeCount = User::count(['active' => 1]);
 $total       = User::count();
 
-// ── Richer queries: drop to PDO ──────────────────────────────────────────────
+// ── Richer queries: the Cloude\Db\Query builder ──────────────────────────────
 //
-// `findBy` is equality-only by design. For LIKE / IN / ranges / aggregations,
-// reach the connection and write SQL. This is the framework's "no DSL" line.
+// `findBy` is equality-only by design. For `>`, `<`, `LIKE`, `IN`, `BETWEEN`,
+// `IS NULL`, multi-column `ORDER BY`, etc., reach for `User::query()` —
+// shortcut for `User::storage()->query()`, returning a fresh `Cloude\Db\Query`
+// bound to the model's table.
 
-$recent = User::storage()->pdo()
-    ->query('SELECT id, name FROM users WHERE created_at > date("now","-7 days") ORDER BY created_at DESC LIMIT 20')
+$rows = User::query()
+    ->where('age', '>', 18)
+    ->whereIn('role', ['admin', 'editor'])
+    ->whereNotNull('email')
+    ->orderBy('created_at', 'DESC')
+    ->limit(20)
+    ->get();                       // list<array> — raw rows
+
+// Lift rows back into Model instances (User::hydrate is public for this):
+$users = array_map(static fn (array $r) => User::hydrate($r), $rows);
+
+// More builder shapes:
+$count    = User::query()->where('active', 1)->count();
+$first    = User::query()->where('email', 'a@b.com')->first();
+$emails   = User::query()->where('active', 1)->pluck('email');           // list<string>
+$nameById = User::query()->select('id', 'name')->pluck('name', 'id');    // [id => name]
+
+// Mutations (apply current WHERE):
+$updated  = User::query()->where('active', 0)->update(['role' => 'guest']);   // affected rows
+$deleted  = User::query()->where('created_at', '<', '2020-01-01')->delete();  // affected rows
+
+// Debug what the builder is about to issue:
+echo User::query()->where('age', '>', 18)->orderBy('name')->limit(5)->toSql();
+// → SELECT * FROM `users` WHERE `age` > ? ORDER BY `name` ASC LIMIT 5
+
+// ── Beyond the builder: drop to PDO ──────────────────────────────────────────
+//
+// The builder is intentionally narrow — no joins, no unions, no subqueries.
+// For anything outside that scope, reach the raw connection.
+
+$top = User::storage()->pdo()
+    ->query('SELECT u.id, u.name, COUNT(o.id) AS n
+             FROM users u LEFT JOIN orders o ON o.user_id = u.id
+             GROUP BY u.id ORDER BY n DESC LIMIT 5')
     ->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Same model, swapped adapter — useful in tests ────────────────────────────

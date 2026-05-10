@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cloude\Model\Storage;
 
+use Cloude\Db\Identifier;
+use Cloude\Db\Query;
 use Cloude\Model\Storage;
 
 /**
@@ -40,21 +42,35 @@ final class PdoStorage implements Storage
         ?string $quoteChar = null,
     ) {
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        if ($quoteChar !== null) {
-            $this->quoteChar = $quoteChar;
-        } else {
-            $driver = (string) $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
-            $this->quoteChar = $driver === 'pgsql' ? '"' : '`';
-        }
+        $this->quoteChar = $quoteChar ?? Identifier::quoteCharFor($pdo);
     }
 
     /**
-     * Escape hatch for raw SQL. Use when `findBy()` doesn't cover what
-     * you need — joins, LIKE, IN, aggregations, transactions.
+     * Escape hatch for raw SQL. Use when neither `findBy()` nor the
+     * `Cloude\Db\Query` builder cover what you need — joins, unions,
+     * subqueries, aggregations, transactions.
      */
     public function pdo(): \PDO
     {
         return $this->pdo;
+    }
+
+    /**
+     * Returns a fresh `Cloude\Db\Query` bound to this storage's table
+     * and quote character. The intended escape hatch when `findBy()`'s
+     * equality predicates aren't enough — `>`, `<`, `LIKE`, `IN`,
+     * `BETWEEN`, `IS NULL`, multi-column `ORDER BY`, and so on.
+     *
+     *   User::storage()->query()
+     *       ->where('age', '>', 18)
+     *       ->whereIn('role', ['admin', 'editor'])
+     *       ->orderBy('created_at', 'DESC')
+     *       ->limit(20)
+     *       ->get();
+     */
+    public function query(): Query
+    {
+        return new Query($this->pdo, $this->table, $this->quoteChar);
     }
 
     public function find(mixed $id): ?array
@@ -181,14 +197,11 @@ final class PdoStorage implements Storage
     }
 
     /**
-     * Whitelist + quote a SQL identifier. PDO can't bind identifiers, so
-     * we strict-check the shape and interpolate manually.
+     * Whitelist + quote a SQL identifier. Delegated to the shared helper
+     * so PdoStorage and the Query builder stay in sync.
      */
     private function q(string $identifier): string
     {
-        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $identifier) !== 1) {
-            throw new \InvalidArgumentException("Invalid SQL identifier: '$identifier'");
-        }
-        return $this->quoteChar . $identifier . $this->quoteChar;
+        return Identifier::quote($identifier, $this->quoteChar);
     }
 }

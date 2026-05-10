@@ -128,9 +128,12 @@ Don't:
 
 ## What the framework deliberately does NOT include
 
-- **No query builder, no migrations, no relations or observers** in
-  `Cloude\Model`. CRUD by primary key + `findBy` by equality. For
-  richer queries, drop down to the underlying PDO connection.
+- **No migrations, no relations, no observers** in `Cloude\Model`.
+  CRUD by primary key + `findBy` by equality, plus a thin
+  `Cloude\Db\Query` builder for the 80% of queries that aren't joins
+  (SELECT/INSERT/UPDATE/DELETE + WHERE + ORDER BY + LIMIT/OFFSET). For
+  joins, unions, subqueries or aggregations beyond `count()`, drop to
+  the underlying PDO connection.
 - **No HTTP client.** Use Guzzle directly.
 - **No template engine.** Plain PHP via `View::render`.
 - **No session / auth helpers.** Use `$_SESSION` and a route-level check

@@ -21,9 +21,11 @@ When asked to build something on top of `cloude/framework`:
    - [`examples/recipes/`](examples/recipes/) — sitemap, JSON-LD, MCP, CLI tasks, repos
 3. **Stay inside the mental model**: no DI container, no magic.
    `Cloude\Model` is a thin Active Record (no relations, no observers,
-   no query builder) — opt-in only. If something feels like it needs a
-   "service locator" or a "repository factory", you're probably
-   overcomplicating.
+   no migrations) — opt-in only. The bundled `Cloude\Db\Query` builder
+   covers SELECT / INSERT / UPDATE / DELETE with WHERE / ORDER BY /
+   LIMIT / OFFSET; joins and subqueries go straight to PDO. If
+   something feels like it needs a "service locator" or a "repository
+   factory", you're probably overcomplicating.
 4. **Wire by hand** in `app/Routes.php` or `www/index.php`. That's the seam.
 
 ## Project layout (recommended)
@@ -208,6 +210,7 @@ validate the same way, and `Response::redirect` on success.
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
+| Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Db/Query.php`](src/Db/Query.php), [`tests/Db/QueryTest.php`](tests/Db/QueryTest.php) |
 | Live search box | JSON route + `fetch()` with debounce | [`examples/contacts/www/assets/app.js`](examples/contacts/www/assets/app.js) |
 | MCP server | `new Mcp\Server(...)` + `tool()` | [`examples/recipes/mcp.php`](examples/recipes/mcp.php) |
 | CLI cron / batch job | `TaskRunner::register / registerClass` | [`examples/recipes/tasks.php`](examples/recipes/tasks.php) |
@@ -224,7 +227,10 @@ The framework is intentionally minimal. If you're tempted to ask
 for any of these, **stop and reconsider** — they're absent on purpose:
 
 - A DI container / service locator → wire by hand in `Routes.php`
-- An ORM / query builder / migrations → JSON or Markdown files on disk
+- A full ORM (relations, observers, migrations) or a query builder
+  with joins / unions / subqueries → `Cloude\Model` + `Cloude\Db\Query`
+  cover the 80% case; for joins drop down to PDO; for migrations use
+  `phinx` or `doctrine/migrations` directly
 - A built-in HTTP client → use `guzzlehttp/guzzle` directly
 - A template engine → plain PHP via `View::render` is the answer
 - Session / auth helpers → `$_SESSION` + a check before `dispatch()`

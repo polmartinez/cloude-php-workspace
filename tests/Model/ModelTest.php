@@ -6,6 +6,7 @@ namespace Cloude\Tests\Model;
 
 use Cloude\Model\Model;
 use Cloude\Model\Storage\ArrayStorage;
+use Cloude\Model\Storage\PdoStorage;
 use PHPUnit\Framework\TestCase;
 
 final class TestUser extends Model
@@ -120,5 +121,41 @@ final class ModelTest extends TestCase
         // adapter's native API (e.g. PdoStorage::pdo()).
         $s = TestUser::storage();
         self::assertInstanceOf(ArrayStorage::class, $s);
+    }
+
+    public function testQueryShortcutRequiresPdoStorage(): void
+    {
+        // ArrayStorage doesn't ship a query builder by design.
+        $this->expectException(\LogicException::class);
+        TestUser::query();
+    }
+
+    public function testQueryAndHydrateRoundTrip(): void
+    {
+        $pdo = new \PDO('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT, name TEXT, active INTEGER
+        )');
+        $pdo->exec("INSERT INTO users (email, name, active) VALUES
+            ('ada@x',   'Ada',   1),
+            ('alan@x',  'Alan',  1),
+            ('linus@x', 'Linus', 0)");
+
+        TestUser::configure(new PdoStorage($pdo, 'users'));
+
+        // Drop down to the query builder for richer predicates ...
+        $rows = TestUser::query()
+            ->where('active', 1)
+            ->orderBy('name')
+            ->get();
+        self::assertCount(2, $rows);
+        self::assertSame('Ada', $rows[0]['name']);
+
+        // ... then lift rows back into Model instances via the (now public) hydrate().
+        $users = array_map(static fn (array $r) => TestUser::hydrate($r), $rows);
+        self::assertInstanceOf(TestUser::class, $users[0]);
+        self::assertTrue($users[0]->isPersisted());
+        self::assertSame('Ada', $users[0]->name);
     }
 }

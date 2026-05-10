@@ -108,6 +108,30 @@ abstract class Model
         return self::$storages[$class];
     }
 
+    /**
+     * Returns a fresh `Cloude\Db\Query` builder bound to this model's
+     * table. Convenience shortcut for `static::storage()->query()` —
+     * only works when the configured storage is `PdoStorage`.
+     *
+     *   $rows = User::query()
+     *       ->where('age', '>', 18)
+     *       ->orderBy('name')
+     *       ->get();
+     *
+     * Rows are plain arrays. Lift them back into Model instances with
+     * `User::hydrate($row)` if you want typed objects.
+     */
+    public static function query(): \Cloude\Db\Query
+    {
+        $storage = static::storage();
+        if (!$storage instanceof \Cloude\Model\Storage\PdoStorage) {
+            throw new \LogicException(
+                static::class . '::query() requires a PdoStorage backend (got ' . $storage::class . ')',
+            );
+        }
+        return $storage->query();
+    }
+
     // ── static finders ─────────────────────────────────────────────────────
 
     public static function find(mixed $id): ?static
@@ -282,9 +306,14 @@ abstract class Model
      * by `find` / `findBy` / `all` — bypasses `fill()` so the whitelist
      * doesn't reject DB-managed columns we forgot to declare.
      *
+     * Public on purpose: when you drop down to a raw query (e.g.
+     * `User::query()->where(...)->get()` returning `array<array>`), you
+     * may want to lift the rows back into `User` instances. Subclasses
+     * override this to add column casting / json decoding / etc.
+     *
      * @param array<string,mixed> $row
      */
-    protected static function hydrate(array $row): static
+    public static function hydrate(array $row): static
     {
         $instance = new static();
         $instance->attributes  = $row;
