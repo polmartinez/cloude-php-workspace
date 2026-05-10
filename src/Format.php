@@ -160,7 +160,7 @@ class Format
             || in_array(strtolower($value), ['true', 'false', 'null', 'yes', 'no', '~'], true)
             || preg_match('/^-?\d+(\.\d+)?$/', $value) === 1;
         if ($needsQuotes) {
-            return '"' . addcslashes($value, "\"\\") . '"';
+            return '"' . addcslashes($value, '"\\') . '"';
         }
         return $value;
     }

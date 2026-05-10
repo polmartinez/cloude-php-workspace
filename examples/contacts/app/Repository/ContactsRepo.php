@@ -69,7 +69,7 @@ class ContactsRepo extends JsonRepository
 
         return $list->filter(static function (array $c) use ($needle): bool {
             $hay = Str::ascii(mb_strtolower(
-                $c['name'] . ' ' . $c['email'] . ' ' . $c['notes']
+                $c['name'] . ' ' . $c['email'] . ' ' . $c['notes'],
             ));
             return str_contains($hay, $needle);
         });

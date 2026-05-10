@@ -44,10 +44,10 @@ class Routes
         $loanCtrl = new LoanController($loans, $books, $return);
 
         // Routes.
-        $router->get('/',          $bookCtrl->index(...));
+        $router->get('/', $bookCtrl->index(...));
         $router->get('/api/books', $bookCtrl->apiList(...));
         $router->get('/books/new', $bookCtrl->newForm(...));
-        $router->post('/books',    $bookCtrl->create(...));
+        $router->post('/books', $bookCtrl->create(...));
 
         // Note: Cloude\Router's constraint syntax stops at the first `}`,
         // so we can't use `{N}` quantifiers here. We accept any digit run

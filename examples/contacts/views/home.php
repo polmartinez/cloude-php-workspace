@@ -1,4 +1,6 @@
-<?php use Cloude\View; ?>
+<?php use Cloude\View;
+
+?>
 
 <section class="search">
     <label for="q" class="search-label">Search</label>

@@ -1,4 +1,6 @@
-<?php use Cloude\View; ?>
+<?php use Cloude\View;
+
+?>
 
 <h1>Active loans</h1>
 

@@ -19,9 +19,11 @@ When asked to build something on top of `cloude/framework`:
    - [`examples/contacts/`](examples/contacts/) — form + JSON Schema validation + JS live search
    - [`examples/library/`](examples/library/) — DDD (Domain / Application / Infrastructure / Presentation)
    - [`examples/recipes/`](examples/recipes/) — sitemap, JSON-LD, MCP, CLI tasks, repos
-3. **Stay inside the mental model**: no DI container, no ORM, no magic.
-   If something feels like it needs a "service locator", you're
-   probably overcomplicating.
+3. **Stay inside the mental model**: no DI container, no magic.
+   `Cloude\Model` is a thin Active Record (no relations, no observers,
+   no query builder) — opt-in only. If something feels like it needs a
+   "service locator" or a "repository factory", you're probably
+   overcomplicating.
 4. **Wire by hand** in `app/Routes.php` or `www/index.php`. That's the seam.
 
 ## Project layout (recommended)
@@ -40,7 +42,7 @@ my-app/
 │   └── Domain/                ← optional, for DDD-shaped projects
 ├── views/
 │   └── layout.php             ← plain PHP templates (no engine)
-├── data/                      ← JSON / Markdown content (no DB layer)
+├── data/                      ← JSON / Markdown content (or use Cloude\Model for relational)
 └── tests/                     ← PHPUnit
 ```
 
@@ -202,8 +204,10 @@ validate the same way, and `Response::redirect` on success.
 |---|---|---|
 | JSON list endpoint | `Response::json(['items' => $rows])` | [`examples/contacts/.../ContactsController::apiSearch`](examples/contacts/app/Controller/ContactsController.php) |
 | HTML form + server validation | `Input::post` + `JsonSchema::validate` + re-render with errors | [`ContactsController::create`](examples/contacts/app/Controller/ContactsController.php) |
-| File-per-entity storage | extend `Data\JsonRepository`, override `transform()` | [`examples/recipes/data.php`](examples/recipes/data.php), [`ContactsRepo`](examples/contacts/app/Repository/ContactsRepo.php) |
+| File-per-entity storage (slug-keyed, schemaless) | extend `Data\JsonRepository`, override `transform()` | [`examples/recipes/data.php`](examples/recipes/data.php), [`ContactsRepo`](examples/contacts/app/Repository/ContactsRepo.php) |
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
+| Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
+| Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
 | Live search box | JSON route + `fetch()` with debounce | [`examples/contacts/www/assets/app.js`](examples/contacts/www/assets/app.js) |
 | MCP server | `new Mcp\Server(...)` + `tool()` | [`examples/recipes/mcp.php`](examples/recipes/mcp.php) |
 | CLI cron / batch job | `TaskRunner::register / registerClass` | [`examples/recipes/tasks.php`](examples/recipes/tasks.php) |

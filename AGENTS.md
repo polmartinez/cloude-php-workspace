@@ -14,9 +14,12 @@ that you should be able to load it once into context and keep going.
 - **Stateless static utilities** for everything except where instance state
   is fundamental (`Logger`, `TaskRunner`, `Mcp\Server`, `AssetUrl` after
   `configure()`, `Markdown::useParser()`).
-- **Files are the storage model**: JSON and Markdown on disk, accessed via
-  `Cloude\JsonFile`, `Cloude\Markdown\File` and the `Cloude\Data\*Repository`
-  base classes. There is no DB layer.
+- **Files are the default storage model**: JSON and Markdown on disk,
+  accessed via `Cloude\JsonFile`, `Cloude\Markdown\File` and the
+  `Cloude\Data\*Repository` base classes.
+- **Relational data is opt-in** via `Cloude\Model` — a thin Active Record
+  over a `Storage` interface. Adapters: `PdoStorage` (MySQL / Postgres /
+  SQLite), `JsonStorage` (one file per row), `ArrayStorage` (in-memory).
 - **PSR-4 only**, namespace `Cloude\`. Consumer projects typically use
   namespace `App\` mapped to `app/classes/`.
 
@@ -125,7 +128,9 @@ Don't:
 
 ## What the framework deliberately does NOT include
 
-- **No DB layer**, no ORM, no query builder, no migrations.
+- **No query builder, no migrations, no relations or observers** in
+  `Cloude\Model`. CRUD by primary key + `findBy` by equality. For
+  richer queries, drop down to the underlying PDO connection.
 - **No HTTP client.** Use Guzzle directly.
 - **No template engine.** Plain PHP via `View::render`.
 - **No session / auth helpers.** Use `$_SESSION` and a route-level check

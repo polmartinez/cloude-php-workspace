@@ -1,4 +1,6 @@
-<?php use Cloude\View; ?>
+<?php use Cloude\View;
+
+?>
 <!doctype html>
 <html lang="en">
 <head>

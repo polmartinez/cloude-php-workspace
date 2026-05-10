@@ -70,10 +70,28 @@ final class Book
         $this->copiesAvailable++;
     }
 
-    public function isAvailable(): bool      { return $this->copiesAvailable > 0; }
-    public function isbn():            Isbn   { return $this->isbn; }
-    public function title():           string { return $this->title; }
-    public function author():          string { return $this->author; }
-    public function copiesTotal():     int    { return $this->copiesTotal; }
-    public function copiesAvailable(): int    { return $this->copiesAvailable; }
+    public function isAvailable(): bool
+    {
+        return $this->copiesAvailable > 0;
+    }
+    public function isbn(): Isbn
+    {
+        return $this->isbn;
+    }
+    public function title(): string
+    {
+        return $this->title;
+    }
+    public function author(): string
+    {
+        return $this->author;
+    }
+    public function copiesTotal(): int
+    {
+        return $this->copiesTotal;
+    }
+    public function copiesAvailable(): int
+    {
+        return $this->copiesAvailable;
+    }
 }

@@ -1,6 +1,6 @@
 # Cloude Framework
 
-A minimalist PHP micro-framework. No magic, no service container, no database. Designed for small and medium web projects running on Apache + PHP.
+A minimalist PHP micro-framework. No magic, no service container. Persistence is opt-in: file-based (JSON / Markdown) by default, with a thin Active Record over PDO via `Cloude\Model` when you need a relational database.
 
 - **PHP 8.4+**
 - **PSR-4** autoloading, namespace `Cloude\`

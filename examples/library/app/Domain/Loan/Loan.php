@@ -44,9 +44,24 @@ final class Loan
         $this->period = $this->period->markReturned($at);
     }
 
-    public function id():         LoanId     { return $this->id; }
-    public function book():       Isbn       { return $this->book; }
-    public function memberName(): string     { return $this->memberName; }
-    public function period():     LoanPeriod { return $this->period; }
-    public function isActive():   bool       { return !$this->period->isReturned(); }
+    public function id(): LoanId
+    {
+        return $this->id;
+    }
+    public function book(): Isbn
+    {
+        return $this->book;
+    }
+    public function memberName(): string
+    {
+        return $this->memberName;
+    }
+    public function period(): LoanPeriod
+    {
+        return $this->period;
+    }
+    public function isActive(): bool
+    {
+        return !$this->period->isReturned();
+    }
 }

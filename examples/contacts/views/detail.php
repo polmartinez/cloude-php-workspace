@@ -1,4 +1,6 @@
-<?php use Cloude\View; ?>
+<?php use Cloude\View;
+
+?>
 
 <article class="card">
     <h1><?= View::e($contact['name']) ?></h1>

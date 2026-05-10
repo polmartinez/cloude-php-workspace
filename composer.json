@@ -1,6 +1,6 @@
 {
     "name": "cloude/framework",
-    "description": "Minimalist PHP 8.4+ micro-framework: router, input, views, markdown and string helpers. No magic, no database, no container. Designed for small and medium web projects running on Apache.",
+    "description": "Minimalist PHP 8.4+ micro-framework: router, input, views, markdown and string helpers. No magic, no service container. Optional persistence: file-based (JSON, Markdown) and a thin PDO Active Record via Cloude\\Model.",
     "type": "library",
     "keywords": ["php", "framework", "router", "micro-framework", "cloude", "psr-4", "psr-12"],
     "license": "MIT",

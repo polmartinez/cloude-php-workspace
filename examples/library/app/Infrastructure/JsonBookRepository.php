@@ -74,8 +74,8 @@ final class JsonBookRepository implements BookRepository
             new Isbn((string) $data['isbn']),
             (string) $data['title'],
             (string) $data['author'],
-            (int)    $data['copies_total'],
-            (int)    $data['copies_available'],
+            (int) $data['copies_total'],
+            (int) $data['copies_available'],
         );
     }
 }

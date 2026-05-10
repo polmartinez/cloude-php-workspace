@@ -1,0 +1,124 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Cloude\Tests\Model;
+
+use Cloude\Model\Model;
+use Cloude\Model\Storage\ArrayStorage;
+use PHPUnit\Framework\TestCase;
+
+final class TestUser extends Model
+{
+    protected static string $table = 'users';
+    /** @var list<string> */
+    protected static array $properties = ['id', 'email', 'name', 'active'];
+}
+
+final class UnconfiguredModel extends Model
+{
+    protected static string $table = 'unconfigured';
+}
+
+final class ModelTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        TestUser::configure(new ArrayStorage([
+            ['id' => 1, 'email' => 'ada@example.com',  'name' => 'Ada',  'active' => 1],
+            ['id' => 2, 'email' => 'alan@example.com', 'name' => 'Alan', 'active' => 1],
+            ['id' => 3, 'email' => 'gone@example.com', 'name' => 'Gone', 'active' => 0],
+        ]));
+    }
+
+    public function testFindReturnsSubclassInstance(): void
+    {
+        $u = TestUser::find(1);
+        self::assertInstanceOf(TestUser::class, $u);
+        self::assertSame('Ada', $u->name);
+        self::assertTrue($u->isPersisted());
+    }
+
+    public function testFindReturnsNullForMissing(): void
+    {
+        self::assertNull(TestUser::find(999));
+    }
+
+    public function testFindByEqualityCriteria(): void
+    {
+        $rows = TestUser::findBy(['active' => 1]);
+        self::assertCount(2, $rows);
+        $names = array_map(static fn ($r) => $r->name, $rows);
+        self::assertContains('Ada', $names);
+        self::assertContains('Alan', $names);
+    }
+
+    public function testFindByOrderAndLimit(): void
+    {
+        $rows = TestUser::findBy([], limit: 2, orderBy: ['name' => 'DESC']);
+        self::assertCount(2, $rows);
+        self::assertSame('Gone', $rows[0]->name);
+    }
+
+    public function testCount(): void
+    {
+        self::assertSame(3, TestUser::count());
+        self::assertSame(2, TestUser::count(['active' => 1]));
+    }
+
+    public function testCreatePersistsAndAssignsId(): void
+    {
+        $u = TestUser::create(['email' => 'grace@example.com', 'name' => 'Grace', 'active' => 1]);
+        self::assertNotNull($u->id);
+        self::assertTrue($u->isPersisted());
+        self::assertSame(4, TestUser::count());
+    }
+
+    public function testSaveOnLoadedInstanceUpdates(): void
+    {
+        $u = TestUser::find(1);
+        $u->name = 'Ada Lovelace';
+        $u->save();
+
+        $reloaded = TestUser::find(1);
+        self::assertSame('Ada Lovelace', $reloaded->name);
+    }
+
+    public function testDeleteRemovesAndFlipsPersistedFlag(): void
+    {
+        $u = TestUser::find(2);
+        self::assertTrue($u->delete());
+        self::assertFalse($u->isPersisted());
+        self::assertNull(TestUser::find(2));
+    }
+
+    public function testToArrayRoundTrip(): void
+    {
+        $u = TestUser::find(1);
+        self::assertSame(
+            ['id' => 1, 'email' => 'ada@example.com', 'name' => 'Ada', 'active' => 1],
+            $u->toArray(),
+        );
+    }
+
+    public function testWhitelistRejectsUnknownAttribute(): void
+    {
+        $u = new TestUser();
+        $this->expectException(\InvalidArgumentException::class);
+        $u->bogus = 'nope';
+    }
+
+    public function testStorageUnconfiguredThrows(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        UnconfiguredModel::find(1);
+    }
+
+    public function testStorageEscapeHatchIsPublic(): void
+    {
+        // Documented: User::storage() is public — used to drop down to the
+        // adapter's native API (e.g. PdoStorage::pdo()).
+        $s = TestUser::storage();
+        self::assertInstanceOf(ArrayStorage::class, $s);
+    }
+}

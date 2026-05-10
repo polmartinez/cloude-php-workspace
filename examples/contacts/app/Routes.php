@@ -27,13 +27,13 @@ class Routes
     {
         $contacts = new ContactsController(DATA_DIR . '/contacts');
 
-        $router->get('/',           $contacts->home(...));
+        $router->get('/', $contacts->home(...));
         $router->get('/api/search', $contacts->apiSearch(...));
 
-        $router->get('/new',  $contacts->newForm(...));
+        $router->get('/new', $contacts->newForm(...));
         $router->post('/new', $contacts->create(...));
 
-        $router->get('/contact/{slug:[a-z0-9-]+}',         $contacts->show(...));
+        $router->get('/contact/{slug:[a-z0-9-]+}', $contacts->show(...));
         $router->post('/contact/{slug:[a-z0-9-]+}/delete', $contacts->delete(...));
     }
 }

@@ -52,7 +52,16 @@ final class LoanPeriod
         return $now > $this->dueAt;
     }
 
-    public function borrowedAt(): \DateTimeImmutable  { return $this->borrowedAt; }
-    public function dueAt():      \DateTimeImmutable  { return $this->dueAt; }
-    public function returnedAt(): ?\DateTimeImmutable { return $this->returnedAt; }
+    public function borrowedAt(): \DateTimeImmutable
+    {
+        return $this->borrowedAt;
+    }
+    public function dueAt(): \DateTimeImmutable
+    {
+        return $this->dueAt;
+    }
+    public function returnedAt(): ?\DateTimeImmutable
+    {
+        return $this->returnedAt;
+    }
 }
