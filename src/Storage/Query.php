@@ -70,8 +70,8 @@ namespace Cloude\Storage;
  *
  * Debugging:
  *
- *   echo $q->where('age', '>', 18)->toSql();  // human-readable SQL
- *   $q->getBindings();                        // bound parameter values
+ *   echo $q->where('age', '>', 18)->compile();
+ *   // → SELECT * FROM `users` WHERE `age` > 18
  */
 final class Query
 {
@@ -324,30 +324,11 @@ final class Query
         return $stmt->rowCount();
     }
 
-    // ── debug helpers ─────────────────────────────────────────────────────
-
-    /**
-     * Returns the SELECT SQL with parameter placeholders (`?`). Pair with
-     * `getBindings()` to see the bound values separately.
-     */
-    public function toSql(): string
-    {
-        [$sql] = $this->buildSelect();
-        return $sql;
-    }
-
-    /**
-     * @return list<mixed>
-     */
-    public function getBindings(): array
-    {
-        [, $params] = $this->buildSelect();
-        return $params;
-    }
+    // ── debug helper ──────────────────────────────────────────────────────
 
     /**
      * Returns the SELECT SQL with bindings inlined as SQL literals — the
-     * single string you'd run in a SQL client to reproduce the query.
+     * single string you'd paste into a SQL client to reproduce the query.
      *
      * **For debugging only.** Never feed the output back through
      * `PDO::exec()` or `query()`: prepared statements are the only safe
@@ -360,27 +341,6 @@ final class Query
     public function compile(): string
     {
         [$sql, $params] = $this->buildSelect();
-        return self::inlineBindings($sql, $params);
-    }
-
-    /**
-     * Like `compile()`, but for the UPDATE that `update($data)` would
-     * issue. Pure inspection — doesn't execute anything.
-     *
-     * @param array<string,mixed> $data
-     */
-    public function compileUpdate(array $data): string
-    {
-        [$sql, $params] = $this->buildUpdate($data);
-        return self::inlineBindings($sql, $params);
-    }
-
-    /**
-     * Like `compile()`, but for the DELETE that `delete()` would issue.
-     */
-    public function compileDelete(): string
-    {
-        [$sql, $params] = $this->buildDelete();
         return self::inlineBindings($sql, $params);
     }
 

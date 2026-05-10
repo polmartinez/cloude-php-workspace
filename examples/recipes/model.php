@@ -127,14 +127,11 @@ $nameById = User::query()->select('id', 'name')->pluck('name', 'id');    // [id 
 $updated  = User::query()->where('active', 0)->update(['role' => 'guest']);   // affected rows
 $deleted  = User::query()->where('created_at', '<', '2020-01-01')->delete();  // affected rows
 
-// Debug what the builder is about to issue:
-echo User::query()->where('age', '>', 18)->orderBy('name')->limit(5)->toSql();
-// → SELECT * FROM `users` WHERE `age` > ? ORDER BY `name` ASC LIMIT 5
-
-// Full SQL with values inlined — paste into a SQL client to reproduce.
-// **Debug only**: never feed this back through PDO::exec() / query().
-echo User::query()->where('age', '>', 18)->compile();
-// → SELECT * FROM `users` WHERE `age` > 18
+// Debug — see the SQL with values inlined, ready to paste into a SQL client.
+// **Debug only**: never feed this back through PDO::exec() / query(); use
+// the builder for actual execution so prepared statements stay in play.
+echo User::query()->where('age', '>', 18)->orderBy('name')->limit(5)->compile();
+// → SELECT * FROM `users` WHERE `age` > 18 ORDER BY `name` ASC LIMIT 5
 
 // ── Beyond the builder: drop to PDO ──────────────────────────────────────────
 //

@@ -245,26 +245,6 @@ final class QueryTest extends TestCase
 
     // ── debug ────────────────────────────────────────────────────────────
 
-    public function testToSqlEmitsExpectedShape(): void
-    {
-        $sql = $this->q()
-            ->select('id', 'name')
-            ->where('age', '>', 18)
-            ->orderBy('name')
-            ->limit(5)
-            ->toSql();
-        self::assertSame(
-            'SELECT `id`, `name` FROM `users` WHERE `age` > ? ORDER BY `name` ASC LIMIT 5',
-            $sql,
-        );
-    }
-
-    public function testGetBindingsMatchesToSql(): void
-    {
-        $q = $this->q()->whereIn('id', [1, 2, 3])->where('active', 1);
-        self::assertSame([1, 2, 3, 1], $q->getBindings());
-    }
-
     public function testCompileInlinesNumericValues(): void
     {
         $sql = $this->q()->where('age', '>', 18)->orderBy('name')->limit(5)->compile();
@@ -297,24 +277,6 @@ final class QueryTest extends TestCase
         $sql = $this->q()->whereIn('id', [1, 2, 3])->compile();
         self::assertSame(
             'SELECT * FROM `users` WHERE `id` IN (1, 2, 3)',
-            $sql,
-        );
-    }
-
-    public function testCompileUpdate(): void
-    {
-        $sql = $this->q()->where('active', 0)->compileUpdate(['role' => 'guest']);
-        self::assertSame(
-            "UPDATE `users` SET `role` = 'guest' WHERE `active` = 0",
-            $sql,
-        );
-    }
-
-    public function testCompileDelete(): void
-    {
-        $sql = $this->q()->where('age', '<', 18)->compileDelete();
-        self::assertSame(
-            'DELETE FROM `users` WHERE `age` < 18',
             $sql,
         );
     }
