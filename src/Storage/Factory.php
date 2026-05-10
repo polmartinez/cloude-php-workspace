@@ -9,6 +9,7 @@ use Cloude\Model\Storage;
 use Cloude\Model\Storage\ArrayStorage;
 use Cloude\Model\Storage\JsonCollectionStorage;
 use Cloude\Model\Storage\JsonStorage;
+use Cloude\Model\Storage\MarkdownStorage;
 use Cloude\Model\Storage\PdoStorage;
 
 /**
@@ -113,11 +114,12 @@ final class Factory
             ),
             'json'            => self::jsonStorage($table, $config),
             'json_collection' => self::jsonCollectionStorage($table, $config),
+            'markdown'        => self::markdownStorage($table, $config),
             'array'           => self::arrayStorage($config),
             default           => throw new \RuntimeException(
                 "Unknown storage driver '$driver'"
                 . ($connectionName !== null ? " for connection '$connectionName'" : ' (inline config)')
-                . ' (supported: pdo, json, json_collection, array)',
+                . ' (supported: pdo, json, json_collection, markdown, array)',
             ),
         };
     }
@@ -147,6 +149,24 @@ final class Factory
             rtrim((string) $config['path'], '/') . '/' . $table,
             (string) ($config['primary_key'] ?? 'id'),
             (bool) ($config['auto_increment'] ?? false),
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $config
+     */
+    private static function markdownStorage(string $table, array $config): MarkdownStorage
+    {
+        if (empty($config['path'])) {
+            throw new \RuntimeException(
+                "'markdown' driver requires a 'path' key (parent directory; storage dir = path/table)",
+            );
+        }
+        $base = rtrim((string) $config['path'], '/');
+        $dir  = $table === '' ? $base : $base . '/' . $table;
+        return new MarkdownStorage(
+            $dir,
+            (string) ($config['primary_key'] ?? 'slug'),
         );
     }
 

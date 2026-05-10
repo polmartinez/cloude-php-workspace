@@ -8,6 +8,7 @@ use Cloude\Config;
 use Cloude\Model\Storage\ArrayStorage;
 use Cloude\Model\Storage\JsonCollectionStorage;
 use Cloude\Model\Storage\JsonStorage;
+use Cloude\Model\Storage\MarkdownStorage;
 use Cloude\Model\Storage\PdoStorage;
 use Cloude\Storage\Connection;
 use Cloude\Storage\Factory;
@@ -23,14 +24,16 @@ final class FactoryTest extends TestCase
         mkdir($this->tmp, 0755, true);
 
         file_put_contents($this->tmp . '/storage.php', "<?php return [
-            'default'   => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
-            'content'   => ['driver' => 'json', 'path' => '" . $this->tmp . "/data', 'auto_increment' => true],
-            'lookup'    => ['driver' => 'json_collection', 'path' => '" . $this->tmp . "/data', 'primary_key' => 'slug'],
-            'fake'      => ['driver' => 'array', 'data' => [['id' => 1, 'name' => 'Ada']]],
-            'weirdpk'   => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:', 'primary_key' => 'uuid'],
-            'broken'    => ['driver' => 'mongo'],
-            'no_path'   => ['driver' => 'json'],
-            'no_path_c' => ['driver' => 'json_collection'],
+            'default'    => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+            'content'    => ['driver' => 'json', 'path' => '" . $this->tmp . "/data', 'auto_increment' => true],
+            'lookup'     => ['driver' => 'json_collection', 'path' => '" . $this->tmp . "/data', 'primary_key' => 'slug'],
+            'articles'   => ['driver' => 'markdown', 'path' => '" . $this->tmp . "/content', 'primary_key' => 'slug'],
+            'fake'       => ['driver' => 'array', 'data' => [['id' => 1, 'name' => 'Ada']]],
+            'weirdpk'    => ['driver' => 'pdo', 'dsn' => 'sqlite::memory:', 'primary_key' => 'uuid'],
+            'broken'     => ['driver' => 'mongo'],
+            'no_path'    => ['driver' => 'json'],
+            'no_path_c'  => ['driver' => 'json_collection'],
+            'no_path_md' => ['driver' => 'markdown'],
         ];");
 
         Connection::reset();
@@ -131,6 +134,31 @@ final class FactoryTest extends TestCase
         );
         self::assertInstanceOf(ArrayStorage::class, $storage);
         self::assertSame('Ada', $storage->find(1)['name']);
+    }
+
+    public function testMarkdownDriverYieldsMarkdownStorage(): void
+    {
+        $storage = Factory::make('articles', 'posts');
+        self::assertInstanceOf(MarkdownStorage::class, $storage);
+
+        // Round-trip via the Factory-built adapter — Markdown\File::write
+        // stores as .md.gz, so check via the framework's existence helper
+        // (transparent .md/.md.gz) instead of file_exists on the plain .md.
+        $storage->insert([
+            'slug' => 'hello',
+            'meta' => ['title' => 'Hello'],
+            'raw'  => 'Body text.',
+        ]);
+        self::assertTrue(\Cloude\Markdown\File::exists($this->tmp . '/content/posts/hello.md'));
+        $row = $storage->find('hello');
+        self::assertSame('Hello', $row['meta']['title']);
+    }
+
+    public function testMarkdownDriverRequiresPath(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("'markdown' driver requires a 'path' key");
+        Factory::make('no_path_md', 'foo');
     }
 
     public function testMakeFromConfigRejectsInlinePdo(): void
