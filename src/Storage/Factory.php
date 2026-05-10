@@ -54,6 +54,13 @@ use Cloude\Model\Storage\PdoStorage;
  *   array → starts empty unless `data` (a list of seed rows) is
  *           supplied. Recognises `primary_key` (default 'id').
  *
+ * Two entry points:
+ *   - `make($connectionName, $table)` — looks the connection up in
+ *     `storage.<name>` config, then dispatches.
+ *   - `makeFromConfig($config, $table, $connectionName = null)` — same
+ *     dispatch but with a pre-built config array (used when a Model
+ *     declares `protected static array $connection = [...]` inline).
+ *
  * Unknown drivers throw — there's no plugin registry. If you need
  * Redis / Mongo / something custom, subclass your Model and override
  * `storage()`, or wire the storage explicitly via
@@ -61,6 +68,11 @@ use Cloude\Model\Storage\PdoStorage;
  */
 final class Factory
 {
+    /**
+     * Resolve a named connection from Config (`storage.<name>`) and build
+     * the right adapter. The high-traffic entry point — `Model::storage()`
+     * calls this when the model has `protected static string $connection`.
+     */
     public static function make(string $connectionName, string $table): Storage
     {
         $config = Config::get(Connection::configName() . '.' . $connectionName);
@@ -70,17 +82,42 @@ final class Factory
                 . Connection::configName() . ' config',
             );
         }
+        return self::makeFromConfig($config, $table, $connectionName);
+    }
 
+    /**
+     * Build an adapter from a raw config array. Called by `make()` after
+     * resolving a named connection, and directly by `Model::storage()`
+     * when a model declares an inline `protected static array $connection`.
+     *
+     * `pdo` driver requires `$connectionName` (the pool in
+     * `Cloude\Storage\Connection` keys instances by name). Inline arrays
+     * therefore only support file-based drivers — `json`,
+     * `json_collection`, `array`.
+     *
+     * @param array<string,mixed> $config
+     */
+    public static function makeFromConfig(array $config, string $table, ?string $connectionName = null): Storage
+    {
         $driver = $config['driver'] ?? 'pdo';
 
         return match ($driver) {
-            'pdo'             => self::pdoStorage($connectionName, $table, $config),
+            'pdo' => self::pdoStorage(
+                $connectionName ?? throw new \InvalidArgumentException(
+                    "'pdo' driver requires a named connection (the PDO pool "
+                    . 'keys instances by name). Declare the connection in '
+                    . 'storage.php and reference it by string instead of an inline array.',
+                ),
+                $table,
+                $config,
+            ),
             'json'            => self::jsonStorage($table, $config),
             'json_collection' => self::jsonCollectionStorage($table, $config),
             'array'           => self::arrayStorage($config),
             default           => throw new \RuntimeException(
-                "Unknown storage driver '$driver' for connection '$connectionName' "
-                . '(supported: pdo, json, json_collection, array)',
+                "Unknown storage driver '$driver'"
+                . ($connectionName !== null ? " for connection '$connectionName'" : ' (inline config)')
+                . ' (supported: pdo, json, json_collection, array)',
             ),
         };
     }

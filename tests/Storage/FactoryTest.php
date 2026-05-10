@@ -122,4 +122,24 @@ final class FactoryTest extends TestCase
         $this->expectExceptionMessage("'json_collection' driver requires a 'path' key");
         Factory::make('no_path_c', 'foo');
     }
+
+    public function testMakeFromConfigBuildsWithoutConfigLookup(): void
+    {
+        $storage = Factory::makeFromConfig(
+            ['driver' => 'array', 'data' => [['id' => 1, 'name' => 'Ada']]],
+            'users',
+        );
+        self::assertInstanceOf(ArrayStorage::class, $storage);
+        self::assertSame('Ada', $storage->find(1)['name']);
+    }
+
+    public function testMakeFromConfigRejectsInlinePdo(): void
+    {
+        // PDO connections must be named AND present in storage config so
+        // that Connection::pdo() can pool them. Inline configs without
+        // Config involvement only support file-based drivers.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("'pdo' driver requires a named connection");
+        Factory::makeFromConfig(['driver' => 'pdo', 'dsn' => 'sqlite::memory:'], 'users');
+    }
 }

@@ -21,13 +21,33 @@ final class TestUser extends Model
 final class UnconfiguredModel extends Model
 {
     protected static string $table = 'unconfigured';
-    protected static string $connection = 'definitely_not_in_config';
+    protected static string|array $connection = 'definitely_not_in_config';
 }
 
 final class AutoResolvedModel extends Model
 {
     protected static string $table = 'autoresolved';
-    protected static string $connection = 'fake';
+    protected static string|array $connection = 'fake';
+}
+
+/**
+ * Demonstrates the inline `$connection` array form (v0.23+): no
+ * `storage.php` entry needed; the config IS the property value.
+ * Only works for file-based drivers (json / json_collection / array)
+ * because PDO connections must be named for the pool.
+ */
+final class InlineConfigModel extends Model
+{
+    protected static string $table = 'inline';
+    protected static string|array $connection = [
+        'driver' => 'array',
+        'data'   => [
+            ['id' => 'a', 'name' => 'Alpha'],
+            ['id' => 'b', 'name' => 'Beta'],
+        ],
+        'primary_key' => 'id',
+    ];
+    protected static string $primaryKey = 'id';
 }
 
 final class ModelTest extends TestCase
@@ -128,6 +148,25 @@ final class ModelTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Could not auto-resolve storage for');
         UnconfiguredModel::find(1);
+    }
+
+    public function testInlineArrayConnectionResolvesWithoutConfig(): void
+    {
+        // No Cloude\Config setup at all. The model carries its own config
+        // inline. find() should still work.
+        \Cloude\Storage\Connection::reset();
+        \Cloude\Config::reset();
+        // Wipe any stale storage on the class:
+        $rc = new \ReflectionClass(Model::class);
+        $rp = $rc->getProperty('storages');
+        $rp->setAccessible(true);
+        $rp->setValue(null, []);
+
+        $row = InlineConfigModel::find('a');
+        self::assertNotNull($row);
+        self::assertSame('Alpha', $row->name);
+
+        self::assertSame(2, InlineConfigModel::count());
     }
 
     public function testStorageAutoResolvesFromConfig(): void

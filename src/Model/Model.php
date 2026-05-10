@@ -54,21 +54,34 @@ abstract class Model
     protected static string $table = '';
 
     /**
-     * Subclass: which connection (from `storage.php` config) backs this
-     * model. The factory dispatches on the connection's `driver` key
-     * (`pdo` / `json` / `array`) to build the right `Storage` adapter
-     * on first use.
+     * Subclass: which storage backs this model. Two shapes:
      *
-     * Override per-class to point models at different connections:
+     *   (a) string — the name of a connection in `app/config/storage.php`.
+     *       The Factory dispatches on its `driver` key. This is the
+     *       common form when you have one central config file.
      *
-     *   class User extends Model {
-     *       protected static string $connection = 'default';   // PDO
-     *   }
-     *   class Article extends Model {
-     *       protected static string $connection = 'content';   // JSON files
-     *   }
+     *         class User extends Model {
+     *             protected static string|array $connection = 'default';
+     *         }
+     *
+     *   (b) array — an inline config (same shape as a storage.php entry).
+     *       Useful when the connection is 1:1 with this model and you
+     *       don't want to fragment storage.php with one-off entries —
+     *       typical for per-file JSON collections at idiosyncratic paths.
+     *
+     *         class PartyEsEuropa extends Model {
+     *             protected static string|array $connection = [
+     *                 'driver'      => 'json_collection',
+     *                 'path'        => DATA_DIR . '/es/europa',
+     *                 'primary_key' => 'slug',
+     *             ];
+     *         }
+     *
+     * PDO connections must use form (a) — they share the named pool in
+     * `Cloude\Storage\Connection`. Inline form (b) is for file-based
+     * drivers (`json`, `json_collection`, `array`).
      */
-    protected static string $connection = 'default';
+    protected static string|array $connection = 'default';
 
     /** Subclass: name of the single-column primary key. */
     protected static string $primaryKey = 'id';
@@ -129,15 +142,17 @@ abstract class Model
             return self::$storages[$class];
         }
         try {
-            return self::$storages[$class] = \Cloude\Storage\Factory::make(
-                static::$connection,
-                static::$table,
-            );
+            $storage = is_array(static::$connection)
+                ? \Cloude\Storage\Factory::makeFromConfig(static::$connection, static::$table)
+                : \Cloude\Storage\Factory::make(static::$connection, static::$table);
+            return self::$storages[$class] = $storage;
         } catch (\Throwable $e) {
+            $where = is_array(static::$connection)
+                ? '[inline ' . ((string) (static::$connection['driver'] ?? '?')) . ']'
+                : "'" . static::$connection . "'";
             throw new \RuntimeException(
-                "Could not auto-resolve storage for $class (connection '"
-                . static::$connection . "', table '" . static::$table . "'): "
-                . $e->getMessage(),
+                "Could not auto-resolve storage for $class (connection $where, "
+                . "table '" . static::$table . "'): " . $e->getMessage(),
                 previous: $e,
             );
         }
