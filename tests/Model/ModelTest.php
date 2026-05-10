@@ -150,6 +150,42 @@ final class ModelTest extends TestCase
         UnconfiguredModel::find(1);
     }
 
+    public function testConfigureAcceptsInlineConfigArray(): void
+    {
+        // Pass a config dict to configure() instead of a Storage instance.
+        // Dispatches through Factory::makeFromConfig.
+        TestUser::configure([
+            'driver' => 'array',
+            'data' => [
+                ['id' => 100, 'email' => 'inline@x', 'name' => 'Inline', 'active' => 1],
+            ],
+            'primary_key' => 'id',
+        ]);
+
+        $u = TestUser::find(100);
+        self::assertNotNull($u);
+        self::assertSame('Inline', $u->name);
+    }
+
+    public function testConfigureRunsTwiceForContextSwapping(): void
+    {
+        // The "one class, many partitions" pattern: configure() replaces
+        // the cached storage each call. The Party use case in politica-esp.
+        TestUser::configure([
+            'driver' => 'array',
+            'data'   => [['id' => 1, 'name' => 'Region A', 'email' => '', 'active' => 1]],
+            'primary_key' => 'id',
+        ]);
+        self::assertSame('Region A', TestUser::find(1)->name);
+
+        TestUser::configure([
+            'driver' => 'array',
+            'data'   => [['id' => 1, 'name' => 'Region B', 'email' => '', 'active' => 1]],
+            'primary_key' => 'id',
+        ]);
+        self::assertSame('Region B', TestUser::find(1)->name);
+    }
+
     public function testInlineArrayConnectionResolvesWithoutConfig(): void
     {
         // No Cloude\Config setup at all. The model carries its own config

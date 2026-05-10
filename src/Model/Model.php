@@ -119,9 +119,53 @@ abstract class Model
      *   - Tests: `User::configure(new ArrayStorage([...]))`
      *   - One-off scripts that build the storage inline
      *   - Override of the config-driven default
+     *   - **Per-context swapping for partitioned data** (single class,
+     *     many on-disk locations — see below)
+     *
+     * Two argument shapes:
+     *
+     *   (a) Storage instance — drop-in for any adapter you've built
+     *       (`new ArrayStorage([...])`, `new PdoStorage($pdo, ...)`, ...).
+     *
+     *   (b) array — an inline config (same shape as a storage.php entry).
+     *       Dispatched through `Cloude\Storage\Factory::makeFromConfig`.
+     *       File-based drivers (`json`, `json_collection`, `array`) only —
+     *       PDO needs a named pool entry.
+     *
+     * Pattern for partitioned data — a single Model class swapping
+     * storage per request context:
+     *
+     *   class Party extends Model {
+     *       protected static string $table = 'partidos';
+     *       protected static string $primaryKey = 'slug';
+     *
+     *       public static function inContext(string $lang, string $ambito): void {
+     *           static::configure([
+     *               'driver'      => 'json_collection',
+     *               'path'        => DATA_DIR . "/$lang/$ambito",
+     *               'primary_key' => 'slug',
+     *           ]);
+     *       }
+     *   }
+     *
+     *   Party::inContext('es', 'europa');
+     *   $psoe = Party::find('psoe');
+     *   Party::inContext('es', 'eeuu');
+     *   $dem = Party::find('dem');
+     *
+     * Each call replaces the cached Storage for this class — explicit,
+     * no hidden state beyond the static pool. PHP is request-scoped so
+     * this is safe per request; in long-lived workers (Swoole / etc.)
+     * you'd want to make sure inContext() runs before every relevant
+     * find() / save().
+     *
+     * @param Storage|array<string,mixed> $storageOrConfig
      */
-    public static function configure(Storage $storage): void
+    public static function configure(Storage|array $storageOrConfig): void
     {
+        $storage = is_array($storageOrConfig)
+            ? \Cloude\Storage\Factory::makeFromConfig($storageOrConfig, static::$table)
+            : $storageOrConfig;
         self::$storages[static::class] = $storage;
     }
 
