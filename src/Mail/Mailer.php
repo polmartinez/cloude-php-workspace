@@ -25,7 +25,7 @@ use Cloude\Mail\Transport\SmtpTransport;
  *
  *   3. From a passed-in config array:
  *
- *      $mailer = Mailer::fromConfig([
+ *      $mailer = Mailer::forge([
  *          'transport' => 'smtp',
  *          'host'      => '...',
  *          'from'      => '...',
@@ -35,7 +35,7 @@ use Cloude\Mail\Transport\SmtpTransport;
  *      shrinks to one line when `Cloude\Config::configure(...)` ran at
  *      boot and `app/config/mail.php` exists:
  *
- *      $mailer = Mailer::fromConfig();
+ *      $mailer = Mailer::forge();
  *
  * Config shape:
  *
@@ -94,18 +94,18 @@ final class Mailer
      * transport on `$config['transport']`.
      *
      * Pass `null` (or omit) to read from `Cloude\Config::get('mail')` —
-     * the call site shrinks to `Mailer::fromConfig()` once you've
+     * the call site shrinks to `Mailer::forge()` once you've
      * wired `Cloude\Config::configure(...)` at boot.
      *
      * @param array<string,mixed>|null $config
      */
-    public static function fromConfig(?array $config = null): self
+    public static function forge(?array $config = null): self
     {
         if ($config === null) {
             $loaded = Config::get('mail');
             if (!is_array($loaded) || $loaded === []) {
                 throw new \InvalidArgumentException(
-                    "Mailer::fromConfig() with no args expects a 'mail' "
+                    "Mailer::forge() with no args expects a 'mail' "
                     . 'entry in Cloude\\Config (app/config/mail.php). '
                     . 'Either set one up or pass the config array explicitly.',
                 );

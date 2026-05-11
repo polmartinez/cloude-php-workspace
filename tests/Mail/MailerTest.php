@@ -54,37 +54,37 @@ final class MailerTest extends TestCase
         $mailer->send(['to' => 'a@x.com', 'from' => 's@x.com', 'body' => 'no subject']);
     }
 
-    public function testFromConfigDispatchesOnTransport(): void
+    public function testForgeDispatchesOnTransport(): void
     {
-        $smtp = Mailer::fromConfig([
+        $smtp = Mailer::forge([
             'transport' => 'smtp', 'host' => 'localhost', 'port' => 1025, 'tls' => false,
         ]);
         self::assertInstanceOf(SmtpTransport::class, $smtp->transport());
 
-        $sendmail = Mailer::fromConfig([
+        $sendmail = Mailer::forge([
             'transport' => 'sendmail',
         ]);
         self::assertInstanceOf(SendmailTransport::class, $sendmail->transport());
     }
 
-    public function testFromConfigRejectsUnknownTransport(): void
+    public function testForgeRejectsUnknownTransport(): void
     {
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Unknown mail transport 'snail'");
-        Mailer::fromConfig(['transport' => 'snail']);
+        Mailer::forge(['transport' => 'snail']);
     }
 
-    public function testFromConfigRejectsSmtpWithoutHost(): void
+    public function testForgeRejectsSmtpWithoutHost(): void
     {
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("'smtp' transport needs 'host'");
-        Mailer::fromConfig(['transport' => 'smtp']);
+        Mailer::forge(['transport' => 'smtp']);
     }
 
-    public function testFromConfigCarriesDefaultsForFromAndReplyTo(): void
+    public function testForgeCarriesDefaultsForFromAndReplyTo(): void
     {
         $t = new MemoryTransport();
-        $mailer = Mailer::fromConfig([
+        $mailer = Mailer::forge([
             'transport' => 'sendmail',
             'from'      => 'noreply@x.com',
             'reply_to'  => 'support@x.com',
@@ -130,7 +130,7 @@ final class MailerTest extends TestCase
         self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
     }
 
-    public function testFromConfigWithNoArgsReadsFromCloudeConfig(): void
+    public function testForgeWithNoArgsReadsFromCloudeConfig(): void
     {
         $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
         @mkdir($tmp, 0755, true);
@@ -142,7 +142,7 @@ final class MailerTest extends TestCase
         \Cloude\Config::reset();
         \Cloude\Config::setConfigPath($tmp);
         try {
-            $mailer = Mailer::fromConfig();
+            $mailer = Mailer::forge();
             self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
 
             // Defaults from config flow through.
@@ -157,14 +157,14 @@ final class MailerTest extends TestCase
         }
     }
 
-    public function testFromConfigWithNoArgsAndNoCloudeConfigEntryThrows(): void
+    public function testForgeWithNoArgsAndNoCloudeConfigEntryThrows(): void
     {
         \Cloude\Config::reset();
         \Cloude\Config::setConfigPath(sys_get_temp_dir());          // no mail.php there
         try {
             $this->expectException(\InvalidArgumentException::class);
             $this->expectExceptionMessage("'mail' entry in Cloude\\Config");
-            Mailer::fromConfig();
+            Mailer::forge();
         } finally {
             \Cloude\Config::reset();
         }

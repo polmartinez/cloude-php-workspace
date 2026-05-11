@@ -63,12 +63,12 @@ Config::configure(__DIR__ . '/../app/config');
 //
 // From an explicit config array:
 //
-//   $mailer = Mailer::fromConfig(['transport' => 'smtp', 'host' => '...', ...]);
+//   $mailer = Mailer::forge(['transport' => 'smtp', 'host' => '...', ...]);
 //
 // Auto-config from Cloude\Config — the call site shrinks to one line
 // once `app/config/mail.php` exists:
 
-$mailer = Mailer::fromConfig();                              // reads Config::get('mail')
+$mailer = Mailer::forge();                              // reads Config::get('mail')
 
 // ── 3. Send ─────────────────────────────────────────────────────────────────
 

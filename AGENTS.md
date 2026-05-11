@@ -87,7 +87,7 @@ if (!defined('DATA_DIR')) define('DATA_DIR', dirname(__DIR__) . '/data');
 | Group CLI scripts | `TaskRunner::register / registerClass` | One entry-point script with `prefix:method` dispatch |
 | File log with daily rotation | `new Logger($path, minLevel: 'info')` | |
 | Fire-and-forget webhook | `EventLog::send($payload)` | curl_multi at shutdown |
-| Send email (SMTP / sendmail) | `Mailer::fromConfig($cfg)->send([...])` | `Cloude\Mail\*`; AUTH LOGIN + STARTTLS for SMTP, no attachments |
+| Send email (SMTP / sendmail) | `Mailer::forge()->send([...])` | `Cloude\Mail\*`; AUTH LOGIN + STARTTLS for SMTP, no attachments |
 | Versioned asset URLs (`/{mtime}/assets/…`) | `Http\AssetUrl::configure(...)` then `AssetUrl::get($rel)` | Apache rewrite required |
 
 ## Idioms

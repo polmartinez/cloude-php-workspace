@@ -212,7 +212,7 @@ validate the same way, and `Response::redirect` on success.
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
 | Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
 | Multi-env config (dev / prod / anything) | `Config::configure($path, $env)` + `Config::get('db.default.dsn')` | [`examples/recipes/config.php`](examples/recipes/config.php), [`tests/ConfigTest.php`](tests/ConfigTest.php) |
-| Send email (SMTP or sendmail) | `Mailer::fromConfig(Config::get('mail'))->send([...])` | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`src/Mail/`](src/Mail/) |
+| Send email (SMTP or sendmail) | `Mailer::forge()->send([...])` (reads `Config::get('mail')`) | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`src/Mail/`](src/Mail/) |
 | Named DB connection pool | `Connection::pdo('default')` reads `db.default` from config, caches per name | [`src/Storage/Connection.php`](src/Storage/Connection.php) |
 | Inspect SQL with values inlined | `User::query()->where(...)->compile()` (debug only — never execute) | [`src/Storage/Query.php`](src/Storage/Query.php) |
 | Live search box | JSON route + `fetch()` with debounce | [`examples/contacts/www/assets/app.js`](examples/contacts/www/assets/app.js) |
