@@ -121,4 +121,52 @@ final class MailerTest extends TestCase
         $t->reset();
         self::assertSame([], $t->sent());
     }
+
+    // ── shortcut constructors ────────────────────────────────────────────────
+
+    public function testZeroArgConstructorFallsBackToSendmail(): void
+    {
+        $mailer = new Mailer();
+        self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
+    }
+
+    public function testFromConfigWithNoArgsReadsFromCloudeConfig(): void
+    {
+        $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
+        @mkdir($tmp, 0755, true);
+        file_put_contents($tmp . '/mail.php', "<?php return [
+            'transport' => 'sendmail',
+            'from'      => 'auto@example.com',
+        ];");
+
+        \Cloude\Config::reset();
+        \Cloude\Config::setConfigPath($tmp);
+        try {
+            $mailer = Mailer::fromConfig();
+            self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
+
+            // Defaults from config flow through.
+            $rc = new \ReflectionClass($mailer);
+            $rp = $rc->getProperty('defaults');
+            $rp->setAccessible(true);
+            self::assertSame(['from' => 'auto@example.com'], $rp->getValue($mailer));
+        } finally {
+            @unlink($tmp . '/mail.php');
+            @rmdir($tmp);
+            \Cloude\Config::reset();
+        }
+    }
+
+    public function testFromConfigWithNoArgsAndNoCloudeConfigEntryThrows(): void
+    {
+        \Cloude\Config::reset();
+        \Cloude\Config::setConfigPath(sys_get_temp_dir());          // no mail.php there
+        try {
+            $this->expectException(\InvalidArgumentException::class);
+            $this->expectExceptionMessage("'mail' entry in Cloude\\Config");
+            Mailer::fromConfig();
+        } finally {
+            \Cloude\Config::reset();
+        }
+    }
 }

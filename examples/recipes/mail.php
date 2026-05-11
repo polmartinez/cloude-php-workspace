@@ -48,9 +48,27 @@ use Cloude\Mail\Mailer;
 
 Config::configure(__DIR__ . '/../app/config');
 
-// ── 2. Build a Mailer from the merged config ────────────────────────────────
+// ── 2. Build a Mailer — pick the shortest path that fits ────────────────────
+//
+// Zero-config, just send via local sendmail (no config files needed):
+//
+//   $mailer = new Mailer();
+//
+// Explicit transport (tests / one-off scripts):
+//
+//   $mailer = new Mailer(new \Cloude\Mail\Transport\MemoryTransport());
+//   $mailer = new Mailer(new \Cloude\Mail\Transport\SmtpTransport(
+//       host: 'smtp.example.com', port: 587, user: '...', pass: '...',
+//   ), ['from' => 'noreply@x.com']);
+//
+// From an explicit config array:
+//
+//   $mailer = Mailer::fromConfig(['transport' => 'smtp', 'host' => '...', ...]);
+//
+// Auto-config from Cloude\Config — the call site shrinks to one line
+// once `app/config/mail.php` exists:
 
-$mailer = Mailer::fromConfig(Config::get('mail'));
+$mailer = Mailer::fromConfig();                              // reads Config::get('mail')
 
 // ── 3. Send ─────────────────────────────────────────────────────────────────
 

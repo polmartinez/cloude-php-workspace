@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cloude\Mail;
 
+use Cloude\Config;
 use Cloude\Mail\Transport\SendmailTransport;
 use Cloude\Mail\Transport\SmtpTransport;
 
@@ -11,14 +12,32 @@ use Cloude\Mail\Transport\SmtpTransport;
  * Public mail API — wraps a `Transport` and applies validation +
  * defaults on every send.
  *
- * Two construction paths:
+ * Four construction paths, pick the shortest that fits:
  *
- *   $mailer = new Mailer($transport, ['from' => 'noreply@x.com']);
+ *   1. Zero-config — sendmail with default path, no defaults:
  *
- *   $mailer = Mailer::fromConfig(\Cloude\Config::get('mail'));
+ *      $mailer = new Mailer();
  *
- * The factory builds the right transport from `$config['transport']`
- * (`'smtp'` or `'sendmail'`). Config shape:
+ *   2. Explicit transport — full control, useful in tests or scripts
+ *      that build their own SmtpTransport / MemoryTransport / etc.:
+ *
+ *      $mailer = new Mailer(new SmtpTransport(...), ['from' => 'x@y.com']);
+ *
+ *   3. From a passed-in config array:
+ *
+ *      $mailer = Mailer::fromConfig([
+ *          'transport' => 'smtp',
+ *          'host'      => '...',
+ *          'from'      => '...',
+ *      ]);
+ *
+ *   4. Auto-config from `Cloude\Config::get('mail')` — the call site
+ *      shrinks to one line when `Cloude\Config::configure(...)` ran at
+ *      boot and `app/config/mail.php` exists:
+ *
+ *      $mailer = Mailer::fromConfig();
+ *
+ * Config shape:
  *
  *   // SMTP (production)
  *   return [
@@ -53,19 +72,47 @@ use Cloude\Mail\Transport\SmtpTransport;
  */
 final class Mailer
 {
-    /**
-     * @param array<string,mixed> $defaults Applied to every send (e.g. default 'from')
-     */
-    public function __construct(
-        private Transport $transport,
-        private array $defaults = [],
-    ) {}
+    private Transport $transport;
+
+    /** @var array<string,mixed> */
+    private array $defaults;
 
     /**
-     * @param array<string,mixed> $config
+     * @param Transport|null       $transport Defaults to `SendmailTransport()` when null.
+     * @param array<string,mixed>  $defaults  Applied to every send (e.g. default 'from')
      */
-    public static function fromConfig(array $config): self
+    public function __construct(
+        ?Transport $transport = null,
+        array $defaults = [],
+    ) {
+        $this->transport = $transport ?? new SendmailTransport();
+        $this->defaults = $defaults;
+    }
+
+    /**
+     * Builds a Mailer from a config array, dispatching the right
+     * transport on `$config['transport']`.
+     *
+     * Pass `null` (or omit) to read from `Cloude\Config::get('mail')` —
+     * the call site shrinks to `Mailer::fromConfig()` once you've
+     * wired `Cloude\Config::configure(...)` at boot.
+     *
+     * @param array<string,mixed>|null $config
+     */
+    public static function fromConfig(?array $config = null): self
     {
+        if ($config === null) {
+            $loaded = Config::get('mail');
+            if (!is_array($loaded) || $loaded === []) {
+                throw new \InvalidArgumentException(
+                    "Mailer::fromConfig() with no args expects a 'mail' "
+                    . 'entry in Cloude\\Config (app/config/mail.php). '
+                    . 'Either set one up or pass the config array explicitly.',
+                );
+            }
+            $config = $loaded;
+        }
+
         $type = $config['transport'] ?? throw new \InvalidArgumentException(
             "Mail config needs a 'transport' key (use 'smtp' or 'sendmail')",
         );
