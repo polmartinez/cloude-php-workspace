@@ -9,13 +9,25 @@ namespace Cloude\Markdown;
  * editorial content: ATX headings (#…######), paragraphs, unordered and
  * ordered lists, fenced code blocks (```), inline code, bold (** / __),
  * italic (* / _), links [text](url), images ![alt](src), blockquotes (>),
- * horizontal rules (--- or ***), and hard line breaks.
+ * horizontal rules (--- or ***), hard line breaks, and GitHub-flavoured
+ * tables with optional column alignment (`:---`, `:---:`, `---:`).
  *
- * NOT supported (by design): tables, footnotes, definition lists,
+ * NOT supported (by design): footnotes, definition lists,
  * reference-style links, setext headings (=== ---), nested lists.
  *
  * Inline HTML is passed through unescaped (Parsedown-compatible). Content
  * inside `code` and ```fenced``` blocks is HTML-escaped.
+ *
+ * Table format expected:
+ *
+ *     | Header 1 | Header 2 | Header 3 |
+ *     |---|:---:|---:|
+ *     | left    | center  | right   |
+ *     | row 2   | row 2   | row 2   |
+ *
+ * Each row on its own line. The separator row (`---`) is mandatory —
+ * without it the lines parse as a regular paragraph (Parsedown's
+ * behaviour).
  */
 class Parser
 {
@@ -117,6 +129,20 @@ class Parser
                 continue;
             }
 
+            // Table: header row + separator row (`---` cells with optional alignment colons)
+            if (str_contains($line, '|') && self::isTableSeparator($lines[$i + 1] ?? '')) {
+                $header = self::splitTableRow($line);
+                $align  = self::tableAlignments($lines[$i + 1]);
+                $i += 2;
+                $rows = [];
+                while ($i < $n && trim($lines[$i]) !== '' && str_contains($lines[$i], '|')) {
+                    $rows[] = self::splitTableRow($lines[$i]);
+                    $i++;
+                }
+                $blocks[] = ['table', $header, $align, $rows];
+                continue;
+            }
+
             // Paragraph: collect until blank line or block-starting line
             $para = [$line];
             $i++;
@@ -130,6 +156,7 @@ class Parser
                     || preg_match('/^[-*+]\s+/', $next)
                     || preg_match('/^\d+\.\s+/', $next)
                     || preg_match('/^\s*([-*_])(?:\s*\1){2,}\s*$/', $next)
+                    || (str_contains($next, '|') && self::isTableSeparator($lines[$i + 1] ?? ''))
                 ) {
                     break;
                 }
@@ -204,9 +231,102 @@ class Parser
                 case 'hr':
                     $out .= "<hr>\n";
                     break;
+
+                case 'table':
+                    /** @var array<int,string> $header */
+                    $header = $b[1];
+                    /** @var array<int,string> $align */
+                    $align = $b[2];
+                    /** @var array<int,array<int,string>> $rows */
+                    $rows = $b[3];
+
+                    $out .= "<table>\n<thead>\n<tr>";
+                    foreach ($header as $idx => $cell) {
+                        $out .= '<th' . self::tableAlignAttr($align[$idx] ?? 'left') . '>'
+                            . self::inline($cell) . '</th>';
+                    }
+                    $out .= "</tr>\n</thead>\n<tbody>\n";
+                    foreach ($rows as $row) {
+                        $out .= '<tr>';
+                        foreach ($row as $idx => $cell) {
+                            $out .= '<td' . self::tableAlignAttr($align[$idx] ?? 'left') . '>'
+                                . self::inline($cell) . '</td>';
+                        }
+                        $out .= "</tr>\n";
+                    }
+                    $out .= "</tbody>\n</table>\n";
+                    break;
             }
         }
         return $out;
+    }
+
+    /**
+     * Detects a table-separator row: each cell is `---`, `:---`, `---:`
+     * or `:---:` (with at least 3 dashes). Surrounding `|` chars are
+     * tolerated, as is leading/trailing whitespace.
+     */
+    private static function isTableSeparator(string $line): bool
+    {
+        $line = trim($line);
+        if ($line === '' || !str_contains($line, '-')) {
+            return false;
+        }
+        // Strip outer | chars
+        $line = trim($line, '|');
+        $cells = preg_split('/\s*\|\s*/', $line) ?: [];
+        if ($cells === []) {
+            return false;
+        }
+        foreach ($cells as $cell) {
+            $cell = trim($cell);
+            if (preg_match('/^:?-{3,}:?$/', $cell) !== 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @return array<int,'left'|'center'|'right'>
+     */
+    private static function tableAlignments(string $separator): array
+    {
+        $line  = trim(trim($separator), '|');
+        $cells = preg_split('/\s*\|\s*/', $line) ?: [];
+        return array_map(static function (string $cell): string {
+            $cell = trim($cell);
+            $left  = str_starts_with($cell, ':');
+            $right = str_ends_with($cell, ':');
+            return match (true) {
+                $left && $right => 'center',
+                $right          => 'right',
+                default         => 'left',
+            };
+        }, $cells);
+    }
+
+    /**
+     * Splits a table row on `|`, trimming the optional leading/trailing
+     * pipe and surrounding whitespace.
+     *
+     * @return array<int,string>
+     */
+    private static function splitTableRow(string $line): array
+    {
+        $line = trim($line);
+        if (str_starts_with($line, '|')) {
+            $line = substr($line, 1);
+        }
+        if (str_ends_with($line, '|')) {
+            $line = substr($line, 0, -1);
+        }
+        return array_map('trim', explode('|', $line));
+    }
+
+    private static function tableAlignAttr(string $align): string
+    {
+        return $align === 'left' ? '' : ' style="text-align:' . $align . '"';
     }
 
     /**
