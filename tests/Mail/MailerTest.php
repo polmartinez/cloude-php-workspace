@@ -169,4 +169,99 @@ final class MailerTest extends TestCase
             \Cloude\Config::reset();
         }
     }
+
+    /**
+     * Compatibility smoke: every config shape from the three transactional
+     * providers (MailerSend, Mailgun, SendGrid) must build a working
+     * SmtpTransport without complaint. We don't actually open sockets here
+     * — the test verifies the factory accepts each shape and produces the
+     * right adapter type. Real-network integration is out of scope.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('providerConfigs')]
+    public function testForgeAcceptsTransactionalProviderConfigs(string $name, array $config): void
+    {
+        $mailer = Mailer::forge($config);
+        self::assertInstanceOf(
+            SmtpTransport::class,
+            $mailer->transport(),
+            "provider '$name' didn't yield an SmtpTransport",
+        );
+
+        // Defaults flow through: when 'from' is in the config, send() picks it up.
+        $captured = new MemoryTransport();
+        $rc = new \ReflectionClass($mailer);
+        $rp = $rc->getProperty('transport');
+        $rp->setAccessible(true);
+        $rp->setValue($mailer, $captured);
+
+        $mailer->send([
+            'to'      => 'audit@example.com',
+            'subject' => 'compat smoke',
+            'body'    => '',
+        ]);
+        self::assertSame(
+            'noreply@example.com',
+            $captured->sent()[0]['from'],
+            "provider '$name' didn't carry the default 'from'",
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, array<string,mixed>}>
+     */
+    public static function providerConfigs(): iterable
+    {
+        yield 'mailersend' => ['mailersend', [
+            'transport' => 'smtp',
+            'host'      => 'smtp.mailersend.net',
+            'port'      => 587,
+            'user'      => 'MS_fake_user',
+            'pass'      => 'fake_password',
+            'tls'       => true,
+            'from'      => 'noreply@example.com',
+        ]];
+
+        yield 'mailgun_us' => ['mailgun_us', [
+            'transport' => 'smtp',
+            'host'      => 'smtp.mailgun.org',
+            'port'      => 587,
+            'user'      => 'postmaster@mg.example.com',
+            'pass'      => 'fake-mailgun-smtp-pass',
+            'tls'       => true,
+            'from'      => 'noreply@example.com',
+        ]];
+
+        yield 'mailgun_eu' => ['mailgun_eu', [
+            'transport' => 'smtp',
+            'host'      => 'smtp.eu.mailgun.org',                    // EU region
+            'port'      => 587,
+            'user'      => 'postmaster@mg.example.com',
+            'pass'      => 'fake-mailgun-smtp-pass',
+            'tls'       => true,
+            'from'      => 'noreply@example.com',
+        ]];
+
+        yield 'sendgrid' => ['sendgrid', [
+            'transport' => 'smtp',
+            'host'      => 'smtp.sendgrid.net',
+            'port'      => 587,
+            'user'      => 'apikey',                                 // literal string
+            'pass'      => 'SG.fake-api-key',
+            'tls'       => true,
+            'from'      => 'noreply@example.com',
+        ]];
+
+        // Port 465 / implicit TLS variant — all three providers accept
+        // this shape too. STARTTLS is skipped because the socket is
+        // already encrypted at connect time.
+        yield 'sendgrid_465' => ['sendgrid_465', [
+            'transport' => 'smtp',
+            'host'      => 'ssl://smtp.sendgrid.net',
+            'port'      => 465,
+            'user'      => 'apikey',
+            'pass'      => 'SG.fake-api-key',
+            'tls'       => false,                                    // socket already TLS
+            'from'      => 'noreply@example.com',
+        ]];
+    }
 }

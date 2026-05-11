@@ -129,3 +129,50 @@ $mailer->send([
 //   ]);
 //
 // → 'from' / 'reply_to' come from the config; caller doesn't repeat them.
+
+// ── 6. Provider configs (transactional gateways via SMTP) ───────────────────
+//
+// All three popular providers speak standard SMTP + AUTH LOGIN + STARTTLS
+// on port 587. Cloude\Mail\Transport\SmtpTransport works against each one
+// out of the box — only credentials and host change.
+//
+// **MailerSend** — https://www.mailersend.com
+//
+//   return [
+//       'transport' => 'smtp',
+//       'host'      => 'smtp.mailersend.net',
+//       'port'      => 587,
+//       'user'      => getenv('MAILERSEND_USER'),    // generated in dashboard
+//       'pass'      => getenv('MAILERSEND_PASS'),
+//       'tls'       => true,
+//       'from'      => 'noreply@yourdomain.com',     // must be a verified domain
+//   ];
+//
+// **Mailgun** — https://www.mailgun.com
+//
+//   return [
+//       'transport' => 'smtp',
+//       'host'      => 'smtp.mailgun.org',           // 'smtp.eu.mailgun.org' for EU region
+//       'port'      => 587,
+//       'user'      => 'postmaster@mg.yourdomain.com',
+//       'pass'      => getenv('MAILGUN_SMTP_PASS'),
+//       'tls'       => true,
+//       'from'      => 'noreply@yourdomain.com',
+//   ];
+//
+// **SendGrid** — https://sendgrid.com
+//
+//   return [
+//       'transport' => 'smtp',
+//       'host'      => 'smtp.sendgrid.net',
+//       'port'      => 587,
+//       'user'      => 'apikey',                     // literal string 'apikey'
+//       'pass'      => getenv('SENDGRID_API_KEY'),   // the SendGrid API key
+//       'tls'       => true,
+//       'from'      => 'noreply@yourdomain.com',     // must be a verified sender
+//   ];
+//
+// Port 465 (implicit TLS instead of STARTTLS) also works on all three —
+// pass `'host' => 'ssl://smtp.example.com'` + `'tls' => false`. Port 587 +
+// STARTTLS is the recommended default and what the framework expects when
+// nothing is specified.
