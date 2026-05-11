@@ -119,7 +119,8 @@ Don't:
 - Try to find a DI container. There isn't one, by design.
 - Plug Parsedown via `Markdown::useParser()` "just in case" — only do it
   if you need a Parsedown-specific feature the in-house parser doesn't
-  cover (tables, footnotes, reference links).
+  cover (footnotes, reference links, definition lists). GFM tables are
+  supported natively since v0.26.
 - Build a custom autoloader. Composer PSR-4 is sufficient.
 - Use `class_alias()` to bridge legacy global class names to namespaced
   ones — migrate the call sites and add `use App\Foo;` instead.

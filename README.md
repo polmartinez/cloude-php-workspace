@@ -332,10 +332,23 @@ Minimalist Markdown → HTML parser. Covers the editorial subset:
 | Fenced code blocks (` ``` `) | `[link](url "title")` |
 | Blockquotes (`>`) | `![img](src "title")` |
 | Horizontal rules (`---`, `***`) | Hard line break (`  \n` or `\\\n`) |
+| GFM tables with alignment | (inline parser runs on cell contents) |
 
-Not supported (by design): tables, footnotes, definition lists, reference-style
-links, setext headings, nested lists. If you need any of these, plug Parsedown
-in via `Markdown::useParser()`.
+```markdown
+| Type | Bore | License |
+|---|:---:|---:|
+| Shotgun | smooth | E |
+| Rifle   | rifled | D |
+```
+
+Alignment colons in the separator row: `|:---|` left, `|:---:|` center,
+`|---:|` right. Without the separator the rows fall back to a paragraph
+(matches Parsedown). Inline markdown inside cells works: `**bold**`,
+`` `code` ``, `[link](url)`, `*italic*`, images.
+
+Not supported (by design): footnotes, definition lists, reference-style
+links, setext headings, nested lists. If you need any of these, plug
+Parsedown in via `Markdown::useParser()`.
 
 ```php
 $html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");
