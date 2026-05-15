@@ -75,6 +75,7 @@ if (!defined('DATA_DIR')) define('DATA_DIR', dirname(__DIR__) . '/data');
 | Random tokens, UUIDs, hashes | `Str::random()`, `Str::uuid()`, `Str::hash()` | |
 | Case conversion | `Str::camel/pascal/snake/kebab` | Handles camel-case + non-alnum boundaries |
 | Mask for privacy | `Str::mask('+34600123456', '*', 4, -3)` | Negative length keeps a tail visible |
+| Truncate by the middle | `Str::truncateMiddle($path, 25)` | Keeps both ends, drops the middle — paths, hashes, breadcrumbs |
 | Dot-path access | `Arr::get($a, 'foo.bar.baz', $default)` | Also `set/has/forget/pluck/dot/undot/merge` |
 | Pipeline data | `Collection::make($rows)->filter(...)->sortBy(...)->take(...)->pluck(...)->all()` | Implements `ArrayAccess`, `Countable`, iterable |
 | Directory of `.json` per entity | extend `Data\JsonRepository` | Override `transform($data, $slug)` |

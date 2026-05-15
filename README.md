@@ -117,7 +117,7 @@ cloude-php-workspace/
 | `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
 | `Cloude\TaskRunner` | CLI task runner. `prefix:method` dispatch over registered callables or static class methods, with auto `list` / `help` |
 | `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, nested route groups, and `get/post/put/patch/delete/any` helpers |
-| `Cloude\Str` | String utilities: `upTo`/`truncate`/`words`/`after`/`afterLast`/`between`/`squish`/`mask`, `slug`/`ascii`, `camel`/`pascal`/`snake`/`kebab`, `random`/`uuid`/`hash` |
+| `Cloude\Str` | String utilities: `upTo`/`truncate`/`truncateMiddle`/`words`/`after`/`afterLast`/`between`/`squish`/`mask`, `slug`/`ascii`, `camel`/`pascal`/`snake`/`kebab`, `random`/`uuid`/`hash` |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
 
 ### `Cloude\Http\…`
@@ -360,6 +360,8 @@ $html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");
 // Basic manipulation
 Str::upTo('hello world', ' ');           // 'hello'
 Str::truncate('long text', 4);           // 'long...'
+Str::truncateMiddle('/var/log/app/very/deep/path/file.log', 25);
+                                          // '/var/log/app...h/file.log' (paths, hashes, breadcrumbs)
 Str::words('a b c d e', 3);              // 'a b c...'
 Str::after('foo.bar.baz', '.');          // 'bar.baz'
 Str::afterLast('foo.bar.baz', '.');      // 'baz'

@@ -28,6 +28,45 @@ class Str
     }
 
     /**
+     * Truncates from the middle, keeping equal-ish chunks of the start
+     * and end joined by `$ellipsis`. The final length never exceeds
+     * `$maxLength` (ellipsis included).
+     *
+     *   Str::truncateMiddle('Cloude framework for PHP 8.4', 16);
+     *   // → 'Cloude f... PHP 8.4'  → 16 chars: 7 + 3 + 6
+     *
+     *   Str::truncateMiddle('/var/log/app/very/deep/path/to/file.log', 25);
+     *   // → '/var/log/app...to/file.log'
+     *
+     * Useful for paths, hashes, breadcrumbs and any "I need to see
+     * both ends but not the middle" rendering. Multibyte-safe.
+     *
+     * The end gets the extra character when `$maxLength - strlen($ellipsis)`
+     * is odd (so filenames / suffixes keep maximum context).
+     */
+    public static function truncateMiddle(string $text, int $maxLength, string $ellipsis = '...'): string
+    {
+        $len = mb_strlen($text);
+        if ($len <= $maxLength) {
+            return $text;
+        }
+        $ellipsisLen = mb_strlen($ellipsis);
+
+        // Edge: ellipsis itself is too long — fall back to truncating
+        // the ellipsis (the only sensible option in this constrained
+        // case; both sides of the source would be 0-length anyway).
+        if ($ellipsisLen >= $maxLength) {
+            return mb_substr($ellipsis, 0, $maxLength);
+        }
+
+        $available = $maxLength - $ellipsisLen;
+        $startLen  = (int) floor($available / 2);
+        $endLen    = (int) ceil($available / 2);
+
+        return mb_substr($text, 0, $startLen) . $ellipsis . mb_substr($text, -$endLen);
+    }
+
+    /**
      * Transliterates a string to ASCII, preserving separators and punctuation.
      * "Análisis Político" → "Analisis Politico"; "Москва" → "Moskva".
      *
