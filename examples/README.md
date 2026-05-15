@@ -10,7 +10,8 @@ project.
 | [`basic/`](basic/)       | The smallest possible front-controller app. Routing, dynamic params, a JSON echo endpoint, two views. |
 | [`contacts/`](contacts/) | Form handling with `JsonSchema` validation, file-per-entity storage via `JsonRepository`, accent-insensitive search, and a JSON endpoint consumed from JavaScript with debounced `fetch()`. |
 | [`library/`](library/)   | DDD-style layering — Domain (value objects, aggregates, domain service), Application (use cases), Infrastructure (Cloude-backed adapters), Presentation (HTTP controllers). |
-| [`recipes/`](recipes/)   | Standalone snippets — XML sitemap, Schema.org JSON-LD, MCP server, CLI task runner, custom JSON / Markdown repositories. Not full apps, just patterns to copy. |
+| [`mcp/`](mcp/)           | Minimal MCP (Model Context Protocol) server. Two toy tools (`echo`, `now`), one static resource, the discovery manifest. Hit it with `curl`. |
+| [`recipes/`](recipes/)   | Standalone snippets — XML sitemap, Schema.org JSON-LD, denser MCP server, CLI task runner, custom JSON / Markdown repositories, mail, markdown. Not full apps, just patterns to copy. |
 
 ## How to run them
 
@@ -24,6 +25,7 @@ The shortest path:
 php -S localhost:8000 -t examples/basic/www
 php -S localhost:8001 -t examples/contacts/www
 php -S localhost:8002 -t examples/library/www
+php -S localhost:8003 -t examples/mcp/www
 ```
 
 ## Independence rule
