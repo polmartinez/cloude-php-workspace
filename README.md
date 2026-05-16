@@ -2,7 +2,7 @@
 
 A minimalist PHP micro-framework. No magic, no service container. Persistence is opt-in: file-based (JSON / Markdown) by default, with a thin Active Record over PDO via `Cloude\Model` when you need a relational database.
 
-- **PHP 8.4+**
+- **PHP 8.3+** (tested on 8.3, 8.4 and 8.5)
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style
 - `declare(strict_types=1)` everywhere

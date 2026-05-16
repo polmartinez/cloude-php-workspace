@@ -59,8 +59,8 @@
 
 > "How do you want to run the project locally?
 >
->   - **php -S** (default — needs PHP 8.4+ on your machine, zero install otherwise)
->   - **Docker** (no PHP install needed; uses the `php:8.4-cli` image)
+>   - **php -S** (default — needs PHP 8.3+ on your machine, zero install otherwise)
+>   - **Docker** (no PHP install needed; uses the `php:8.3-cli` image)
 >   - **Both** (set up both, decide each session)
 >
 > Which one?"
@@ -76,7 +76,7 @@ Recipe to copy into `compose.yml` (when needed):
 ```yaml
 services:
   app:
-    image: php:8.4-cli
+    image: php:8.3-cli
     working_dir: /app
     command: php -S 0.0.0.0:8000 -t <docroot>
     ports: ["8000:8000"]
@@ -309,7 +309,7 @@ Next steps:
 - **Don't reach for symfony/* or laravel/* shims.** The framework is self-contained on purpose.
 - **Show the user the file tree at the end** so they know what they got.
 - **If a step's answer is ambiguous**, ask a clarifying question rather than guessing.
-- **PHP / docker availability**: check before recommending. If `php --version` returns < 8.4, suggest Docker mode instead of `php -S`.
+- **PHP / docker availability**: check before recommending. If `php --version` returns < 8.3, suggest Docker mode instead of `php -S`.
 
 ---
 

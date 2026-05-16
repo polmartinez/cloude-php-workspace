@@ -157,7 +157,6 @@ final class ConfigTest extends TestCase
         // Reset configPath via reflection (the API doesn't expose unset).
         $rc = new \ReflectionClass(Config::class);
         $rp = $rc->getProperty('configPath');
-        $rp->setAccessible(true);
         $rp->setValue(null, null);
 
         $this->expectException(\RuntimeException::class);

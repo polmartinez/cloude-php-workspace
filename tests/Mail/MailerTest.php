@@ -92,7 +92,6 @@ final class MailerTest extends TestCase
         // Replace transport so we can capture without actually invoking sendmail.
         $rc = new \ReflectionClass($mailer);
         $rp = $rc->getProperty('transport');
-        $rp->setAccessible(true);
         $rp->setValue($mailer, $t);
 
         $mailer->send(['to' => 'a@x.com', 'subject' => 'Hi', 'body' => 'Body']);
@@ -148,7 +147,6 @@ final class MailerTest extends TestCase
             // Defaults from config flow through.
             $rc = new \ReflectionClass($mailer);
             $rp = $rc->getProperty('defaults');
-            $rp->setAccessible(true);
             self::assertSame(['from' => 'auto@example.com'], $rp->getValue($mailer));
         } finally {
             @unlink($tmp . '/mail.php');
@@ -191,7 +189,6 @@ final class MailerTest extends TestCase
         $captured = new MemoryTransport();
         $rc = new \ReflectionClass($mailer);
         $rp = $rc->getProperty('transport');
-        $rp->setAccessible(true);
         $rp->setValue($mailer, $captured);
 
         $mailer->send([
