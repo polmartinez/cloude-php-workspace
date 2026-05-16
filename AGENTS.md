@@ -13,6 +13,13 @@ time to graduate, anti-patterns to avoid), see
 [`PATTERNS.md`](PATTERNS.md). It maps "what your app looks like" to
 "which example to copy".
 
+For **brand-new projects, scaffolded interactively**: [`SETUP.md`](SETUP.md)
+is an eight-step interview script. When the user says "I want to start
+a new project on cloude/framework", read SETUP.md and walk them
+through it — namespace, docroot, run mode (`php -S` / Docker), pattern
+(reads PATTERNS.md), CSS / JS choices, optional modules (storage,
+mail, MCP). Don't guess defaults silently; ask each question.
+
 ## Mental model
 
 - **One class per file. No magic. No DSL. No container.** What you read is

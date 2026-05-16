@@ -8,6 +8,12 @@
 > **For consumer projects**: copy this file from
 > `vendor/cloude/framework/CLAUDE.md` into your project root and adjust
 > the namespace / paths. Claude Code will pick it up there.
+>
+> **Starting a brand-new project from scratch?** Use [`SETUP.md`](SETUP.md)
+> instead — it's an eight-step interview that scaffolds the project
+> based on the user's answers (namespace, docroot, run mode, pattern,
+> CSS / JS, optional modules). This file is for ongoing development
+> once the skeleton exists.
 
 ## TL;DR for Claude
 

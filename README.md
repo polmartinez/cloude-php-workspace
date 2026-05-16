@@ -46,6 +46,13 @@ it in one prompt.
 > decision guide for picking an architecture — Transaction Script, MVC
 > + Repository, or DDD layered. It maps "what your app looks like" to
 > "which example to copy", with migration paths and anti-patterns.
+>
+> **For brand-new projects, AI-guided:** [`SETUP.md`](SETUP.md) is an
+> interview script for AI coding agents. Point Claude Code (or any
+> tool-capable agent) at this file and it walks you through eight
+> steps — namespace, docroot, run mode (`php -S` / Docker / both),
+> pattern, CSS, JS, optional modules — and scaffolds the project
+> based on your answers.
 
 ## Installation
 
