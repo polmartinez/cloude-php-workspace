@@ -1,5 +1,9 @@
 # basic — minimal Cloude app
 
+> **Pattern**: Transaction Script — route handlers inline, no
+> repositories, no domain layer. See [`../../PATTERNS.md`](../../PATTERNS.md)
+> for when to graduate to MVC + Repository or DDD.
+
 The smallest end-to-end project on top of `cloude/framework`: front
 controller, four routes, plain-PHP views.
 

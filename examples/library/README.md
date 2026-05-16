@@ -1,5 +1,11 @@
 # Library demo — DDD layering on `cloude/framework`
 
+> **Pattern**: DDD Layered — value objects, aggregate roots, a domain
+> service that owns a cross-aggregate invariant (borrow consumes a
+> copy AND creates a loan, atomically from the domain's view). See
+> [`../../PATTERNS.md`](../../PATTERNS.md) for when this complexity is
+> warranted (and when it isn't).
+
 A book-lending mini-app structured as a four-layer DDD project:
 
 ```

@@ -15,18 +15,23 @@ When asked to build something on top of `cloude/framework`:
 
 1. **Read [`AGENTS.md`](AGENTS.md) first.** Every helper, with the call
    form. Don't re-invent `Response::json`, `JsonFile::write`, `Str::slug`, …
-2. **Find the closest example before writing new code:**
-   - [`examples/contacts/`](examples/contacts/) — form + JSON Schema validation + JS live search
+2. **Pick the right pattern.** [`PATTERNS.md`](PATTERNS.md) is the
+   one-page decision guide — Transaction Script for ≤10 routes, MVC +
+   Repository for CRUD apps, DDD only when the domain has invariants
+   that need enforcing everywhere. Don't over-engineer.
+3. **Find the closest example before writing new code:**
+   - [`examples/basic/`](examples/basic/) — Transaction Script
+   - [`examples/contacts/`](examples/contacts/) — MVC + Repository (form + JSON Schema + JS live search)
    - [`examples/library/`](examples/library/) — DDD (Domain / Application / Infrastructure / Presentation)
-   - [`examples/recipes/`](examples/recipes/) — sitemap, JSON-LD, MCP, CLI tasks, repos
-3. **Stay inside the mental model**: no DI container, no magic.
+   - [`examples/recipes/`](examples/recipes/) — sitemap, JSON-LD, MCP, CLI tasks, repos, model, mail, markdown
+4. **Stay inside the mental model**: no DI container, no magic.
    `Cloude\Model` is a thin Active Record (no relations, no observers,
    no migrations) — opt-in only. The bundled `Cloude\Db\Query` builder
    covers SELECT / INSERT / UPDATE / DELETE with WHERE / ORDER BY /
    LIMIT / OFFSET; joins and subqueries go straight to PDO. If
    something feels like it needs a "service locator" or a "repository
    factory", you're probably overcomplicating.
-4. **Wire by hand** in `app/Routes.php` or `www/index.php`. That's the seam.
+5. **Wire by hand** in `app/Routes.php` or `www/index.php`. That's the seam.
 
 ## Project layout (recommended)
 

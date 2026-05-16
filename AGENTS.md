@@ -7,6 +7,12 @@
 This file is intentionally short. The framework's surface area is small enough
 that you should be able to load it once into context and keep going.
 
+For **architecture pattern guidance** (Transaction Script vs. MVC +
+Repository vs. DDD layered — when to pick each, smells that mean it's
+time to graduate, anti-patterns to avoid), see
+[`PATTERNS.md`](PATTERNS.md). It maps "what your app looks like" to
+"which example to copy".
+
 ## Mental model
 
 - **One class per file. No magic. No DSL. No container.** What you read is

@@ -41,6 +41,11 @@ it in one prompt.
 > the standard add-a-feature workflow, common patterns, and how to brief
 > Claude effectively. Copy it into your own project root once you start
 > building on top of `cloude/framework`.
+>
+> **For design-pattern guidance:** [`PATTERNS.md`](PATTERNS.md) is the
+> decision guide for picking an architecture — Transaction Script, MVC
+> + Repository, or DDD layered. It maps "what your app looks like" to
+> "which example to copy", with migration paths and anti-patterns.
 
 ## Installation
 

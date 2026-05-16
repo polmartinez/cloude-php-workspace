@@ -1,5 +1,10 @@
 # mcp — minimal MCP server
 
+> **Pattern**: MCP is a transport, not an architecture tier — combine
+> it with any of the three patterns in [`../../PATTERNS.md`](../../PATTERNS.md).
+> Tools call into your application code; this example keeps things
+> inline (Transaction Script style) for simplicity.
+
 The smallest end-to-end MCP (Model Context Protocol) server built on
 `cloude/framework`. Two toy tools, one static resource, three
 endpoints. Designed to be the "hello world" of MCP in this codebase.

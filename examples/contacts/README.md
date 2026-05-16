@@ -1,5 +1,10 @@
 # Contacts demo
 
+> **Pattern**: MVC + Repository (document variant) — Controllers +
+> a Repository that extends `Cloude\Data\JsonRepository`, data as
+> plain arrays. See [`../../PATTERNS.md`](../../PATTERNS.md) for when
+> this is the right fit and when to move to DDD instead.
+
 A tiny address-book built on `cloude/framework`. Single front controller,
 file-backed JSON storage, server-side validation, and a JSON endpoint
 consumed by a small `fetch()` script for live search.
