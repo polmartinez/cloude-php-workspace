@@ -108,6 +108,14 @@ if (!defined('DATA_DIR')) define('DATA_DIR', dirname(__DIR__) . '/data');
 
 ## Idioms
 
+- **Throw, don't render, when something is missing.** `Response::notFound`
+  is for handlers that already know they want a 404 body. For "I asked
+  the repo and it returned null", throw `Cloude\Http\NotFoundException`
+  — `ErrorHandler` picks the status, the right view (`404.html.php`),
+  and the right format (HTML / JSON / CLI text). The HTML view ships
+  with the framework; drop a `404.html.php` under your `viewBase` to
+  override it. For other statuses use `Cloude\Http\HttpException(int
+  $status, string $message)` directly.
 - **Validate at the edge.** `Mcp\Server` validates `arguments` against
   `inputSchema` before invoking the handler. For HTTP routes do
   `JsonSchema::validate($input, $schema)` early and `Response::json($errors, 422)`

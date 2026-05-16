@@ -93,12 +93,14 @@ cloude-php-workspace/
       Cache.php
       AssetUrl.php
       ErrorHandler.php
+      HttpException.php   # Base: carries a status code
+      NotFoundException.php  # extends HttpException, status 404
       Response.php
     Mcp/
       Server.php         # MCP (Model Context Protocol) server, HTTP transport
       JsonRpc.php        # JSON-RPC 2.0 + MCP error codes
       McpException.php
-    views/               # Default 500 / 500-debug views (overridable)
+    views/               # Default 404 / 500 / 500-debug views (overridable)
   tests/                 # PHPUnit tests
   examples/              # Runnable sample apps (see examples/README.md)
     recipes/             # Cookbook snippets for sitemap, JSON-LD, ...
@@ -138,7 +140,9 @@ cloude-php-workspace/
 |---|---|
 | `Cloude\Http\AssetUrl` | Versioned asset URLs (`/{mtime}/assets/...`) for cache-busting |
 | `Cloude\Http\Cache` | HTTP cache headers (`ok`, `notFound`, `unavailable`) and `conditionalGet()` |
-| `Cloude\Http\ErrorHandler` | Global 503 handler with HTML / JSON / `.md` negotiation, debug mode |
+| `Cloude\Http\ErrorHandler` | Global error handler. Defaults to 503 (`Retry-After: 600`); honors `HttpException::statusCode` when thrown. HTML / JSON / `.md` / CLI / AJAX negotiation, debug mode |
+| `Cloude\Http\HttpException` | Throwable carrying a status code; caught by `ErrorHandler` to render with that status |
+| `Cloude\Http\NotFoundException` | `HttpException` pinned to 404; renders bundled `404.html.php` (or your override) |
 | `Cloude\Http\Response` | One-call response helpers: `json`, `html`, `xml`, `markdown`, `redirect`, `notFound`, `noContent` |
 
 ### `Cloude\Data\…`
@@ -638,21 +642,77 @@ A non-allowed host falls back to `localhost`.
 
 ### `Cloude\Http\ErrorHandler`
 
-Drop-in 503 handler. Treats unhandled exceptions as temporary unavailability
-(crawlers retry instead of deindexing). Negotiates HTML / JSON / `.md`
-based on `Accept` and URL extension.
+Drop-in global handler. Defaults unhandled errors to **503** (temporary
+unavailability — crawlers retry instead of deindexing the URL). Throw a
+`Cloude\Http\HttpException` (or its `NotFoundException` subclass) to
+override the status — see [`Cloude\Http\HttpException`](#cloudehttphttpexception--notfoundexception)
+below.
+
+Negotiates the response format from the request context:
+
+| Request looks like…                                                | Response          |
+|---------------------------------------------------------------------|-------------------|
+| `PHP_SAPI === 'cli'`                                                | plain text on STDERR |
+| `Accept: application/json` *or* `Content-Type: application/json`    | JSON              |
+| `X-Requested-With: XMLHttpRequest` (classic jQuery AJAX)            | JSON              |
+| URL path ends in `.json`                                            | JSON              |
+| URL path ends in `.md`                                              | text/plain (markdown) |
+| Everything else                                                     | HTML view         |
 
 ```php
 ob_start();
 \Cloude\Http\ErrorHandler::register(
     debug:    DEBUG,
-    viewBase: dirname(__DIR__) . '/app/views', // optional override
+    viewBase: dirname(__DIR__) . '/app/views', // optional override directory
 );
 ```
 
-In debug mode, HTML responses include source snippet and stack trace.
-The HTML response uses `500.html.php` (or `500-debug.html.php` in debug);
-if `viewBase` is set and the file exists there, it overrides the framework default.
+In debug mode, HTML responses include source snippet and stack trace
+(`500-debug.html.php`, shared by every status). In production, the HTML
+template is chosen by status: 404 → `404.html.php`, anything else →
+`500.html.php`. If `viewBase` is set and the file exists there, it
+overrides the framework default — drop a `404.html.php` next to your
+other views to brand the page.
+
+The content-negotiation logic is exposed as `ErrorHandler::negotiate($server)`
+(pure function over a `$_SERVER`-shaped array, returns `'json' | 'md' | 'html'`)
+so you can unit-test consumers without touching the global state.
+
+### `Cloude\Http\HttpException` + `NotFoundException`
+
+Throw one of these from anywhere in a request handler and `ErrorHandler`
+renders with the carried status code (instead of falling back to 503).
+Headers and templates follow the status:
+
+- **404** — bundled `404.html.php` view (no `Retry-After`)
+- **other** — falls back to the `500.html.php` template
+- **503** — adds `Retry-After: 600` and uses `500.html.php`
+
+```php
+use Cloude\Http\HttpException;
+use Cloude\Http\NotFoundException;
+
+// Idiomatic 404 from a controller:
+$book = $repo->find($isbn) ?? throw new NotFoundException("book $isbn");
+
+// Any HTTP status — message goes into the JSON / debug output:
+throw new HttpException(403, 'forbidden');
+```
+
+`HttpException` is the base class with a `public readonly int $statusCode`.
+`NotFoundException` is just `HttpException` with the code pinned to 404 and a
+default message of `'Not found'`. No other subclasses ship — make your own
+(`class ForbiddenException extends HttpException { public function __construct(string $m = 'Forbidden') { parent::__construct(403, $m); } }`)
+if a project wants named 401 / 403 / 422 helpers.
+
+JSON responses for `HttpException`s look like:
+
+```json
+{"error": "not_found", "status": 404}
+```
+
+In debug they include `message`, `file`, `line`, `trace`, and `status`.
+CLI prints `"Not found."` for 404, `"Error: service temporarily unavailable."` otherwise.
 
 ### `Cloude\Http\Cache`
 
