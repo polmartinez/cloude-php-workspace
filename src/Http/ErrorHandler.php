@@ -8,10 +8,15 @@ namespace Cloude\Http;
  * Global error / exception handler that turns unhandled errors into a 503
  * (treating them as temporary unavailability so crawlers retry instead of
  * deindexing the URL) and renders an appropriate response based on the
- * Accept header / URL extension:
+ * request context (SAPI, headers, URL extension):
  *
- *   - JSON  →  application/json
- *   - .md   →  text/plain
+ *   - CLI   →  plain text on STDERR (or stdout if STDERR is missing)
+ *   - JSON  →  application/json when:
+ *                · Accept header contains application/json, OR
+ *                · Content-Type header is application/json (AJAX POST/PUT), OR
+ *                · X-Requested-With is XMLHttpRequest (classic jQuery AJAX), OR
+ *                · URL path ends with .json
+ *   - .md   →  text/plain when URL path ends with .md
  *   - HTML  →  500.html.php (debug: 500-debug.html.php with stack trace)
  *
  * Usage in www/index.php, BEFORE any output:
@@ -77,11 +82,16 @@ class ErrorHandler
     }
 
     /**
-     * Renders the error response (status 503) negotiating HTML / JSON / .md
-     * based on the Accept header and the URL extension.
+     * Renders the error response (status 503) negotiating CLI / JSON / .md /
+     * HTML based on SAPI, request headers and the URL extension.
      */
     public static function render(\Throwable $e): void
     {
+        if (PHP_SAPI === 'cli') {
+            self::renderCli($e);
+            return;
+        }
+
         $alreadySent = headers_sent();
 
         if (!$alreadySent) {
@@ -93,20 +103,71 @@ class ErrorHandler
             }
         }
 
-        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
-        $path   = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
-        $wantsJson = str_contains($accept, 'application/json') || str_ends_with($path, '.json');
-        $wantsMd   = str_ends_with($path, '.md');
+        switch (self::negotiate($_SERVER)) {
+            case 'json':
+                self::renderJson($e, $alreadySent);
+                return;
+            case 'md':
+                self::renderMarkdown($e, $alreadySent);
+                return;
+            default:
+                self::renderHtml($e, $alreadySent);
+        }
+    }
 
+    /**
+     * Picks the response format from a $_SERVER-shaped array.
+     *
+     * Returns one of `json`, `md`, `html`. Exposed (and pure) so it can be
+     * unit-tested without spawning a CLI subprocess to escape the PHP_SAPI
+     * branch in render().
+     *
+     * @param array<string, mixed> $server
+     */
+    public static function negotiate(array $server): string
+    {
+        $accept        = (string) ($server['HTTP_ACCEPT'] ?? '');
+        $contentType   = (string) ($server['CONTENT_TYPE'] ?? $server['HTTP_CONTENT_TYPE'] ?? '');
+        $requestedWith = (string) ($server['HTTP_X_REQUESTED_WITH'] ?? '');
+        $path          = parse_url((string) ($server['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '';
+
+        $wantsJson = str_contains($accept, 'application/json')
+            || str_contains($contentType, 'application/json')
+            || strcasecmp($requestedWith, 'XMLHttpRequest') === 0
+            || str_ends_with($path, '.json');
         if ($wantsJson) {
-            self::renderJson($e, $alreadySent);
-            return;
+            return 'json';
         }
-        if ($wantsMd) {
-            self::renderMarkdown($e, $alreadySent);
-            return;
+        if (str_ends_with($path, '.md')) {
+            return 'md';
         }
-        self::renderHtml($e, $alreadySent);
+        return 'html';
+    }
+
+    private static function renderCli(\Throwable $e): void
+    {
+        $stderr = defined('STDERR') ? STDERR : null;
+        $write = static function (string $s) use ($stderr): void {
+            if ($stderr) {
+                fwrite($stderr, $s);
+            } else {
+                echo $s;
+            }
+        };
+
+        if (self::$debug) {
+            $write(get_class($e) . ': ' . $e->getMessage() . "\n");
+            $write('  at ' . $e->getFile() . ':' . $e->getLine() . "\n\n");
+            $write($e->getTraceAsString() . "\n");
+            $p = $e->getPrevious();
+            while ($p) {
+                $write("\nCaused by " . get_class($p) . ': ' . $p->getMessage() . "\n");
+                $write('  at ' . $p->getFile() . ':' . $p->getLine() . "\n");
+                $p = $p->getPrevious();
+            }
+        } else {
+            $write("Error: service temporarily unavailable.\n");
+        }
     }
 
     private static function renderJson(\Throwable $e, bool $alreadySent): void
