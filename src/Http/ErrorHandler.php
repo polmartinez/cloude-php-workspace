@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Cloude\Http;
 
 /**
- * Global error / exception handler that turns unhandled errors into a 503
- * (treating them as temporary unavailability so crawlers retry instead of
- * deindexing the URL) and renders an appropriate response based on the
- * request context (SAPI, headers, URL extension):
+ * Global error / exception handler. Unhandled errors become 503 (treated
+ * as temporary unavailability so crawlers retry instead of deindexing).
+ * Exceptions extending `\Cloude\Http\HttpException` carry their own status
+ * code — throw a `NotFoundException` and you get a real 404 with the
+ * bundled 404 view. The response format is negotiated from the request
+ * context (SAPI, headers, URL extension):
  *
  *   - CLI   →  plain text on STDERR (or stdout if STDERR is missing)
  *   - JSON  →  application/json when:
@@ -87,16 +89,20 @@ class ErrorHandler
      */
     public static function render(\Throwable $e): void
     {
+        $status = $e instanceof HttpException ? $e->statusCode : 503;
+
         if (PHP_SAPI === 'cli') {
-            self::renderCli($e);
+            self::renderCli($e, $status);
             return;
         }
 
         $alreadySent = headers_sent();
 
         if (!$alreadySent) {
-            http_response_code(503);
-            header('Retry-After: 600');
+            http_response_code($status);
+            if ($status === 503) {
+                header('Retry-After: 600');
+            }
             header('Cache-Control: no-store');
             while (ob_get_level() > 0) {
                 ob_end_clean();
@@ -105,13 +111,13 @@ class ErrorHandler
 
         switch (self::negotiate($_SERVER)) {
             case 'json':
-                self::renderJson($e, $alreadySent);
+                self::renderJson($e, $alreadySent, $status);
                 return;
             case 'md':
-                self::renderMarkdown($e, $alreadySent);
+                self::renderMarkdown($e, $alreadySent, $status);
                 return;
             default:
-                self::renderHtml($e, $alreadySent);
+                self::renderHtml($e, $alreadySent, $status);
         }
     }
 
@@ -144,7 +150,7 @@ class ErrorHandler
         return 'html';
     }
 
-    private static function renderCli(\Throwable $e): void
+    private static function renderCli(\Throwable $e, int $status): void
     {
         $stderr = defined('STDERR') ? STDERR : null;
         $write = static function (string $s) use ($stderr): void {
@@ -156,7 +162,7 @@ class ErrorHandler
         };
 
         if (self::$debug) {
-            $write(get_class($e) . ': ' . $e->getMessage() . "\n");
+            $write('[' . $status . '] ' . get_class($e) . ': ' . $e->getMessage() . "\n");
             $write('  at ' . $e->getFile() . ':' . $e->getLine() . "\n\n");
             $write($e->getTraceAsString() . "\n");
             $p = $e->getPrevious();
@@ -166,17 +172,20 @@ class ErrorHandler
                 $p = $p->getPrevious();
             }
         } else {
-            $write("Error: service temporarily unavailable.\n");
+            $write($status === 404
+                ? "Not found.\n"
+                : "Error: service temporarily unavailable.\n");
         }
     }
 
-    private static function renderJson(\Throwable $e, bool $alreadySent): void
+    private static function renderJson(\Throwable $e, bool $alreadySent, int $status): void
     {
         if (!$alreadySent) {
             header('Content-Type: application/json; charset=utf-8');
         }
         if (self::$debug) {
             echo json_encode([
+                'status'  => $status,
                 'error'   => get_class($e),
                 'message' => $e->getMessage(),
                 'file'    => $e->getFile(),
@@ -189,30 +198,36 @@ class ErrorHandler
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             return;
         }
-        echo '{"error":"internal_error","status":500}';
+        $slug = $status === 404 ? 'not_found' : 'internal_error';
+        echo json_encode(['error' => $slug, 'status' => $status]);
     }
 
-    private static function renderMarkdown(\Throwable $e, bool $alreadySent): void
+    private static function renderMarkdown(\Throwable $e, bool $alreadySent, int $status): void
     {
         if (!$alreadySent) {
             header('Content-Type: text/plain; charset=utf-8');
         }
         if (self::$debug) {
-            echo '# ' . get_class($e) . "\n\n" . $e->getMessage()
+            echo '# ' . $status . ' ' . get_class($e) . "\n\n" . $e->getMessage()
                 . "\n\nat " . $e->getFile() . ':' . $e->getLine()
                 . "\n\n" . $e->getTraceAsString();
             return;
         }
-        echo "# 503\n\nService temporarily unavailable.";
+        echo $status === 404
+            ? "# 404\n\nNot found."
+            : "# 503\n\nService temporarily unavailable.";
     }
 
-    private static function renderHtml(\Throwable $e, bool $alreadySent): void
+    private static function renderHtml(\Throwable $e, bool $alreadySent, int $status): void
     {
         if (!$alreadySent) {
             header('Content-Type: text/html; charset=utf-8');
         }
 
-        $template = self::$debug ? '500-debug.html.php' : '500.html.php';
+        // Pick the template by status (404 → 404.html.php, anything else
+        // falls back to the 500 view). Debug stack-trace view is shared.
+        $base = $status === 404 ? '404' : '500';
+        $template = self::$debug ? '500-debug.html.php' : $base . '.html.php';
         $vars = self::$debug ? self::buildDebugVars($e) : [];
 
         $override = self::$viewBase !== null ? self::$viewBase . '/' . $template : null;

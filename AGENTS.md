@@ -78,6 +78,8 @@ if (!defined('DATA_DIR')) define('DATA_DIR', dirname(__DIR__) . '/data');
 |---|---|---|
 | Send a JSON response | `Http\Response::json($data, $status, $pretty)` | Don't `header()` + `echo json_encode()` by hand |
 | 404 / redirect / 204 | `Response::notFound`, `redirect`, `noContent` | |
+| Throw a 404 from anywhere | `throw new Http\NotFoundException("book $isbn")` | Caught by `ErrorHandler`; renders bundled `404.html.php` (HTML), JSON, or plain text |
+| Throw any HTTP status | `throw new Http\HttpException(403, 'forbidden')` | Same as above; uses `500.html.php` template by default for non-404 |
 | Cache a 200 at the CDN | `Http\Cache::ok($seconds)` | Sets both `Cache-Control` and `CDN-Cache-Control` |
 | Conditional GET (304) | `Cache::conditionalGet(filemtime($path))` | Returns true when client is fresh |
 | Read JSON file (cached) | `JsonFile::read($path)` / `readOr($path, $default)` | Per-request cache; `null` on missing/invalid |
