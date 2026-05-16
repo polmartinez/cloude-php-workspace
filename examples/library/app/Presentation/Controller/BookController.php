@@ -33,9 +33,9 @@ class BookController
         $books = $this->books->all();
         usort($books, static fn ($a, $b) => $a->title() <=> $b->title());
 
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'   => 'Catalogue',
-            'content' => 'books.php',
+            'content' => 'books.html.php',
             'books'   => $books,
             'flash'   => self::flash(),
         ]);
@@ -59,9 +59,9 @@ class BookController
 
     public function newForm(): void
     {
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'   => 'Register a book',
-            'content' => 'book_form.php',
+            'content' => 'book_form.html.php',
             'errors'  => [],
             'old'     => ['isbn' => '', 'title' => '', 'author' => '', 'copies' => '1'],
         ]);
@@ -80,9 +80,9 @@ class BookController
             ($this->register)($input['isbn'], $input['title'], $input['author'], $input['copies']);
         } catch (DomainException $e) {
             http_response_code(422);
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => 'Register a book',
-                'content' => 'book_form.php',
+                'content' => 'book_form.html.php',
                 'errors'  => [$e->getMessage()],
                 'old'     => $input,
             ]);

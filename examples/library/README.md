@@ -79,11 +79,11 @@ library/
 │           ├── BookController.php
 │           └── LoanController.php
 ├── views/
-│   ├── layout.php
-│   ├── books.php
-│   ├── book_form.php
-│   ├── loans.php
-│   └── 404.php
+│   ├── layout.html.php
+│   ├── books.html.php
+│   ├── book_form.html.php
+│   ├── loans.html.php
+│   └── 404.html.php
 └── data/
     ├── books/{isbn}.json         ← seeded with three classics
     └── loans/{uuid}.json         ← created at runtime

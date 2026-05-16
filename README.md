@@ -182,7 +182,7 @@ use Cloude\View;
 
 $router = new Router(BASE_URL);
 
-$router->get('/', fn () => View::render('home.php', ['title' => 'Hello']));
+$router->get('/', fn () => View::render('home.html.php', ['title' => 'Hello']));
 
 $router->get('/users/{id:\d+}', fn (array $p) => Response::json(['id' => $p['id']]));
 
@@ -288,10 +288,15 @@ Input::ip(trustProxy: false);
 ```php
 View::setBasePath(__DIR__ . '/views');
 
-View::render('home.php', ['title' => 'Hello']);   // prints
-$html = View::capture('home.php', $vars);         // returns a string
-echo View::e($text);                               // HTML escape
+View::render('home.html.php', ['title' => 'Hello']);   // prints
+$html = View::capture('home.html.php', $vars);         // returns a string
+echo View::e($text);                                   // HTML escape
 ```
+
+View templates use the `.html.php` double extension by convention —
+visually separates HTML-producing templates from PHP source files
+(controllers, models) and improves IDE highlighting. The `render()` /
+`capture()` methods don't enforce it; any `require`-able path works.
 
 ### `Cloude\Markdown`
 

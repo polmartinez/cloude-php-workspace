@@ -51,9 +51,9 @@ $router = new \Cloude\Router();
 \App\Routes::register($router);
 
 $router->setNotFound(static function (): void {
-    \Cloude\View::render('layout.php', [
+    \Cloude\View::render('layout.html.php', [
         'title'   => '404 - Not Found',
-        'content' => '404.php',
+        'content' => '404.html.php',
     ]);
 });
 

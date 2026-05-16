@@ -49,9 +49,9 @@ require_once dirname(__DIR__) . '/app/routes.php';
 App\Routes::register($router);
 
 $router->setNotFound(function (): void {
-    View::render('layout.php', [
+    View::render('layout.html.php', [
         'title'   => '404 - Not Found',
-        'content' => '404.php',
+        'content' => '404.html.php',
     ]);
 });
 

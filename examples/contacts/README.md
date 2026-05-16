@@ -46,11 +46,11 @@ contacts/
 │   └── Repository/
 │       └── ContactsRepo.php   ← extends Cloude\Data\JsonRepository
 ├── views/
-│   ├── layout.php             ← shared chrome
-│   ├── home.php               ← list + search
-│   ├── new.php                ← form
-│   ├── detail.php             ← single contact
-│   └── 404.php
+│   ├── layout.html.php             ← shared chrome
+│   ├── home.html.php               ← list + search
+│   ├── new.html.php                ← form
+│   ├── detail.html.php             ← single contact
+│   └── 404.html.php
 └── data/
     └── contacts/
         ├── ada-lovelace.json

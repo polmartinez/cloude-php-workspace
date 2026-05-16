@@ -42,8 +42,8 @@ my-app/
 │   ├── Controller/            ← thin HTTP handlers
 │   ├── Repository/            ← extends Cloude\Data\JsonRepository, etc.
 │   └── Domain/                ← optional, for DDD-shaped projects
-├── views/
-│   └── layout.php             ← plain PHP templates (no engine)
+├── views/                     ← plain PHP templates, `.html.php` extension
+│   └── layout.html.php        ← (double extension separates views from PHP code)
 ├── data/                      ← JSON / Markdown content (or use Cloude\Model for relational)
 └── tests/                     ← PHPUnit
 ```
@@ -125,16 +125,20 @@ class Routes
 {
     public static function register(Router $router): void
     {
-        $router->get('/', fn () => View::render('layout.php', [
+        $router->get('/', fn () => View::render('layout.html.php', [
             'title'   => 'Hello',
-            'content' => 'home.php',
+            'content' => 'home.html.php',
         ]));
     }
 }
 ```
 
+View templates use the `.html.php` double extension by convention —
+keeps them visually distinct from PHP source files (controllers,
+models) at a glance and improves IDE highlighting.
+
 ```php
-<?php // views/layout.php ?>
+<?php // views/layout.html.php ?>
 <?php use Cloude\View; ?>
 <!doctype html>
 <title><?= View::e($title) ?></title>
@@ -142,7 +146,7 @@ class Routes
 ```
 
 ```php
-<?php // views/home.php ?>
+<?php // views/home.html.php ?>
 <h1>Hello, cloude/framework</h1>
 ```
 

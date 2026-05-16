@@ -28,20 +28,20 @@ basic/
     config.php           # BASE_URL, ROOT_DIR, DEBUG...
     routes.php           # App\Routes::register()
   views/
-    layout.php           # base HTML layout
-    home.php             # landing page
-    hello.php            # dynamic-parameter example
-    about.php            # static page
-    404.php              # not-found page
+    layout.html.php           # base HTML layout
+    home.html.php             # landing page
+    hello.html.php            # dynamic-parameter example
+    about.html.php            # static page
+    404.html.php              # not-found page
 ```
 
 ## Routes
 
 | Method | Path              | Handler                                    |
 |--------|-------------------|--------------------------------------------|
-| GET    | `/`               | Renders `home.php`                         |
-| GET    | `/hello/{name}`   | Renders `hello.php` with `$name`           |
-| GET    | `/about`          | Renders `about.php`                        |
+| GET    | `/`               | Renders `home.html.php`                         |
+| GET    | `/hello/{name}`   | Renders `hello.html.php` with `$name`           |
+| GET    | `/about`          | Renders `about.html.php`                        |
 | POST   | `/api/echo`       | Returns a JSON dump of the request         |
 
 ## Try the JSON endpoint

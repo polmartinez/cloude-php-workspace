@@ -6,8 +6,23 @@ namespace Cloude;
 
 /**
  * Plain PHP template rendering.
+ *
  * Variables from the $vars array are extracted into the local scope
- * before requiring the template file.
+ * before requiring the template file. No engine, no compilation step
+ * — `<?= View::e($title) ?>` and friends do all the work.
+ *
+ * **View filename convention**: templates use the `.html.php` extension
+ * (e.g. `layout.html.php`, `home.html.php`, `partido.html.php`). The
+ * double extension separates HTML-producing templates from PHP CODE
+ * files (controllers, models, repositories) at a glance, helps IDE
+ * syntax highlighting pick the right mode, and matches the convention
+ * used elsewhere in the framework's examples and recipes.
+ *
+ *   View::render('partido.html.php', ['title' => $name, ...]);
+ *
+ * `render()` itself doesn't enforce the extension — `.php`, `.tpl`,
+ * anything `require`-able works — but new code should follow the
+ * convention so all view files look identifiable.
  */
 class View
 {

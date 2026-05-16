@@ -14,17 +14,17 @@ class Routes
     {
         // Home.
         $router->get('/', function (): void {
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => 'Cloude Framework - Example',
-                'content' => 'home.php',
+                'content' => 'home.html.php',
             ]);
         });
 
         // Route with a dynamic parameter.
         $router->get('/hello/{name}', function (array $params): void {
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => 'Hello ' . $params['name'],
-                'content' => 'hello.php',
+                'content' => 'hello.html.php',
                 'name'    => $params['name'],
             ]);
         });
@@ -42,9 +42,9 @@ class Routes
 
         // Static page.
         $router->get('/about', function (): void {
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => 'About this example',
-                'content' => 'about.php',
+                'content' => 'about.html.php',
             ]);
         });
     }

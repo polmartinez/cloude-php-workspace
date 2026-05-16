@@ -32,9 +32,9 @@ class ContactsController
 
     public function home(): void
     {
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'    => 'Contacts',
-            'content'  => 'home.php',
+            'content'  => 'home.html.php',
             'contacts' => $this->repo->search('')->all(),
             'flash'    => $this->flash(),
         ]);
@@ -68,9 +68,9 @@ class ContactsController
 
     public function newForm(): void
     {
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'   => 'New contact',
-            'content' => 'new.php',
+            'content' => 'new.html.php',
             'errors'  => [],
             'old'     => self::emptyInput(),
         ]);
@@ -90,9 +90,9 @@ class ContactsController
         $errors = JsonSchema::validate($input, self::schema());
         if ($errors !== []) {
             http_response_code(422);
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => 'New contact',
-                'content' => 'new.php',
+                'content' => 'new.html.php',
                 'errors'  => $errors,
                 'old'     => $input,
             ]);
@@ -117,16 +117,16 @@ class ContactsController
         $contact = $this->repo->findOne($params['slug']);
         if ($contact === null) {
             http_response_code(404);
-            View::render('layout.php', [
+            View::render('layout.html.php', [
                 'title'   => '404 - Not Found',
-                'content' => '404.php',
+                'content' => '404.html.php',
             ]);
             return;
         }
 
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'   => $contact['name'],
-            'content' => 'detail.php',
+            'content' => 'detail.html.php',
             'contact' => $contact,
             'flash'   => $this->flash(),
         ]);

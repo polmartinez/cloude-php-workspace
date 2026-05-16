@@ -38,9 +38,9 @@ class LoanController
         }
         usort($rows, static fn ($a, $b) => $a['due_at'] <=> $b['due_at']);
 
-        View::render('layout.php', [
+        View::render('layout.html.php', [
             'title'   => 'Active loans',
-            'content' => 'loans.php',
+            'content' => 'loans.html.php',
             'loans'   => $rows,
             'flash'   => null,
         ]);
