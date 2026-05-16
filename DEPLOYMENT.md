@@ -9,7 +9,7 @@ Pick whichever runner fits your machine.
 
 ## With `php -S` (no install required)
 
-PHP ≥ 8.4 is the only prerequisite. From the **repository root**:
+PHP ≥ 8.3 is the only prerequisite (tested on 8.3, 8.4, 8.5). From the **repository root**:
 
 ```bash
 php -S localhost:8000 -t examples/basic/www       # basic skeleton
@@ -30,15 +30,15 @@ The official PHP CLI image is enough — no Dockerfile, no
 ```bash
 # basic
 docker run --rm -it -p 8000:8000 -v "$PWD":/app -w /app/examples/basic \
-    php:8.4-cli php -S 0.0.0.0:8000 -t www
+    php:8.3-cli php -S 0.0.0.0:8000 -t www
 
 # contacts
 docker run --rm -it -p 8001:8001 -v "$PWD":/app -w /app/examples/contacts \
-    php:8.4-cli php -S 0.0.0.0:8001 -t www
+    php:8.3-cli php -S 0.0.0.0:8001 -t www
 
 # library
 docker run --rm -it -p 8002:8002 -v "$PWD":/app -w /app/examples/library \
-    php:8.4-cli php -S 0.0.0.0:8002 -t www
+    php:8.3-cli php -S 0.0.0.0:8002 -t www
 ```
 
 > The whole repo is mounted at `/app` so the example's `index.php` can
@@ -49,11 +49,11 @@ docker run --rm -it -p 8002:8002 -v "$PWD":/app -w /app/examples/library \
 
 `Cloude\Str::slug()` and `::ascii()` use `ext-intl`'s `Transliterator`
 when present, so "Cataluña" becomes `cataluna` instead of `catalu-a`.
-The base `php:8.4-cli` image doesn't ship `ext-intl`. To opt in, run:
+The base `php:8.3-cli` image doesn't ship `ext-intl`. To opt in, run:
 
 ```bash
 docker run --rm -it -p 8001:8001 -v "$PWD":/app -w /app/examples/contacts \
-    php:8.4-cli sh -c '
+    php:8.3-cli sh -c '
         apt-get update && apt-get install -y libicu-dev \
             && docker-php-ext-install -j$(nproc) intl \
             && php -S 0.0.0.0:8001 -t www
@@ -71,21 +71,21 @@ If you'd rather keep one running container per app, drop a small
 ```yaml
 services:
   basic:
-    image: php:8.4-cli
+    image: php:8.3-cli
     working_dir: /app/examples/basic
     command: php -S 0.0.0.0:8000 -t www
     ports: ["8000:8000"]
     volumes: [".:/app"]
 
   contacts:
-    image: php:8.4-cli
+    image: php:8.3-cli
     working_dir: /app/examples/contacts
     command: php -S 0.0.0.0:8001 -t www
     ports: ["8001:8001"]
     volumes: [".:/app"]
 
   library:
-    image: php:8.4-cli
+    image: php:8.3-cli
     working_dir: /app/examples/library
     command: php -S 0.0.0.0:8002 -t www
     ports: ["8002:8002"]
@@ -101,7 +101,7 @@ docker compose up           # all three
 
 ## Production stacks
 
-The framework itself is plain PHP 8.4 — it runs on Apache, nginx +
+The framework itself is plain PHP 8.3 — it runs on Apache, nginx +
 PHP-FPM, Caddy, Heroku, Fly.io, anywhere. The bundled examples
 deliberately stay generic so the focus is on what each demo
 illustrates, not the deploy plumbing.

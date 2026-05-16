@@ -291,7 +291,7 @@ Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 
 The app is a plain front-controller PHP web app — it runs identically
 under `php -S`, Apache, nginx + PHP-FPM, Caddy, Heroku, Fly.io, or
-anything else that speaks PHP 8.4. The bundled examples deliberately
+anything else that speaks PHP 8.3+. The bundled examples deliberately
 ship without any web-server config so the focus stays on what each
 demo illustrates.
 

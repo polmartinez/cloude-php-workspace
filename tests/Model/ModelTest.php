@@ -195,7 +195,6 @@ final class ModelTest extends TestCase
         // Wipe any stale storage on the class:
         $rc = new \ReflectionClass(Model::class);
         $rp = $rc->getProperty('storages');
-        $rp->setAccessible(true);
         $rp->setValue(null, []);
 
         $row = InlineConfigModel::find('a');
