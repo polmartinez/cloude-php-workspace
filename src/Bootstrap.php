@@ -5,23 +5,73 @@ declare(strict_types=1);
 namespace Cloude;
 
 /**
- * One-stop entry-point bootstrap. A typical www/index.php becomes:
+ * One-stop entry-point bootstrap.
  *
- *   require_once dirname(__DIR__) . '/vendor/autoload.php';
- *   require_once dirname(__DIR__) . '/app/config.php';
+ * Two conventions live here:
  *
- *   if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
+ * ### Path constants (define once, in www/index.php)
+ *
+ * The framework relies on a small, fixed set of directory constants —
+ * everything else lives in Config files. This mirrors FuelPHP's
+ * `DOCROOT` / `APPPATH` / `PKGPATH` approach:
+ *
+ *   - `DOCROOT`   public web root (where `www/index.php` lives)
+ *   - `APPPATH`   application root (where `app/` lives)
+ *   - `BASEPATH`  project root (parent of `app/`, `www/`, `data/`...)
+ *
+ * Define them by calling `Bootstrap::initPaths()` before anything else.
+ *
+ * ### Recommended www/index.php
+ *
+ *   require __DIR__ . '/../vendor/autoload.php';
+ *
+ *   \Cloude\Bootstrap::initPaths(
+ *       docroot: __DIR__,
+ *       apppath: dirname(__DIR__) . '/app',
+ *   );
+ *   \Cloude\Config::configure(APPPATH . '/config');
+ *
+ *   if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
  *       return false;
  *   }
  *
- *   \Cloude\Bootstrap::run(debug: DEBUG, viewBase: dirname(__DIR__) . '/app/views');
+ *   \Cloude\Bootstrap::run();   // pulls debug / views from Config
  *
- *   $router = new \Cloude\Router(BASE_URL);
+ *   $router = new \Cloude\Router(\Cloude\Config::baseUrl(['example.com']));
  *   // ...routes...
  *   $router->dispatch();
+ *
+ * Everything else (data dir, view dir, base URL, debug, mail, db, …) is
+ * read via `Config::get(...)` / `Config::baseUrl()` / `Config::debug()`
+ * / `Config::path(...)` from files under `APPPATH/config/`.
  */
 class Bootstrap
 {
+    /**
+     * Defines the three directory constants the framework expects.
+     *
+     * - `DOCROOT`   public web root              (typically `www/`)
+     * - `APPPATH`   application root              (typically `app/`)
+     * - `BASEPATH`  project root                  (parent of both)
+     *
+     * Trailing slashes are stripped. Already-defined constants are left
+     * untouched, so callers may pre-define any of them (handy in tests).
+     */
+    public static function initPaths(
+        string $docroot,
+        string $apppath,
+        ?string $basepath = null,
+    ): void {
+        if (!defined('DOCROOT')) {
+            define('DOCROOT', rtrim($docroot, DIRECTORY_SEPARATOR . '/'));
+        }
+        if (!defined('APPPATH')) {
+            define('APPPATH', rtrim($apppath, DIRECTORY_SEPARATOR . '/'));
+        }
+        if (!defined('BASEPATH')) {
+            define('BASEPATH', rtrim($basepath ?? dirname($apppath), DIRECTORY_SEPARATOR . '/'));
+        }
+    }
     /**
      * Built-in PHP dev server (cli-server) static-file passthrough.
      *
@@ -52,11 +102,22 @@ class Bootstrap
      *      negotiation. Uses $viewBase to look up 500.html.php overrides;
      *      falls back to the View base path, then to framework defaults.
      *   3. View::setBasePath($viewBase) — when $viewBase is provided.
+     *
+     * Both arguments are optional. When omitted, the values are read from
+     * `Config::debug()` and `Config::path('views')` (which in turn read
+     * `app.debug` and `app.paths.views` from the config files). This is
+     * the recommended way to wire things since v0.35 — keep `www/index.php`
+     * minimal and let `app/config/app.php` own the knobs.
      */
-    public static function run(bool $debug = false, ?string $viewBase = null): void
+    public static function run(?bool $debug = null, ?string $viewBase = null): void
     {
         ob_start();
 
+        $debug ??= Config::debug();
+
+        if ($viewBase === null) {
+            $viewBase = Config::path('views', null);
+        }
         if ($viewBase !== null && $viewBase !== '') {
             View::setBasePath($viewBase);
         }

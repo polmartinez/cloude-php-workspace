@@ -38,44 +38,88 @@ mail, MCP). Don't guess defaults silently; ask each question.
 
 ## Bootstrapping a project
 
-The canonical `www/index.php`:
+**Philosophy (FuelPHP-style):** define a *fixed, minimal* set of
+directory constants once, then route every other knob — base URL,
+debug, data path, view path, db, mail, … — through `Cloude\Config`
+files under `APPPATH/config/`.
+
+### The three path constants
+
+`Bootstrap::initPaths()` defines these once, before anything else:
+
+| Constant   | Meaning                          | Typical value             |
+|------------|----------------------------------|---------------------------|
+| `DOCROOT`  | public web root (`www/`)         | `__DIR__` inside index.php |
+| `APPPATH`  | application root (`app/`)        | `dirname(__DIR__) . '/app'` |
+| `BASEPATH` | project root (parent of both)    | auto-derived (`dirname(APPPATH)`) |
+
+Trailing slashes are stripped. If you pre-defined any of them (e.g. in
+tests), `initPaths()` leaves the existing value alone.
+
+### Canonical `www/index.php` (since v0.35)
 
 ```php
 <?php
 declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../app/config.php';   // defines BASE_URL, DEBUG
 
-if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
-    return false;   // PHP dev-server static-file passthrough
+\Cloude\Bootstrap::initPaths(
+    docroot: __DIR__,
+    apppath: dirname(__DIR__) . '/app',
+);
+\Cloude\Config::configure(APPPATH . '/config');
+
+if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
+    return false;  // dev-server static-file passthrough
 }
 
-\Cloude\Bootstrap::run(
-    debug:    DEBUG,
-    viewBase: __DIR__ . '/../app/views',
-);
+\Cloude\Bootstrap::run();   // reads debug + views from Config
 
-$router = new \Cloude\Router(BASE_URL);
+$router = new \Cloude\Router(\Cloude\Config::baseUrl(['example.com', 'localhost']));
 // ...register routes...
 $router->dispatch();
 ```
 
-`Bootstrap::run()` wires `ob_start`, `Http\ErrorHandler::register` and
-`View::setBasePath` in one call. Don't roll those by hand.
-
-`app/config.php` should use `Cloude\Config`:
+### Canonical `app/config/app.php`
 
 ```php
-\Cloude\Config::defineBaseUrl(['example.com', 'localhost']);
-\Cloude\Config::defineDebug();
-if (!defined('DATA_DIR')) define('DATA_DIR', dirname(__DIR__) . '/data');
+<?php
+return [
+    'base_url' => \Cloude\Config::env('BASE_URL'),    // null → auto-detect
+    'debug'    => \Cloude\Config::boolEnv('DEBUG'),
+    'paths' => [
+        'data'  => BASEPATH . '/data',
+        'views' => APPPATH . '/views',
+    ],
+];
 ```
+
+Then anywhere in the app:
+
+```php
+\Cloude\Config::baseUrl(['example.com']);   // memoized, validated against allowlist
+\Cloude\Config::debug();                    // bool
+\Cloude\Config::path('data');               // app.paths.data
+\Cloude\Config::get('db.default.dsn');      // any other config key
+```
+
+### Legacy bootstrap (still supported)
+
+The previous global-constants approach (`defineBaseUrl()`,
+`defineDebug()`, ad-hoc `DATA_DIR`) keeps working unchanged —
+`Config::baseUrl()` / `Config::debug()` honor `BASE_URL` / `DEBUG`
+when they're already defined as global constants. Migrate at your own
+pace; **prefer the Config-driven approach in new code**.
 
 ## Decision matrix — when to use what
 
 | You want to… | Use | Notes |
 |---|---|---|
+| Look up a project path | `Config::path('data')` / `Config::path('views')` | Reads `app.paths.{name}` — preferred over `DATA_DIR`-style globals |
+| Resolve the base URL | `Config::baseUrl(['example.com'])` | Memoized; reads `app.base_url` → env → auto-detect |
+| Read the debug flag | `Config::debug()` | Reads `app.debug` → env → false |
+| Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](README.md#cloudeconfig) |
 | Send a JSON response | `Http\Response::json($data, $status, $pretty)` | Don't `header()` + `echo json_encode()` by hand |
 | 404 / redirect / 204 | `Response::notFound`, `redirect`, `noContent` | |
 | Throw a 404 from anywhere | `throw new Http\NotFoundException("book $isbn")` | Caught by `ErrorHandler`; renders bundled `404.html.php` (HTML), JSON, or plain text |

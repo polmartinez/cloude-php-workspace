@@ -162,4 +162,83 @@ final class ConfigTest extends TestCase
         $this->expectException(\RuntimeException::class);
         Config::load('app');
     }
+
+    // ── typed accessors ──────────────────────────────────────────────────
+
+    public function testBaseUrlReadsFromConfigFile(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return [
+            'base_url' => 'https://example.test',
+        ];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+        Config::setEnvironment('dev');
+
+        self::assertSame('https://example.test', Config::baseUrl());
+    }
+
+    public function testBaseUrlStripsTrailingSlash(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return [
+            'base_url' => 'https://example.test/',
+        ];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('https://example.test', Config::baseUrl());
+    }
+
+    public function testBaseUrlAutoDetectWithAllowlist(): void
+    {
+        file_put_contents($this->tmp . '/app.php', '<?php return [];');
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+        unset($_ENV['BASE_URL'], $_SERVER['BASE_URL']);
+        putenv('BASE_URL');
+        $_SERVER['HTTP_HOST'] = 'evil.test';
+
+        self::assertSame('http://localhost', Config::baseUrl(['example.com']));
+    }
+
+    public function testDebugReadsFromConfig(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return ['debug' => true];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertTrue(Config::debug());
+    }
+
+    public function testDebugDefaultsToFalse(): void
+    {
+        file_put_contents($this->tmp . '/app.php', '<?php return [];');
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+        unset($_ENV['DEBUG'], $_SERVER['DEBUG']);
+        putenv('DEBUG');
+
+        self::assertFalse(Config::debug());
+    }
+
+    public function testPathReadsAppPaths(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return [
+            'paths' => ['data' => '/srv/data', 'views' => '/srv/views'],
+        ];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('/srv/data', Config::path('data'));
+        self::assertSame('/srv/views', Config::path('views'));
+    }
+
+    public function testPathFallsBackToDefault(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return ['paths' => []];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('/fallback', Config::path('cache', '/fallback'));
+        self::assertNull(Config::path('cache'));
+    }
 }

@@ -44,6 +44,23 @@ namespace Cloude;
  * Environment names are free-form strings. "dev" and "prod" are
  * conventional starting points; nothing stops you adding `staging`,
  * `test`, `ci`, `local`, or anything else.
+ *
+ * ### Recommended `app/config/app.php`
+ *
+ *   return [
+ *       'base_url' => Cloude\Config::env('BASE_URL'),   // null → auto-detect
+ *       'debug'    => Cloude\Config::boolEnv('DEBUG'),
+ *       'paths'    => [
+ *           'data'  => BASEPATH . '/data',
+ *           'views' => APPPATH . '/views',
+ *       ],
+ *   ];
+ *
+ * Then read those values via the typed helpers:
+ *
+ *   Config::baseUrl(['example.com', 'localhost']);  // memoized, validated
+ *   Config::debug();                                // bool
+ *   Config::path('data');                           // app.paths.data
  */
 class Config
 {
@@ -208,6 +225,109 @@ class Config
     public static function reset(): void
     {
         self::$loaded = [];
+        self::$baseUrl = null;
+    }
+
+    // ── typed accessors (recommended over scattered global constants) ──
+
+    private static ?string $baseUrl = null;
+
+    /**
+     * Returns the project base URL. Resolution order on first call:
+     *
+     *   1. `app.base_url` config value (if set and non-empty)
+     *   2. `BASE_URL` env var (if set)
+     *   3. scheme + Host header, validated against $allowedHosts
+     *      (any host not in the list collapses to "localhost", preventing
+     *      Host-header injection)
+     *
+     * Memoized for the rest of the request; pass $allowedHosts only on
+     * the first call (it's ignored afterwards).
+     *
+     * If the legacy `BASE_URL` constant is defined, this method returns
+     * it untouched — keeps `defineBaseUrl()`-style bootstraps working.
+     *
+     * @param array<int, string> $allowedHosts Hostnames (no port) accepted as-is
+     */
+    public static function baseUrl(array $allowedHosts = []): string
+    {
+        if (self::$baseUrl !== null) {
+            return self::$baseUrl;
+        }
+        if (defined('BASE_URL')) {
+            return self::$baseUrl = (string) constant('BASE_URL');
+        }
+
+        // 1. Config file
+        if (self::$configPath !== null) {
+            $cfg = self::get('app.base_url');
+            if (is_string($cfg) && $cfg !== '') {
+                return self::$baseUrl = rtrim($cfg, '/');
+            }
+        }
+
+        // 2. Env var
+        $env = self::env('BASE_URL');
+        if ($env !== null) {
+            return self::$baseUrl = rtrim($env, '/');
+        }
+
+        // 3. Auto-detect with allowlist
+        $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+        $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $hostname = explode(':', $host, 2)[0];
+        if ($allowedHosts !== [] && !in_array($hostname, $allowedHosts, true)) {
+            $host = 'localhost';
+        }
+        return self::$baseUrl = rtrim($scheme . '://' . $host, '/');
+    }
+
+    /**
+     * Returns the debug flag. Resolution order:
+     *
+     *   1. `DEBUG` global constant (legacy back-compat)
+     *   2. `app.debug` config value (cast via filter_var BOOLEAN)
+     *   3. `DEBUG` env var (boolEnv parsing)
+     *   4. false
+     */
+    public static function debug(): bool
+    {
+        if (defined('DEBUG')) {
+            return (bool) constant('DEBUG');
+        }
+        if (self::$configPath !== null) {
+            $cfg = self::get('app.debug');
+            if ($cfg !== null) {
+                return filter_var($cfg, FILTER_VALIDATE_BOOLEAN);
+            }
+        }
+        return self::boolEnv('DEBUG', false);
+    }
+
+    /**
+     * Looks up `app.paths.{name}` and returns it. Falls back to $default
+     * when missing. Trailing slashes are not normalised — store the path
+     * exactly as you want it returned.
+     *
+     * Typical app.php config:
+     *
+     *   'paths' => [
+     *       'data'    => BASEPATH . '/data',
+     *       'views'   => APPPATH . '/views',
+     *       'storage' => BASEPATH . '/storage',
+     *   ]
+     *
+     * Then anywhere in the app: `Config::path('data')`.
+     */
+    public static function path(string $name, ?string $default = null): ?string
+    {
+        if (self::$configPath !== null) {
+            $value = self::get('app.paths.' . $name);
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+        return $default;
     }
 
     /**

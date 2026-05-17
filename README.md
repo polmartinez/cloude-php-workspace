@@ -119,10 +119,10 @@ cloude-php-workspace/
 | Class | Responsibility |
 |---|---|
 | `Cloude\Arr` | Array helpers with dot-notation: `get/set/has/forget/pluck/only/except/dot/undot/merge` |
-| `Cloude\Bootstrap` | One-call front-controller bootstrap (cli-server passthrough + `ob_start` + `ErrorHandler` + view base) |
+| `Cloude\Bootstrap` | Front-controller bootstrap: `initPaths()` defines `DOCROOT`/`APPPATH`/`BASEPATH`; `run()` wires cli-server passthrough + `ob_start` + `ErrorHandler` + view base (pulls debug/views from `Config` when omitted) |
 | `Cloude\Cli` | Argv parsing + colored output for `app/cli/` scripts |
 | `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
-| `Cloude\Config` | Bootstrap helpers: `env()`, `boolEnv()`, `defineBaseUrl()`, `defineDebug()` |
+| `Cloude\Config` | Env helpers (`env`/`boolEnv`); multi-env file loader (`configure`/`load`/`get`); typed accessors (`baseUrl`/`debug`/`path`); legacy `defineBaseUrl`/`defineDebug` |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
@@ -568,36 +568,58 @@ the chainable pipeline is one method call away — see the
 
 ### `Cloude\Bootstrap`
 
-Folds the canonical front-controller boilerplate (cli-server static-file
-passthrough + `ob_start()` + `ErrorHandler::register()` + `View::setBasePath`)
-into one call.
+Folds the canonical front-controller boilerplate into two calls:
+**(1)** `initPaths()` defines the three directory constants every
+project uses (`DOCROOT`, `APPPATH`, `BASEPATH`), and **(2)** `run()`
+wires `ob_start()`, `ErrorHandler::register()` and
+`View::setBasePath()` in one go.
 
 ```php
-require_once dirname(__DIR__) . '/vendor/autoload.php';
-require_once dirname(__DIR__) . '/app/config.php';
+require __DIR__ . '/../vendor/autoload.php';
 
-if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
+\Cloude\Bootstrap::initPaths(
+    docroot: __DIR__,
+    apppath: dirname(__DIR__) . '/app',
+    // basepath: defaults to dirname(apppath) if omitted
+);
+\Cloude\Config::configure(APPPATH . '/config');
+
+if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
     return false;
 }
 
-\Cloude\Bootstrap::run(
-    debug:    DEBUG,
-    viewBase: dirname(__DIR__) . '/app/views',
-);
+\Cloude\Bootstrap::run();   // reads debug + views from Config
 
-$router = new \Cloude\Router(BASE_URL);
+$router = new \Cloude\Router(\Cloude\Config::baseUrl(['example.com', 'localhost']));
 // ...routes...
 $router->dispatch();
 ```
 
-`serveStaticIfExists()` returns `true` only under the PHP built-in dev server
-when the request hits a real file inside `$docroot`. The caller MUST
-`return false;` from the router script in that case (cli-server's documented
-convention to delegate to its static handler). Production Apache uses
-`.htaccess`, so this is a no-op there.
+**The framework's directory model.** Only three constants — defined
+by `initPaths()`. Every other knob (data dir, view dir, base URL,
+debug flag, db / mail / cache options) goes through `Cloude\Config`
+files under `APPPATH/config/`. The legacy global-constants style
+(`defineBaseUrl()`, `defineDebug()`, ad-hoc `DATA_DIR`) still works
+unchanged, but new projects should prefer the Config-driven approach.
 
-If `$viewBase` is omitted, `Bootstrap::run()` reads `View::getBasePath()` as a
-fallback — handy when the project sets the view base in `app/config.php`.
+| Constant   | Purpose                          | Set by `initPaths()` from |
+|------------|----------------------------------|---------------------------|
+| `DOCROOT`  | Public web root (`www/`)         | `$docroot` arg            |
+| `APPPATH`  | Application root (`app/`)        | `$apppath` arg            |
+| `BASEPATH` | Project root (parent of both)    | `$basepath` arg, or `dirname($apppath)` |
+
+`initPaths()` is idempotent — pre-defined constants are left alone,
+so tests can pin any of them up front.
+
+`Bootstrap::run()` arguments are optional in v0.35+: when omitted
+`$debug` comes from `Config::debug()` and `$viewBase` from
+`Config::path('views')`. Pass them explicitly to override.
+
+`serveStaticIfExists()` returns `true` only under the PHP built-in dev
+server when the request hits a real file inside `$docroot`. The caller
+MUST `return false;` from the router script in that case (cli-server's
+documented convention to delegate to its static handler). Production
+Apache uses `.htaccess`, so this is a no-op there.
 
 ### `Cloude\Http\Response`
 
@@ -622,23 +644,74 @@ prevent header injection.
 
 ### `Cloude\Config`
 
-Bootstrap helpers for `app/config.php`. Reads from `$_ENV / $_SERVER / getenv()`.
+Two responsibilities in one class: **(1)** env-var helpers and the
+typed bootstrap accessors (`baseUrl`, `debug`, `path`), **(2)** the
+multi-environment config-file loader (FuelPHP-style — base files +
+per-env overrides deep-merged).
+
+The framework only ships three directory constants (defined by
+[`Bootstrap::initPaths()`](#cloudebootstrap) — `DOCROOT`, `APPPATH`,
+`BASEPATH`); everything else lives in config files and flows through
+`Config::get()` / `Config::baseUrl()` / `Config::debug()` / `Config::path()`.
 
 ```php
-Config::env('OPENAI_API_KEY');                 // ?string
-Config::boolEnv('DEBUG', false);               // bool
+// Env-var helpers (always available)
+Config::env('OPENAI_API_KEY');           // ?string — empty string treated as missing
+Config::boolEnv('DEBUG', false);          // bool — 1/true/yes/on (case-insensitive)
 
-Config::defineBaseUrl([                        // → defines BASE_URL
-    'www.example.com',
-    'example.com',
-    'localhost',
-]);
-Config::defineDebug();                         // → defines DEBUG
+// Wire the loader (once, in www/index.php right after initPaths)
+Config::configure(APPPATH . '/config');
+// optional: ::configure($path, environment: 'prod')
+// otherwise APP_ENV / ENVIRONMENT env vars decide
+
+// Read a file/dot-path
+Config::get('db.default.dsn');            // any value
+Config::load('db');                       // whole merged array
+Config::environment();                    // current env name ('dev' default)
+
+// Typed accessors — the recommended way to read framework knobs
+Config::baseUrl(['example.com']);         // memoized; reads app.base_url, then env, then auto-detect
+Config::debug();                          // bool — reads app.debug, then env DEBUG
+Config::path('data');                     // app.paths.data
+Config::path('cache', '/tmp/c');          // with fallback
+
+// Legacy global-constants helpers (still supported, back-compat)
+Config::defineBaseUrl(['example.com']);   // → define('BASE_URL', ...)
+Config::defineDebug();                    // → define('DEBUG', ...)
 ```
 
-`defineBaseUrl()` validates `$_SERVER['HTTP_HOST']` against the allowlist
-(matching hostname only, port preserved) to prevent host-header injection.
-A non-allowed host falls back to `localhost`.
+**Directory layout under `APPPATH/config/`:**
+
+```
+app/config/
+├── app.php          # base — always loaded
+├── db.php
+├── mail.php
+├── dev/             # active when environment is 'dev'
+│   └── app.php      # deep-merged onto the base
+└── prod/
+    ├── app.php
+    └── db.php
+```
+
+**Conventional `app/config/app.php`:**
+
+```php
+return [
+    'base_url' => Cloude\Config::env('BASE_URL'),    // null → auto-detect
+    'debug'    => Cloude\Config::boolEnv('DEBUG'),
+    'paths' => [
+        'data'  => BASEPATH . '/data',
+        'views' => APPPATH . '/views',
+    ],
+];
+```
+
+`baseUrl()` resolves in this order: `BASE_URL` global constant (if
+already defined), `app.base_url` config, `BASE_URL` env var,
+auto-detected scheme + Host (validated against the optional allowlist;
+non-allowed hosts collapse to `localhost` to prevent header injection).
+The result is memoized for the request — `Config::reset()` clears it.
 
 ### `Cloude\Http\ErrorHandler`
 

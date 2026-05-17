@@ -84,19 +84,22 @@ mkdir -p www/assets app views data
 composer dump-autoload
 ```
 
-### 3. `app/config.php`
+### 3. `app/config/app.php`
 
 ```php
 <?php
-declare(strict_types=1);
-
-\Cloude\Config::defineBaseUrl(['localhost', 'example.com']);
-\Cloude\Config::defineDebug();
-
-if (!defined('DATA_DIR')) {
-    define('DATA_DIR', dirname(__DIR__) . '/data');
-}
+return [
+    'base_url' => \Cloude\Config::env('BASE_URL'),   // null → auto-detect
+    'debug'    => \Cloude\Config::boolEnv('DEBUG'),
+    'paths' => [
+        'data'  => BASEPATH . '/data',
+        'views' => APPPATH . '/../views',  // or wherever you put templates
+    ],
+];
 ```
+
+Add as many config files as you want next to this one (`db.php`,
+`mail.php`, …); each is loaded on demand by `Config::load(...)`.
 
 ### 4. `www/index.php`
 
@@ -105,21 +108,31 @@ if (!defined('DATA_DIR')) {
 declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../app/config.php';
 
-if (\Cloude\Bootstrap::serveStaticIfExists(__DIR__)) {
+\Cloude\Bootstrap::initPaths(
+    docroot: __DIR__,
+    apppath: dirname(__DIR__) . '/app',
+);
+\Cloude\Config::configure(APPPATH . '/config');
+
+if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
     return false;
 }
 
-\Cloude\Bootstrap::run(
-    debug:    DEBUG,
-    viewBase: __DIR__ . '/../views',
-);
+\Cloude\Bootstrap::run();   // debug + views come from Config
 
-$router = new \Cloude\Router();
+$router = new \Cloude\Router(\Cloude\Config::baseUrl(['localhost', 'example.com']));
 \App\Routes::register($router);
 $router->dispatch();
 ```
+
+The framework only relies on three directory constants (`DOCROOT`,
+`APPPATH`, `BASEPATH`), defined by `Bootstrap::initPaths()`.
+Everything else (base URL, debug flag, data/views paths, DB, mail, …)
+goes through `Config::get(...)` / `Config::baseUrl()` / `Config::debug()`
+/ `Config::path(...)`. The legacy `defineBaseUrl()` / `defineDebug()` +
+ad-hoc `DATA_DIR` style still works for back-compat but new code
+should be Config-driven.
 
 ### 5. `app/Routes.php` + minimal views
 
