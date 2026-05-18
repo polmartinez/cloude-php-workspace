@@ -31,13 +31,34 @@ Config::configure(__DIR__ . '/../app/config');
 
 // ── Define an entity ─────────────────────────────────────────────────────────
 
+enum UserStatus: string
+{
+    case Active  = 'active';
+    case Pending = 'pending';
+}
+
 class User extends Model
 {
     protected static string $table       = 'users';
     protected static string $connection  = 'default';     // → reads storage.default
     protected static string $primaryKey  = 'id';
     /** @var list<string> Whitelist guards against mass-assignment from form input. */
-    protected static array  $properties  = ['id', 'email', 'name', 'active', 'created_at'];
+    protected static array  $properties  = ['id', 'email', 'name', 'active', 'created_at', 'tags', 'status'];
+
+    /**
+     * Optional. Read-side ('users.created_at' string → DateTimeImmutable, etc.)
+     * and write-side coercion happen automatically; null always passes through.
+     * See `Cloude\Model\Cast` for the full type catalogue.
+     *
+     * @var array<string,string>
+     */
+    protected static array $casts = [
+        'id'         => 'int',
+        'active'     => 'bool',
+        'tags'       => 'json',
+        'created_at' => 'datetime',
+        'status'     => 'enum:' . UserStatus::class,
+    ];
 
     /**
      * Override `beforeSave()` for hooks. No event bus, no observer registry —

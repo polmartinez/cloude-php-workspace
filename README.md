@@ -157,7 +157,8 @@ cloude-php-workspace/
 
 | Class | Responsibility |
 |---|---|
-| `Cloude\Model\Model` | Abstract Active Record. Subclass with `protected static string $table` + `$connection`. CRUD via `find` / `findBy` / `create` / `save` / `delete`. Static helpers: `table()`, `field('col')`, `as('alias')`, `ref()`, `query()` |
+| `Cloude\Model\Model` | Abstract Active Record. Subclass with `protected static string $table` + `$connection` (+ optional `$casts`). CRUD via `find` / `findBy` / `create` / `save` / `delete`. Static helpers: `table()`, `field('col')`, `as('alias')`, `ref()`, `query()` |
+| `Cloude\Model\Cast` | Opt-in attribute coercion driven by the `$casts` map: `int`, `float`, `string`, `bool`, `decimal[:N]`, `json`/`array`, `datetime[:FMT]`, `date[:FMT]`, `enum:FQCN`. Null passes through |
 | `Cloude\Model\Storage\PdoStorage` | PDO-backed adapter. Driven by `Cloude\Storage\Connection` named pool |
 | `Cloude\Model\Storage\JsonStorage` | One JSON file per row (collection mode) or one big array (collection storage) |
 | `Cloude\Model\Storage\MarkdownStorage` | Markdown body + frontmatter as a row |
@@ -581,6 +582,59 @@ entirely (e.g. sharded sub-directories).
 `all()` returns a `Cloude\Collection`, so once you have a Repository
 the chainable pipeline is one method call away — see the
 [recipe](examples/recipes/data.php) for the full pattern.
+
+### `Cloude\Model\Model` — typed attribute casts
+
+Declare a `$casts` map on the subclass and the framework normalises
+values when reading (storage → PHP) and writing (PHP → storage). Null
+always passes through — nullable columns stay nullable.
+
+```php
+use Cloude\Model\Model;
+
+enum Status: string { case Active = 'active'; case Banned = 'banned'; }
+
+class Product extends Model
+{
+    protected static string $table = 'products';
+    protected static array  $casts = [
+        'id'          => 'int',
+        'price'       => 'decimal:2',
+        'in_stock'    => 'bool',
+        'tags'        => 'json',
+        'created_at'  => 'datetime',
+        'status'      => 'enum:' . Status::class,
+    ];
+}
+
+$p = Product::find(1);
+$p->price;          // string "12.50"   (preserves precision; use bcmath for arithmetic)
+$p->in_stock;       // bool
+$p->tags;           // array
+$p->created_at;     // \DateTimeImmutable
+$p->status;         // Status::Active
+```
+
+| Type                       | Read (storage → PHP)                                | Write (PHP → storage)                  |
+|----------------------------|-----------------------------------------------------|----------------------------------------|
+| `int` / `integer`          | `(int)`                                             | `(int)`                                |
+| `float` / `double` / `real`| `(float)`                                           | `(float)`                              |
+| `string`                   | `(string)`                                          | `(string)`                             |
+| `bool` / `boolean`         | `filter_var(BOOLEAN)` (`1`/`true`/`yes`/`on` → true)| `1` or `0` (DB-friendly int)           |
+| `decimal[:N]`              | `number_format(v, N, '.', '')` — N defaults to 2    | same                                   |
+| `json` / `array`           | `json_decode(true)`                                 | `json_encode`                          |
+| `datetime[:FMT]`           | `new \DateTimeImmutable($v)`                        | `$v->format($FMT ?? 'Y-m-d H:i:s')`    |
+| `date[:FMT]`               | same                                                | `$v->format($FMT ?? 'Y-m-d')`          |
+| `enum:FQCN`                | `$FQCN::from($v)` (BackedEnum)                      | `$v->value`                            |
+
+Apply points: `Model::hydrate()` (called by `find` / `findBy` / `all`),
+`Model::refresh()`, and `Model::save()` for writes. `toArray()`
+returns the raw PHP-typed attributes; pass `serialize: true` to get the
+write-cast scalars (handy for `Response::json($u->toArray(true))`).
+
+Leave `$casts` empty (the default) to opt out — the model behaves
+exactly as before. Unknown cast types throw `\InvalidArgumentException`
+so typos surface fast.
 
 ### `Cloude\Model\Model` — static table / field / alias helpers
 

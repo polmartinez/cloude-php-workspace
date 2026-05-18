@@ -95,6 +95,28 @@ abstract class Model
      */
     protected static array $properties = [];
 
+    /**
+     * Subclass: optional `column => type` map. The framework normalises
+     * values on read (storage → PHP) and write (PHP → storage). Null
+     * always passes through untouched, so nullable columns stay nullable.
+     *
+     * See {@see \Cloude\Model\Cast} for the type catalogue. Typical use:
+     *
+     *   protected static array $casts = [
+     *       'id'          => 'int',
+     *       'price'       => 'decimal:2',
+     *       'in_stock'    => 'bool',
+     *       'tags'        => 'json',
+     *       'created_at'  => 'datetime',
+     *       'status'      => 'enum:' . Status::class,
+     *   ];
+     *
+     * Leave empty to opt out — the model behaves exactly like before.
+     *
+     * @var array<string,string>
+     */
+    protected static array $casts = [];
+
     /** @var array<class-string, Storage> */
     private static array $storages = [];
 
@@ -385,11 +407,19 @@ abstract class Model
     }
 
     /**
+     * Snapshot of the model's attributes. Pass `serialize: true` to apply
+     * the write-side casts (DateTimeImmutable → string, BackedEnum →
+     * value, json → string, …) — handy when feeding the result to
+     * `Response::json`.
+     *
      * @return array<string,mixed>
      */
-    public function toArray(): array
+    public function toArray(bool $serialize = false): array
     {
-        return $this->attributes;
+        if (!$serialize || static::$casts === []) {
+            return $this->attributes;
+        }
+        return self::applyCasts($this->attributes, /* write: */ true);
     }
 
     /**
@@ -400,12 +430,15 @@ abstract class Model
     {
         $this->beforeSave();
 
+        $payload = static::$casts === []
+            ? $this->attributes
+            : self::applyCasts($this->attributes, /* write: */ true);
+
         if ($this->isPersisted && $this->id() !== null) {
-            $payload = $this->attributes;
             unset($payload[static::$primaryKey]);                // never re-write PK
             static::storage()->update($this->id(), $payload);
         } else {
-            $newId = static::storage()->insert($this->attributes);
+            $newId = static::storage()->insert($payload);
             if ($newId !== null && $newId !== false && $this->id() === null) {
                 $this->attributes[static::$primaryKey] = $newId;
             }
@@ -439,7 +472,9 @@ abstract class Model
         }
         $row = static::storage()->find($this->id());
         if ($row !== null) {
-            $this->attributes = $row;
+            $this->attributes = static::$casts === []
+                ? $row
+                : self::applyCasts($row, /* write: */ false);
         }
         return $this;
     }
@@ -466,8 +501,27 @@ abstract class Model
     public static function hydrate(array $row): static
     {
         $instance = new static();
-        $instance->attributes  = $row;
+        $instance->attributes  = static::$casts === [] ? $row : self::applyCasts($row, /* write: */ false);
         $instance->isPersisted = true;
         return $instance;
+    }
+
+    /**
+     * Apply the per-attribute cast map to an attribute set.
+     *
+     * @param  array<string,mixed> $attrs
+     * @return array<string,mixed>
+     */
+    private static function applyCasts(array $attrs, bool $write): array
+    {
+        foreach (static::$casts as $col => $type) {
+            if (!array_key_exists($col, $attrs)) {
+                continue;
+            }
+            $attrs[$col] = $write
+                ? Cast::write($attrs[$col], $type)
+                : Cast::read($attrs[$col], $type);
+        }
+        return $attrs;
     }
 }
