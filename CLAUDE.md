@@ -271,10 +271,14 @@ class User extends \Cloude\Model\Model
 | `$indexes`     | `User::indexesSql()` returns `list<string>` of `CREATE [UNIQUE] INDEX` statements                      |
 | `$foreignKeys` | `User::foreignKeysSql()` returns `list<string>` of `ALTER TABLE … ADD CONSTRAINT` statements           |
 
-The framework emits the index / FK SQL on demand. **It does not apply
-it** — feed the strings to `pdo->exec()` from a migration step, an
-install task, or whatever fits your project. Column SQL types
-(`VARCHAR(255)`, etc.) live in your migrations, not in `$types`.
+`$indexes` and `$foreignKeys` are **metadata-only**. The framework
+emits the SQL on demand and stops there — no cascade-from-PHP, no
+eager loading, no FK-aware `delete()`. Referential integrity comes
+from the database (assuming you applied the emitted SQL); the model
+just declares the contract for documentation + emission. Feed the
+strings to `pdo->exec()` from a migration step, an install task, or
+whatever fits your project. Column SQL types (`VARCHAR(255)`, etc.)
+live in your migrations, not in `$types`.
 
 ```php
 // In an install / migration step:

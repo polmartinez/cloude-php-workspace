@@ -167,11 +167,13 @@ class User extends \Cloude\Model\Model
 
 ### Indexes / FKs: declared here, applied elsewhere
 
-The framework **emits** the SQL; it doesn't **apply** it. That's
-deliberate — Cloude has no migration runner, no `up()` / `down()`, no
-version tracking. The model declares the constraint surface; a
-separate script (your installer, a phinx task, a one-off shell)
-feeds the emitted strings to `pdo->exec()`:
+**Metadata-only.** The framework **emits** the SQL via `indexesSql()`
+/ `foreignKeysSql()`; it doesn't **apply** it, and it doesn't use the
+declarations for anything else at runtime — no cascade-from-PHP, no
+eager loading, no referential validation in code. Referential
+integrity comes from the database, not from PHP. The model just
+declares the contract; a separate script (your installer, a phinx
+task, a one-off shell) feeds the emitted strings to `pdo->exec()`:
 
 ```php
 foreach (User::indexesSql()     as $sql) $pdo->exec($sql);

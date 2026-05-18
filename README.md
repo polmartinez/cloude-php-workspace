@@ -639,11 +639,12 @@ class User extends \Cloude\Model\Model
 }
 ```
 
-**Indexes / FKs: declared here, applied elsewhere.** The framework
-emits the SQL; a separate script applies it. No migration runner,
-no `up()`/`down()`, no version tracking — the model says what
-constraints exist, your installer / migration tool feeds the strings
-to `pdo->exec()`:
+**`$indexes` and `$foreignKeys` are metadata-only.** The framework
+**emits** the SQL on demand via `indexesSql()` / `foreignKeysSql()`
+and stops there. No cascade-from-PHP, no automatic eager loading,
+no FK-aware `delete()`, no migration runner, no `up()` / `down()`.
+The model declares the contract; the database enforces it (after
+you apply the emitted SQL):
 
 ```php
 foreach (User::indexesSql()     as $sql) $pdo->exec($sql);

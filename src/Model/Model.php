@@ -91,14 +91,21 @@ namespace Cloude\Model;
  *   | $primaryKey    | find() / save() / delete()                           | by-PK lookups, the column save() refuses to overwrite                 |
  *   | $properties    | __set() / fill() / create()                          | mass-assignment whitelist; empty = no whitelist                       |
  *   | $types         | hydrate() / save() / refresh() / toArray(true)       | per-attribute Cast::read / Cast::write (null passes through)          |
- *   | $indexes       | indexesSql()                                         | list<string> of CREATE [UNIQUE] INDEX statements                      |
- *   | $foreignKeys   | foreignKeysSql()                                     | list<string> of ALTER TABLE ADD CONSTRAINT statements                 |
+ *   | $indexes       | indexesSql() ONLY                                    | list<string> of CREATE [UNIQUE] INDEX statements (metadata-only)      |
+ *   | $foreignKeys   | foreignKeysSql() ONLY                                | list<string> of ALTER TABLE ADD CONSTRAINT statements (metadata-only) |
  *
  * Column TYPES (SQL — VARCHAR(255), INT, etc.) live in your migration
  * tooling, not here. `$types` describes PHP-side coercion, not the
  * DDL. This is intentional: the framework doesn't track schema
  * versions or generate migration files. It hands you the index / FK
  * SQL on demand and stays out of the up/down loop.
+ *
+ * **`$indexes` and `$foreignKeys` are metadata-only.** The framework
+ * does NOT use them at runtime for cascading deletes, eager loading,
+ * referential validation, or query optimisation. Their only effect
+ * is the SQL string emitted by `indexesSql()` / `foreignKeysSql()`
+ * — apply it yourself (install script / migration tool / shell task).
+ * Referential integrity comes from the database, not from PHP.
  *
  *   User::configure(new PdoStorage($pdo, 'users'));   // once at boot
  *
@@ -205,11 +212,22 @@ abstract class Model
     protected static array $types = [];
 
     /**
-     * Subclass: optional UNIQUE / INDEX declarations attached to this
-     * table. Column types live in your migrations (or wherever you
-     * manage DDL); these only describe the indexes the application
-     * cares about — for emission via `indexesSql()` and for documenting
-     * the constraint surface alongside the data.
+     * Subclass: optional UNIQUE / INDEX declarations.
+     *
+     * **Metadata-only.** The framework does NOT use this at runtime
+     * for query optimisation, hint-injection, or anything else. Its
+     * only consumer inside the framework is `indexesSql()`, which
+     * emits standalone `CREATE [UNIQUE] INDEX` statements that you
+     * apply manually (install script, migration runner, dev seed —
+     * whatever fits the project).
+     *
+     * Why declare it here at all, then? Two reasons:
+     *
+     *   1. **Documentation next to the data** — humans and AI agents
+     *      reading the model see the constraint surface in one place.
+     *   2. **Single source of truth** when the app's own setup script
+     *      applies its own indexes (no external migration tool, or
+     *      the FW-emitted SQL feeds your migration directly).
      *
      *   protected static array $indexes = [
      *       ['type' => 'unique', 'columns' => ['email']],
@@ -226,6 +244,13 @@ abstract class Model
 
     /**
      * Subclass: optional foreign-key declarations.
+     *
+     * **Metadata-only.** Same contract as `$indexes` (above) — the
+     * framework does NOT enforce these at runtime. There's no
+     * cascade-from-PHP, no automatic eager-loading, no FK-aware
+     * `delete()`. Referential integrity is enforced by the database
+     * itself (assuming you've actually applied the SQL emitted by
+     * `foreignKeysSql()`); the framework just declares the contract.
      *
      *   protected static array $foreignKeys = [
      *       [
