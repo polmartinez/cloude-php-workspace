@@ -165,7 +165,7 @@ pace; **prefer the Config-driven approach in new code**.
 | Group CLI scripts | `TaskRunner::register / registerClass` | One entry-point script with `prefix:method` dispatch |
 | File log with daily rotation | `new Logger($path, minLevel: 'info')` | |
 | Fire-and-forget webhook | `EventLog::send($payload)` | curl_multi at shutdown |
-| Send email (SMTP / sendmail) | `Mailer::forge()->send([...])` | `Cloude\Mail\*`; AUTH LOGIN + STARTTLS for SMTP, no attachments |
+| Send email (SMTP / sendmail) | `Mailer::forge()->send([...])` | Reads `app/config/email.php` via `Config::get('email')`. AUTH LOGIN + STARTTLS for SMTP. See [`examples/recipes/config/email.php`](examples/recipes/config/email.php) for a copy-paste config |
 | Versioned asset URLs (`/{mtime}/assets/…`) | `Http\AssetUrl::configure(...)` then `AssetUrl::get($rel)` | Apache rewrite required |
 
 ## Idioms

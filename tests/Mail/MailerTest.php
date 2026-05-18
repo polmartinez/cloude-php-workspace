@@ -129,11 +129,11 @@ final class MailerTest extends TestCase
         self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
     }
 
-    public function testForgeWithNoArgsReadsFromCloudeConfig(): void
+    public function testForgeWithNoArgsReadsEmailConfigKey(): void
     {
         $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
         @mkdir($tmp, 0755, true);
-        file_put_contents($tmp . '/mail.php', "<?php return [
+        file_put_contents($tmp . '/email.php', "<?php return [
             'transport' => 'sendmail',
             'from'      => 'auto@example.com',
         ];");
@@ -149,6 +149,63 @@ final class MailerTest extends TestCase
             $rp = $rc->getProperty('defaults');
             self::assertSame(['from' => 'auto@example.com'], $rp->getValue($mailer));
         } finally {
+            @unlink($tmp . '/email.php');
+            @rmdir($tmp);
+            \Cloude\Config::reset();
+        }
+    }
+
+    public function testForgeFallsBackToLegacyMailKey(): void
+    {
+        // Pre-v1.1 used 'mail' as the config key; keep reading it for
+        // back-compat so existing projects don't need to rename their files.
+        $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
+        @mkdir($tmp, 0755, true);
+        file_put_contents($tmp . '/mail.php', "<?php return [
+            'transport' => 'sendmail',
+            'from'      => 'legacy@example.com',
+        ];");
+
+        \Cloude\Config::reset();
+        \Cloude\Config::setConfigPath($tmp);
+        try {
+            $mailer = Mailer::forge();
+            self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
+
+            $rc = new \ReflectionClass($mailer);
+            $rp = $rc->getProperty('defaults');
+            self::assertSame(['from' => 'legacy@example.com'], $rp->getValue($mailer));
+        } finally {
+            @unlink($tmp . '/mail.php');
+            @rmdir($tmp);
+            \Cloude\Config::reset();
+        }
+    }
+
+    public function testForgeEmailKeyWinsOverLegacyMailKey(): void
+    {
+        // When both exist, the new 'email' key takes precedence — gives
+        // projects a clean migration path: drop in email.php, delete mail.php.
+        $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
+        @mkdir($tmp, 0755, true);
+        file_put_contents($tmp . '/email.php', "<?php return [
+            'transport' => 'sendmail',
+            'from'      => 'new@example.com',
+        ];");
+        file_put_contents($tmp . '/mail.php', "<?php return [
+            'transport' => 'sendmail',
+            'from'      => 'old@example.com',
+        ];");
+
+        \Cloude\Config::reset();
+        \Cloude\Config::setConfigPath($tmp);
+        try {
+            $mailer = Mailer::forge();
+            $rc = new \ReflectionClass($mailer);
+            $rp = $rc->getProperty('defaults');
+            self::assertSame(['from' => 'new@example.com'], $rp->getValue($mailer));
+        } finally {
+            @unlink($tmp . '/email.php');
             @unlink($tmp . '/mail.php');
             @rmdir($tmp);
             \Cloude\Config::reset();
@@ -158,10 +215,10 @@ final class MailerTest extends TestCase
     public function testForgeWithNoArgsAndNoCloudeConfigEntryThrows(): void
     {
         \Cloude\Config::reset();
-        \Cloude\Config::setConfigPath(sys_get_temp_dir());          // no mail.php there
+        \Cloude\Config::setConfigPath(sys_get_temp_dir());          // no email.php or mail.php there
         try {
             $this->expectException(\InvalidArgumentException::class);
-            $this->expectExceptionMessage("'mail' entry in Cloude\\Config");
+            $this->expectExceptionMessage("'email' entry in Cloude\\Config");
             Mailer::forge();
         } finally {
             \Cloude\Config::reset();

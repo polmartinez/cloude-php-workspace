@@ -31,9 +31,10 @@ use Cloude\Mail\Transport\SmtpTransport;
  *          'from'      => '...',
  *      ]);
  *
- *   4. Auto-config from `Cloude\Config::get('mail')` — the call site
+ *   4. Auto-config from `Cloude\Config::get('email')` — the call site
  *      shrinks to one line when `Cloude\Config::configure(...)` ran at
- *      boot and `app/config/mail.php` exists:
+ *      boot and `app/config/email.php` exists. The legacy key `'mail'`
+ *      is still honoured for back-compat:
  *
  *      $mailer = Mailer::forge();
  *
@@ -93,20 +94,37 @@ final class Mailer
      * Builds a Mailer from a config array, dispatching the right
      * transport on `$config['transport']`.
      *
-     * Pass `null` (or omit) to read from `Cloude\Config::get('mail')` —
-     * the call site shrinks to `Mailer::forge()` once you've
-     * wired `Cloude\Config::configure(...)` at boot.
+     * Pass `null` (or omit) to read from `Cloude\Config::get('email')`
+     * (or the legacy `'mail'` key for back-compat) — the call site
+     * shrinks to `Mailer::forge()` once you've wired
+     * `Cloude\Config::configure(...)` at boot. Drop a config file like:
+     *
+     *   // app/config/email.php
+     *   return [
+     *       'transport' => 'smtp',
+     *       'host'      => 'smtp.example.com',
+     *       'port'      => 587,
+     *       'user'      => Cloude\Config::env('SMTP_USER'),
+     *       'pass'      => Cloude\Config::env('SMTP_PASS'),
+     *       'tls'       => true,
+     *       'from'      => 'no-reply@example.com',
+     *   ];
      *
      * @param array<string,mixed>|null $config
      */
     public static function forge(?array $config = null): self
     {
         if ($config === null) {
-            $loaded = Config::get('mail');
+            $loaded = Config::get('email');
+            if (!is_array($loaded) || $loaded === []) {
+                // Back-compat: pre-v1.1 the key was 'mail'.
+                $loaded = Config::get('mail');
+            }
             if (!is_array($loaded) || $loaded === []) {
                 throw new \InvalidArgumentException(
-                    "Mailer::forge() with no args expects a 'mail' "
-                    . 'entry in Cloude\\Config (app/config/mail.php). '
+                    "Mailer::forge() with no args expects an 'email' "
+                    . 'entry in Cloude\\Config (app/config/email.php). '
+                    . "The legacy 'mail' key is still honoured. "
                     . 'Either set one up or pass the config array explicitly.',
                 );
             }

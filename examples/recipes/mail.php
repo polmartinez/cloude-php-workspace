@@ -11,7 +11,7 @@ declare(strict_types=1);
  *   - SendmailTransport pipes through the local /usr/sbin/sendmail binary
  *   - MemoryTransport   collects messages in-memory for tests
  *
- * Configuration lives in `app/config/mail.php` (with per-env overrides
+ * Configuration lives in `app/config/email.php` (with per-env overrides
  * at `app/config/<env>/mail.php`). Dev uses sendmail to a local
  * postfix or `msmtp`; prod uses SMTP to a transactional gateway.
  *
@@ -25,7 +25,7 @@ use Cloude\Mail\Mailer;
 
 // ── 1. Bootstrap: define the mail config alongside the rest ──────────────────
 //
-// app/config/mail.php (base — committed):
+// app/config/email.php (base — committed):
 //
 //   return [
 //       'transport' => 'sendmail',            // dev default
@@ -66,9 +66,9 @@ Config::configure(__DIR__ . '/../app/config');
 //   $mailer = Mailer::forge(['transport' => 'smtp', 'host' => '...', ...]);
 //
 // Auto-config from Cloude\Config — the call site shrinks to one line
-// once `app/config/mail.php` exists:
+// once `app/config/email.php` exists:
 
-$mailer = Mailer::forge();                              // reads Config::get('mail')
+$mailer = Mailer::forge();                              // reads Config::get('email')
 
 // ── 3. Send ─────────────────────────────────────────────────────────────────
 
