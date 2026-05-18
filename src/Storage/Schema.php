@@ -54,12 +54,46 @@ namespace Cloude\Storage;
  * always explicit so the database — and any reader of the
  * generated `ALTER TABLE` — knows exactly what each constraint
  * does, no implicit defaults left to driver / engine.
+ *
+ * ## Strict shape validation
+ *
+ * Every emitter validates its descriptor BEFORE producing SQL:
+ *
+ *   - Required keys must be present (`columns` / `references` / `on`
+ *     for FKs; `columns` for indexes; `type` for column descriptors)
+ *   - Unknown keys throw — catches typos like `'on_dlete'` or
+ *     `'colums'` that would otherwise be silently ignored
+ *   - Boolean flags (`null`, `unsigned`, `primary`, `auto_increment`)
+ *     must actually be bool
+ *   - FK `columns` / `on` arrays must match in length
+ *   - All column / table names must be non-empty strings
+ *   - Referential actions (`on_delete` / `on_update`) must be one of
+ *     the five ANSI values
+ *
+ * All errors are `\InvalidArgumentException` with the offending
+ * table / key named in the message.
  */
 final class Schema
 {
     /** Allowed referential-action values for FK on_update / on_delete. */
     private const REFERENTIAL_ACTIONS = [
         'cascade', 'set null', 'restrict', 'no action', 'set default',
+    ];
+
+    /** Whitelist of keys allowed on a column descriptor. Typos fail loudly. */
+    private const ALLOWED_COLUMN_KEYS = [
+        'type', 'null', 'default', 'auto_increment', 'unsigned', 'primary', 'comment',
+    ];
+
+    /** Whitelist of keys allowed on an index descriptor. */
+    private const ALLOWED_INDEX_KEYS = ['type', 'columns', 'name'];
+
+    /** Allowed values for an index's `type` (aliases accepted). */
+    private const ALLOWED_INDEX_TYPES = ['unique', 'uq', 'index', 'ix'];
+
+    /** Whitelist of keys allowed on a foreign-key descriptor. */
+    private const ALLOWED_FK_KEYS = [
+        'columns', 'references', 'on', 'on_delete', 'on_update', 'name',
     ];
 
     /**
@@ -80,6 +114,35 @@ final class Schema
     ): string {
         if ($columns === []) {
             throw new \InvalidArgumentException("Schema::createTableSql('$table'): \$columns is empty");
+        }
+        foreach ($columns as $colName => $colDef) {
+            if (!is_string($colName) || $colName === '') {
+                throw new \InvalidArgumentException(
+                    "Schema::createTableSql('$table'): column names must be non-empty strings",
+                );
+            }
+            if (!is_array($colDef)) {
+                throw new \InvalidArgumentException(
+                    "Schema::createTableSql('$table'): column '$colName' must be an array descriptor",
+                );
+            }
+            self::assertColumnShape($table, $colName, $colDef);
+        }
+        foreach ($indexes as $idx) {
+            if (!is_array($idx)) {
+                throw new \InvalidArgumentException(
+                    "Schema::createTableSql('$table'): every \$indexes entry must be an array",
+                );
+            }
+            self::assertIndexShape($table, $idx);
+        }
+        foreach ($foreignKeys as $fk) {
+            if (!is_array($fk)) {
+                throw new \InvalidArgumentException(
+                    "Schema::createTableSql('$table'): every \$foreignKeys entry must be an array",
+                );
+            }
+            self::assertForeignKeyShape($table, $fk);
         }
         $q = self::quoteCharFor($dialect);
 
@@ -144,15 +207,11 @@ final class Schema
      */
     public static function indexSql(string $table, array $idx, string $dialect = 'mysql'): string
     {
+        self::assertIndexShape($table, $idx);
         $q       = self::quoteCharFor($dialect);
         $type    = strtolower((string) ($idx['type'] ?? 'index'));
-        $columns = (array) ($idx['columns'] ?? throw new \InvalidArgumentException(
-            "Index on '$table' is missing 'columns'",
-        ));
-        if ($columns === []) {
-            throw new \InvalidArgumentException("Index on '$table' has empty 'columns'");
-        }
-        $name = (string) ($idx['name'] ?? self::derivedIndexName($table, $columns, $type));
+        $columns = (array) $idx['columns'];
+        $name    = (string) ($idx['name'] ?? self::derivedIndexName($table, $columns, $type));
 
         $kw = match ($type) {
             'unique', 'uq' => 'CREATE UNIQUE INDEX',
@@ -179,17 +238,12 @@ final class Schema
      */
     public static function foreignKeySql(string $table, array $fk, string $dialect = 'mysql'): string
     {
+        self::assertForeignKeyShape($table, $fk);
         $q          = self::quoteCharFor($dialect);
-        $columns    = (array) ($fk['columns'] ?? throw new \InvalidArgumentException(
-            "FK on '$table' is missing 'columns'",
-        ));
-        $references = (string) ($fk['references'] ?? throw new \InvalidArgumentException(
-            "FK on '$table' is missing 'references'",
-        ));
-        $on         = (array) ($fk['on'] ?? throw new \InvalidArgumentException(
-            "FK on '$table' is missing 'on' (target column list)",
-        ));
-        $name = (string) ($fk['name'] ?? self::derivedFkName($table, $columns));
+        $columns    = (array) $fk['columns'];
+        $references = (string) $fk['references'];
+        $on         = (array) $fk['on'];
+        $name       = (string) ($fk['name'] ?? self::derivedFkName($table, $columns));
 
         $sql = 'ALTER TABLE ' . self::quote($table, $q)
             . ' ADD CONSTRAINT ' . self::quote($name, $q)
@@ -292,6 +346,164 @@ final class Schema
             . ' ON DELETE ' . self::referentialAction((string) ($fk['on_delete'] ?? 'no action'))
             . ' ON UPDATE ' . self::referentialAction((string) ($fk['on_update'] ?? 'no action'));
         return $sql;
+    }
+
+    /**
+     * Validate a column descriptor against the documented shape.
+     * Throws on unknown keys (catches typos like `'unsiged'`), missing
+     * required keys (`type`), or values of the wrong PHP type.
+     *
+     * @param array<string,mixed> $def
+     */
+    private static function assertColumnShape(string $table, string $name, array $def): void
+    {
+        if (!isset($def['type']) || !is_string($def['type']) || $def['type'] === '') {
+            throw new \InvalidArgumentException(
+                "Schema: column '$table.$name' is missing required key 'type' (non-empty string)",
+            );
+        }
+        $unknown = array_diff(array_keys($def), self::ALLOWED_COLUMN_KEYS);
+        if ($unknown !== []) {
+            throw new \InvalidArgumentException(
+                "Schema: column '$table.$name' has unknown key(s) " . self::renderKeys($unknown)
+                . ' (allowed: ' . implode(', ', self::ALLOWED_COLUMN_KEYS) . ')',
+            );
+        }
+        foreach (['null', 'auto_increment', 'unsigned', 'primary'] as $boolKey) {
+            if (isset($def[$boolKey]) && !is_bool($def[$boolKey])) {
+                throw new \InvalidArgumentException(
+                    "Schema: column '$table.$name' key '$boolKey' must be bool, got " . gettype($def[$boolKey]),
+                );
+            }
+        }
+    }
+
+    /**
+     * Validate an index descriptor — required keys, allowed keys,
+     * non-empty columns list, recognised type.
+     *
+     * @param array<string,mixed> $idx
+     */
+    private static function assertIndexShape(string $table, array $idx): void
+    {
+        if (!isset($idx['columns'])) {
+            throw new \InvalidArgumentException("Schema: index on '$table' is missing 'columns'");
+        }
+        if (!is_array($idx['columns']) || $idx['columns'] === []) {
+            throw new \InvalidArgumentException(
+                "Schema: index on '$table' needs 'columns' as a non-empty array",
+            );
+        }
+        foreach ($idx['columns'] as $col) {
+            if (!is_string($col) || $col === '') {
+                throw new \InvalidArgumentException(
+                    "Schema: index on '$table' has a non-string / empty column name",
+                );
+            }
+        }
+        $unknown = array_diff(array_keys($idx), self::ALLOWED_INDEX_KEYS);
+        if ($unknown !== []) {
+            throw new \InvalidArgumentException(
+                "Schema: index on '$table' has unknown key(s) " . self::renderKeys($unknown)
+                . ' (allowed: ' . implode(', ', self::ALLOWED_INDEX_KEYS) . ')',
+            );
+        }
+        if (isset($idx['type'])) {
+            if (!is_string($idx['type'])) {
+                throw new \InvalidArgumentException(
+                    "Schema: index on '$table' has non-string 'type'",
+                );
+            }
+            $type = strtolower($idx['type']);
+            if (!in_array($type, self::ALLOWED_INDEX_TYPES, true)) {
+                throw new \InvalidArgumentException(
+                    "Schema: index on '$table' has unknown type '{$idx['type']}' "
+                    . '(allowed: ' . implode(', ', self::ALLOWED_INDEX_TYPES) . ')',
+                );
+            }
+        }
+        if (isset($idx['name']) && (!is_string($idx['name']) || $idx['name'] === '')) {
+            throw new \InvalidArgumentException(
+                "Schema: index on '$table' has empty or non-string 'name'",
+            );
+        }
+    }
+
+    /**
+     * Validate a foreign-key descriptor — required keys, allowed keys,
+     * non-empty columns/on lists, valid referential actions.
+     *
+     * @param array<string,mixed> $fk
+     */
+    private static function assertForeignKeyShape(string $table, array $fk): void
+    {
+        foreach (['columns', 'references', 'on'] as $required) {
+            if (!isset($fk[$required])) {
+                throw new \InvalidArgumentException(
+                    "Schema: FK on '$table' is missing required key '$required'",
+                );
+            }
+        }
+        if (!is_array($fk['columns']) || $fk['columns'] === []) {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' needs 'columns' as a non-empty array",
+            );
+        }
+        if (!is_string($fk['references']) || $fk['references'] === '') {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' needs 'references' as a non-empty string",
+            );
+        }
+        if (!is_array($fk['on']) || $fk['on'] === []) {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' needs 'on' (target columns) as a non-empty array",
+            );
+        }
+        if (count($fk['columns']) !== count($fk['on'])) {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' has mismatched 'columns' (" . count($fk['columns']) . ')'
+                . " vs 'on' (" . count($fk['on']) . ') counts',
+            );
+        }
+        foreach (['columns', 'on'] as $listKey) {
+            foreach ($fk[$listKey] as $col) {
+                if (!is_string($col) || $col === '') {
+                    throw new \InvalidArgumentException(
+                        "Schema: FK on '$table' has a non-string / empty column in '$listKey'",
+                    );
+                }
+            }
+        }
+        $unknown = array_diff(array_keys($fk), self::ALLOWED_FK_KEYS);
+        if ($unknown !== []) {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' has unknown key(s) " . self::renderKeys($unknown)
+                . ' (allowed: ' . implode(', ', self::ALLOWED_FK_KEYS) . ')',
+            );
+        }
+        foreach (['on_delete', 'on_update'] as $actionKey) {
+            if (isset($fk[$actionKey])) {
+                if (!is_string($fk[$actionKey])) {
+                    throw new \InvalidArgumentException(
+                        "Schema: FK on '$table' key '$actionKey' must be a string",
+                    );
+                }
+                self::referentialAction($fk[$actionKey]);  // throws on unknown action
+            }
+        }
+        if (isset($fk['name']) && (!is_string($fk['name']) || $fk['name'] === '')) {
+            throw new \InvalidArgumentException(
+                "Schema: FK on '$table' has empty or non-string 'name'",
+            );
+        }
+    }
+
+    /**
+     * @param list<int|string> $keys
+     */
+    private static function renderKeys(array $keys): string
+    {
+        return "'" . implode("', '", array_map(static fn ($k) => (string) $k, $keys)) . "'";
     }
 
     private static function referentialAction(string $action): string

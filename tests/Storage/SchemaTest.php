@@ -142,6 +142,130 @@ final class SchemaTest extends TestCase
         Schema::createTableSql('users', []);
     }
 
+    // ── shape validation ─────────────────────────────────────────────────
+
+    public function testColumnMissingTypeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("column 'users.email' is missing required key 'type'");
+        Schema::createTableSql('users', ['email' => ['null' => false]]);
+    }
+
+    public function testColumnUnknownKeyThrows(): void
+    {
+        // Typo: 'unsiged' instead of 'unsigned' — must fail loudly.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("unknown key(s) 'unsiged'");
+        Schema::createTableSql('users', [
+            'id' => ['type' => 'INT', 'unsiged' => true, 'primary' => true],
+        ]);
+    }
+
+    public function testColumnNonBoolFlagThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("'null' must be bool");
+        Schema::createTableSql('users', [
+            'id' => ['type' => 'INT', 'null' => 'yes'],
+        ]);
+    }
+
+    public function testIndexMissingColumnsThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("missing 'columns'");
+        Schema::indexSql('users', ['type' => 'unique']);
+    }
+
+    public function testIndexUnknownTypeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("unknown type 'fulltext'");
+        Schema::indexSql('users', ['type' => 'fulltext', 'columns' => ['email']]);
+    }
+
+    public function testIndexUnknownKeyThrows(): void
+    {
+        // Typo: 'colums' instead of 'columns'.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("unknown key(s) 'colums'");
+        Schema::indexSql('users', ['type' => 'unique', 'columns' => ['email'], 'colums' => ['foo']]);
+    }
+
+    public function testForeignKeyMissingReferencesThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("missing required key 'references'");
+        Schema::foreignKeySql('orders', ['columns' => ['user_id'], 'on' => ['id']]);
+    }
+
+    public function testForeignKeyUnknownKeyThrows(): void
+    {
+        // Typo: 'on_dlete' instead of 'on_delete' — used to be silently ignored.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("unknown key(s) 'on_dlete'");
+        Schema::foreignKeySql('orders', [
+            'columns'    => ['user_id'],
+            'references' => 'users',
+            'on'         => ['id'],
+            'on_dlete'   => 'cascade',
+        ]);
+    }
+
+    public function testForeignKeyColumnsOnLengthMismatchThrows(): void
+    {
+        // Two source columns mapped to one target — invalid.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("mismatched 'columns' (2) vs 'on' (1)");
+        Schema::foreignKeySql('orders', [
+            'columns'    => ['user_id', 'tenant_id'],
+            'references' => 'users',
+            'on'         => ['id'],
+        ]);
+    }
+
+    public function testForeignKeyEmptyColumnsThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("'columns' as a non-empty array");
+        Schema::foreignKeySql('orders', [
+            'columns'    => [],
+            'references' => 'users',
+            'on'         => ['id'],
+        ]);
+    }
+
+    public function testForeignKeyEmptyNameThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("empty or non-string 'name'");
+        Schema::foreignKeySql('orders', [
+            'columns'    => ['user_id'],
+            'references' => 'users',
+            'on'         => ['id'],
+            'name'       => '',
+        ]);
+    }
+
+    public function testCreateTableSqlValidatesEveryNestedDescriptor(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("unknown key(s) 'on_dlete'");
+        Schema::createTableSql(
+            'orders',
+            ['id' => ['type' => 'INT', 'primary' => true]],
+            indexes: [],
+            foreignKeys: [
+                [
+                    'columns'    => ['user_id'],
+                    'references' => 'users',
+                    'on'         => ['id'],
+                    'on_dlete'   => 'cascade',   // typo — must surface here too
+                ],
+            ],
+        );
+    }
+
     // ── standalone index / FK emitters ────────────────────────────────────
 
     public function testIndexSqlUnique(): void
