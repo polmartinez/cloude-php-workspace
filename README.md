@@ -598,7 +598,65 @@ entirely (e.g. sharded sub-directories).
 the chainable pipeline is one method call away — see the
 [recipe](examples/recipes/data.php) for the full pattern.
 
-### `Cloude\Model\Model` — `$types` (attribute coercion)
+### `Cloude\Model\Model` — schema declaration
+
+The model subclass IS the schema definition. Four declarative static
+properties describe the table's shape; everything else (cast logic,
+mass-assignment guard, DDL emission, query builder) reads from them.
+
+| Property       | Purpose                                                                                                              |
+|----------------|----------------------------------------------------------------------------------------------------------------------|
+| `$properties`  | **Fields the model accepts.** Mass-assignment whitelist. Empty = no whitelist (any key accepted).                    |
+| `$types`       | **PHP-side types.** Auto-coerced on read AND write via `Cast::read` / `Cast::write`. **NULL always passes through**. |
+| `$indexes`     | **Indexes** (`unique` / `index`). Emitted as standalone `CREATE [UNIQUE] INDEX` statements via `indexesSql()`.       |
+| `$foreignKeys` | **Foreign keys** with optional `ON DELETE` / `ON UPDATE`. Emitted as `ALTER TABLE ... ADD CONSTRAINT` via `foreignKeysSql()`. |
+
+```php
+class User extends \Cloude\Model\Model
+{
+    protected static string $table      = 'users';
+    protected static string $primaryKey = 'id';
+
+    protected static array $properties = ['id', 'email', 'name', 'role_id', 'active', 'created_at', 'tags', 'status'];
+
+    protected static array $types = [
+        'id'         => 'int',
+        'active'     => 'bool',
+        'tags'       => 'json',
+        'created_at' => 'datetime',
+        'status'     => 'enum:' . Status::class,
+    ];
+
+    protected static array $indexes = [
+        ['type' => 'unique', 'columns' => ['email']],
+        ['type' => 'index',  'columns' => ['role_id']],
+    ];
+
+    protected static array $foreignKeys = [
+        ['columns' => ['role_id'], 'references' => 'roles', 'on' => ['id'],
+         'on_delete' => 'set null', 'on_update' => 'cascade'],
+    ];
+}
+```
+
+**Indexes / FKs: declared here, applied elsewhere.** The framework
+emits the SQL; a separate script applies it. No migration runner,
+no `up()`/`down()`, no version tracking — the model says what
+constraints exist, your installer / migration tool feeds the strings
+to `pdo->exec()`:
+
+```php
+foreach (User::indexesSql()     as $sql) $pdo->exec($sql);
+foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
+```
+
+Column SQL types (`VARCHAR(255)`, `BIGINT UNSIGNED`, …) deliberately
+live in your migrations, not in `$types`. `$types` is PHP-side
+coercion; `$indexes` / `$foreignKeys` are constraint metadata. The
+framework doesn't try to be a migration system — only to surface
+what the application already knows about its own data.
+
+### `Cloude\Model\Model` — `$types` (attribute coercion details)
 
 Declare a `$types` map on the subclass and the framework normalises
 values when reading (storage → PHP) and writing (PHP → storage). Null

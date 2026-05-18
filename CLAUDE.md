@@ -228,6 +228,60 @@ $router->post('/api/leads', function (): void {
 The same pattern works for HTML forms — read `Input::post('field')`,
 validate the same way, and `Response::redirect` on success.
 
+## The Model IS the schema definition
+
+When a feature touches relational data, declare the model first. The
+subclass becomes the single place that describes the table's shape;
+every cast, mass-assignment check, query, and DDL emitter reads from
+it.
+
+```php
+class User extends \Cloude\Model\Model
+{
+    protected static string $table      = 'users';
+    protected static string $primaryKey = 'id';
+
+    // (1) Allowed fields — mass-assignment whitelist.
+    protected static array $properties = ['id', 'email', 'name', 'role_id', 'created_at', 'status'];
+
+    // (2) PHP-side types — coerced on read/write. NULL stays NULL.
+    protected static array $types = [
+        'id'         => 'int',
+        'created_at' => 'datetime',
+        'status'     => 'enum:' . Status::class,
+    ];
+
+    // (3) Indexes — the FW emits the SQL; another script applies it.
+    protected static array $indexes = [
+        ['type' => 'unique', 'columns' => ['email']],
+    ];
+
+    // (4) Foreign keys — same idea, with optional ON DELETE / ON UPDATE.
+    protected static array $foreignKeys = [
+        ['columns' => ['role_id'], 'references' => 'roles', 'on' => ['id'],
+         'on_delete' => 'set null'],
+    ];
+}
+```
+
+| Property       | Effect                                                                                                 |
+|----------------|--------------------------------------------------------------------------------------------------------|
+| `$properties`  | Rejects unknown keys on `fill()` / `create()` (when non-empty). Hardens against untrusted-input        |
+| `$types`       | Per-attribute coercion via `Cast::read` (storage→PHP) and `Cast::write` (PHP→storage). **NULL passes through untouched** |
+| `$indexes`     | `User::indexesSql()` returns `list<string>` of `CREATE [UNIQUE] INDEX` statements                      |
+| `$foreignKeys` | `User::foreignKeysSql()` returns `list<string>` of `ALTER TABLE … ADD CONSTRAINT` statements           |
+
+The framework emits the index / FK SQL on demand. **It does not apply
+it** — feed the strings to `pdo->exec()` from a migration step, an
+install task, or whatever fits your project. Column SQL types
+(`VARCHAR(255)`, etc.) live in your migrations, not in `$types`.
+
+```php
+// In an install / migration step:
+foreach (User::indexesSql()     as $sql) $pdo->exec($sql);
+foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
+```
+
 ## Common patterns at a glance
 
 | You want… | Use | Closest reading |

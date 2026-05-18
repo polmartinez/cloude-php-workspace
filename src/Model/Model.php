@@ -12,14 +12,93 @@ namespace Cloude\Model;
  * adapter behind the scenes is configurable per subclass — same API
  * whether the rows live in MySQL, SQLite or in-memory.
  *
- * Convention:
+ * ## The model IS the schema definition
+ *
+ * Everything the framework needs to know about a table — and most of
+ * what your application needs to know — is declared as static
+ * properties on the subclass. The model is the single source of truth;
+ * everything else (cast logic, index/FK SQL emission, mass-assignment
+ * guard, query builder) reads from these declarations.
  *
  *   class User extends \Cloude\Model\Model
  *   {
- *       protected static string $table       = 'users';
- *       protected static string $primaryKey  = 'id';
- *       protected static array  $properties  = ['id', 'email', 'name', 'created_at'];
+ *       protected static string $table      = 'users';
+ *       protected static string $primaryKey = 'id';
+ *
+ *       // 1. Fields the model accepts.
+ *       //
+ *       //    Mass-assignment whitelist. Anything passed to fill() /
+ *       //    create() / new User($data) that isn't listed here is
+ *       //    rejected with InvalidArgumentException. Hardens against
+ *       //    untrusted-input attacks. Leave empty to disable the check.
+ *       protected static array $properties = [
+ *           'id', 'email', 'name', 'role_id', 'active', 'created_at', 'tags', 'status',
+ *       ];
+ *
+ *       // 2. PHP-side types.
+ *       //
+ *       //    `column => type` map. On read (storage → PHP) and write
+ *       //    (PHP → storage), each listed column is coerced via
+ *       //    Cloude\Model\Cast. NULL always passes through untouched
+ *       //    — nullable columns stay nullable, never silently turn
+ *       //    into 0 / '' / wrong defaults. Columns not listed here
+ *       //    pass through as-is.
+ *       //
+ *       //    Catalogue (see Cloude\Model\Cast): int / float / string /
+ *       //    bool / decimal[:N] / json | array / datetime[:FMT] /
+ *       //    date[:FMT] / enum:FQCN.
+ *       protected static array $types = [
+ *           'id'         => 'int',
+ *           'active'     => 'bool',
+ *           'tags'       => 'json',
+ *           'created_at' => 'datetime',
+ *           'status'     => 'enum:' . Status::class,
+ *       ];
+ *
+ *       // 3. Indexes.
+ *       //
+ *       //    Declarative. The framework doesn't apply them — it
+ *       //    EMITS the SQL via `User::indexesSql()`, and a separate
+ *       //    script (your migration runner, an install task, a
+ *       //    one-off bootstrap) feeds the result to pdo->exec().
+ *       //    Names auto-derive from the cols when omitted.
+ *       protected static array $indexes = [
+ *           ['type' => 'unique', 'columns' => ['email']],
+ *           ['type' => 'index',  'columns' => ['role_id']],
+ *       ];
+ *
+ *       // 4. Foreign keys (with optional ON DELETE / ON UPDATE).
+ *       //
+ *       //    Same idea: declared here, emitted via foreignKeysSql(),
+ *       //    applied by your runner. Referential actions: cascade /
+ *       //    set null / restrict / no action / set default.
+ *       protected static array $foreignKeys = [
+ *           [
+ *               'columns'    => ['role_id'],
+ *               'references' => 'roles',
+ *               'on'         => ['id'],
+ *               'on_delete'  => 'set null',
+ *               'on_update'  => 'cascade',
+ *           ],
+ *       ];
  *   }
+ *
+ * ## Where each declaration is used
+ *
+ *   | Property       | Read by                                              | Effect                                                                |
+ *   |----------------|------------------------------------------------------|-----------------------------------------------------------------------|
+ *   | $table         | every storage operation                              | identifies the table / collection                                     |
+ *   | $primaryKey    | find() / save() / delete()                           | by-PK lookups, the column save() refuses to overwrite                 |
+ *   | $properties    | __set() / fill() / create()                          | mass-assignment whitelist; empty = no whitelist                       |
+ *   | $types         | hydrate() / save() / refresh() / toArray(true)       | per-attribute Cast::read / Cast::write (null passes through)          |
+ *   | $indexes       | indexesSql()                                         | list<string> of CREATE [UNIQUE] INDEX statements                      |
+ *   | $foreignKeys   | foreignKeysSql()                                     | list<string> of ALTER TABLE ADD CONSTRAINT statements                 |
+ *
+ * Column TYPES (SQL — VARCHAR(255), INT, etc.) live in your migration
+ * tooling, not here. `$types` describes PHP-side coercion, not the
+ * DDL. This is intentional: the framework doesn't track schema
+ * versions or generate migration files. It hands you the index / FK
+ * SQL on demand and stays out of the up/down loop.
  *
  *   User::configure(new PdoStorage($pdo, 'users'));   // once at boot
  *
@@ -30,14 +109,22 @@ namespace Cloude\Model;
  *   User::create(['email' => 'a@b.com', 'name' => 'Ada']);
  *   User::findBy(['active' => 1], limit: 10, orderBy: ['created_at' => 'DESC']);
  *
- * What this class deliberately does NOT do:
+ *   // Optional bootstrap script:
+ *   foreach (User::indexesSql() as $sql) { $pdo->exec($sql); }
+ *   foreach (User::foreignKeysSql() as $sql) { $pdo->exec($sql); }
+ *
+ * ## What this class deliberately does NOT do
+ *
  *   - Relations (`hasMany`, `belongsTo`). Two `findBy()` calls in your
  *     use case are clearer than declarative associations.
+ *   - Migrations / schema versioning / up-down. `$indexes` /
+ *     `$foreignKeys` are pure description — emission is on demand,
+ *     application is on you (or your migration tool).
+ *   - Column DDL. SQL types like `VARCHAR(255)` are NOT in `$types`;
+ *     they live in your migrations. `$types` is PHP-side.
  *   - Observers / events. Hook into `save()` by overriding `beforeSave()`
  *     / `afterSave()` in the subclass — no event bus.
  *   - Validation. Use `Cloude\JsonSchema::validate` at the edge instead.
- *   - Casting. What comes from the storage comes; cast in accessors if
- *     you need it (`public function age(): int { return (int) $this->age; }`).
  *
  * If the subset feels too narrow, that's the cue to either subclass and
  * add what you need (the codebase is ~150 lines, easy to extend) or
