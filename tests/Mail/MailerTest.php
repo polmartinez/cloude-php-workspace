@@ -155,73 +155,61 @@ final class MailerTest extends TestCase
         }
     }
 
-    public function testForgeFallsBackToLegacyMailKey(): void
+    public function testForgeMergesFrameworkDefaultsWithAppEmailConfig(): void
     {
-        // Pre-v1.1 used 'mail' as the config key; keep reading it for
-        // back-compat so existing projects don't need to rename their files.
-        $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
-        @mkdir($tmp, 0755, true);
-        file_put_contents($tmp . '/mail.php', "<?php return [
-            'transport' => 'sendmail',
-            'from'      => 'legacy@example.com',
-        ];");
-
-        \Cloude\Config::reset();
-        \Cloude\Config::setConfigPath($tmp);
-        try {
-            $mailer = Mailer::forge();
-            self::assertInstanceOf(SendmailTransport::class, $mailer->transport());
-
-            $rc = new \ReflectionClass($mailer);
-            $rp = $rc->getProperty('defaults');
-            self::assertSame(['from' => 'legacy@example.com'], $rp->getValue($mailer));
-        } finally {
-            @unlink($tmp . '/mail.php');
-            @rmdir($tmp);
-            \Cloude\Config::reset();
-        }
-    }
-
-    public function testForgeEmailKeyWinsOverLegacyMailKey(): void
-    {
-        // When both exist, the new 'email' key takes precedence — gives
-        // projects a clean migration path: drop in email.php, delete mail.php.
+        // The framework's bundled config/email.php provides safe defaults
+        // (sendmail transport, modern SMTP fallbacks). When the app only
+        // declares what's specific, the merged result should still have
+        // every key populated.
         $tmp = sys_get_temp_dir() . '/cloude-mail-cfg-' . bin2hex(random_bytes(4));
         @mkdir($tmp, 0755, true);
         file_put_contents($tmp . '/email.php', "<?php return [
-            'transport' => 'sendmail',
-            'from'      => 'new@example.com',
-        ];");
-        file_put_contents($tmp . '/mail.php', "<?php return [
-            'transport' => 'sendmail',
-            'from'      => 'old@example.com',
+            'transport' => 'smtp',
+            'host'      => 'smtp.app.test',
+            'from'      => 'app@example.com',
         ];");
 
         \Cloude\Config::reset();
         \Cloude\Config::setConfigPath($tmp);
         try {
-            $mailer = Mailer::forge();
-            $rc = new \ReflectionClass($mailer);
-            $rp = $rc->getProperty('defaults');
-            self::assertSame(['from' => 'new@example.com'], $rp->getValue($mailer));
+            $merged = \Cloude\Config::get('email');
+            // App-declared keys win.
+            self::assertSame('smtp', $merged['transport']);
+            self::assertSame('smtp.app.test', $merged['host']);
+            self::assertSame('app@example.com', $merged['from']);
+            // Framework defaults flow through where the app didn't override.
+            self::assertSame(587, $merged['port']);
+            self::assertTrue($merged['tls']);
+            self::assertSame(30, $merged['timeout']);
         } finally {
             @unlink($tmp . '/email.php');
-            @unlink($tmp . '/mail.php');
             @rmdir($tmp);
             \Cloude\Config::reset();
         }
     }
 
-    public function testForgeWithNoArgsAndNoCloudeConfigEntryThrows(): void
+    public function testForgeWithNoArgsAndNoEmailConfigEntryThrows(): void
     {
+        // Sanity check: when neither app email.php nor framework defaults
+        // exist (we wipe both via reflection), the factory complains
+        // with a clear message.
         \Cloude\Config::reset();
-        \Cloude\Config::setConfigPath(sys_get_temp_dir());          // no email.php or mail.php there
+        $rc = new \ReflectionClass(\Cloude\Config::class);
+        $rc->getProperty('appPath')->setValue(null, sys_get_temp_dir());
+        $rc->getProperty('extraPaths')->setValue(null, []);
+        $coreResolved = $rc->getProperty('coreResolved');
+        $corePath     = $rc->getProperty('corePath');
+        $coreResolved->setValue(null, true);
+        $corePath->setValue(null, null);
+
         try {
             $this->expectException(\InvalidArgumentException::class);
             $this->expectExceptionMessage("'email' entry in Cloude\\Config");
             Mailer::forge();
         } finally {
             \Cloude\Config::reset();
+            $coreResolved->setValue(null, false);
+            $corePath->setValue(null, null);
         }
     }
 

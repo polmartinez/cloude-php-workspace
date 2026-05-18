@@ -65,7 +65,22 @@ namespace Cloude;
 class Config
 {
     private static string $environment = 'dev';
-    private static ?string $configPath = null;
+
+    /**
+     * Extra search paths registered by `addPath()`. The full search list
+     * in resolution order is `[core?, app?, ...extraPaths]` — see
+     * {@see paths()}. Later entries win on every key (deep-merged via
+     * {@see Arr::merge}).
+     *
+     * @var list<string>
+     */
+    private static array $extraPaths = [];
+
+    private static ?string $appPath = null;
+
+    /** Resolved once via {@see corePath()} and cached. */
+    private static ?string $corePath = null;
+    private static bool $coreResolved = false;
 
     /** @var array<string, array<mixed>> */
     private static array $loaded = [];
@@ -146,10 +161,65 @@ class Config
         }
     }
 
+    /**
+     * Set the app config path. The framework's bundled defaults
+     * directory (`cloude/framework/config/`) is always searched first
+     * (when present), so app configs override core configs key-by-key
+     * via deep-merge.
+     */
     public static function setConfigPath(string $path): void
     {
-        self::$configPath = rtrim($path, '/');
+        self::$appPath = rtrim($path, '/');
         self::$loaded = [];
+    }
+
+    /**
+     * Append an extra config directory to the search list. Useful for
+     * library / module developers who want to ship their own defaults
+     * loadable through `Config::get(...)`. Last call wins (deeper-merged).
+     */
+    public static function addPath(string $path): void
+    {
+        self::$extraPaths[] = rtrim($path, '/');
+        self::$loaded = [];
+    }
+
+    /**
+     * Returns the current search-path list in resolution order:
+     * `[core?, app?, ...extraPaths]`. The first entry is the
+     * framework's bundled `config/` (when present); the last entry
+     * wins on every key.
+     *
+     * @return list<string>
+     */
+    public static function paths(): array
+    {
+        $out = [];
+        if (($core = self::corePath()) !== null) {
+            $out[] = $core;
+        }
+        if (self::$appPath !== null) {
+            $out[] = self::$appPath;
+        }
+        foreach (self::$extraPaths as $p) {
+            $out[] = $p;
+        }
+        return $out;
+    }
+
+    /**
+     * Resolves the framework's bundled `config/` once and caches the
+     * result. Returns null when there's no `config/` next to `src/`
+     * (e.g. when running from a stripped-down install).
+     */
+    private static function corePath(): ?string
+    {
+        if (!self::$coreResolved) {
+            self::$coreResolved = true;
+            $dir = dirname(__DIR__) . '/config';
+            self::$corePath = is_dir($dir) ? $dir : null;
+        }
+        return self::$corePath;
     }
 
     public static function setEnvironment(string $environment): void
@@ -180,7 +250,8 @@ class Config
         if (isset(self::$loaded[$name])) {
             return self::$loaded[$name];
         }
-        if (self::$configPath === null) {
+        $paths = self::paths();
+        if ($paths === []) {
             throw new \RuntimeException(
                 'Config path not set; call Config::setConfigPath() or Config::configure() first',
             );
@@ -191,10 +262,21 @@ class Config
             );
         }
 
-        $base     = self::readFile(self::$configPath . '/' . $name . '.php');
-        $override = self::readFile(self::$configPath . '/' . self::$environment . '/' . $name . '.php');
-
-        $merged = $base === [] ? $override : Arr::merge($base, $override);
+        // Walk every search path in order: core defaults → app → app/env.
+        // Each path contributes a base file (`$name.php`) and an
+        // env-specific override (`{env}/$name.php`). Later paths win on
+        // every key; deep-merged via Arr::merge.
+        $merged = [];
+        foreach (self::paths() as $path) {
+            $base = self::readFile($path . '/' . $name . '.php');
+            if ($base !== []) {
+                $merged = $merged === [] ? $base : Arr::merge($merged, $base);
+            }
+            $env = self::readFile($path . '/' . self::$environment . '/' . $name . '.php');
+            if ($env !== []) {
+                $merged = $merged === [] ? $env : Arr::merge($merged, $env);
+            }
+        }
         return self::$loaded[$name] = $merged;
     }
 
@@ -259,7 +341,7 @@ class Config
         }
 
         // 1. Config file
-        if (self::$configPath !== null) {
+        if (self::paths() !== []) {
             $cfg = self::get('app.base_url');
             if (is_string($cfg) && $cfg !== '') {
                 return self::$baseUrl = rtrim($cfg, '/');
@@ -295,7 +377,7 @@ class Config
         if (defined('DEBUG')) {
             return (bool) constant('DEBUG');
         }
-        if (self::$configPath !== null) {
+        if (self::paths() !== []) {
             $cfg = self::get('app.debug');
             if ($cfg !== null) {
                 return filter_var($cfg, FILTER_VALIDATE_BOOLEAN);
@@ -321,7 +403,7 @@ class Config
      */
     public static function path(string $name, ?string $default = null): ?string
     {
-        if (self::$configPath !== null) {
+        if (self::paths() !== []) {
             $value = self::get('app.paths.' . $name);
             if (is_string($value) && $value !== '') {
                 return $value;

@@ -12,10 +12,13 @@ namespace Cloude\Mail;
  * Output uses CRLF line endings (mandatory for SMTP). Sendmail
  * tolerates LF, but CRLF is the safer common denominator.
  *
+ * DKIM: when the email array carries a `'dkim'` key (or the Mailer's
+ * defaults do), the built message is signed by {@see DkimSigner} before
+ * `build()` returns. See `DkimSigner` for the config shape.
+ *
  * Deliberately narrow:
  *   - No attachments (multipart/mixed). For PDFs/etc. install
  *     `symfony/mailer` or `phpmailer/phpmailer` directly.
- *   - No DKIM signing.
  *   - No HTML + plain alternative. Pick one with the `html` flag.
  *   - No bounce / tracking headers — add them via the `headers` field
  *     if you need them.
@@ -63,7 +66,16 @@ final class Message
         $lines[] = '';                                                  // blank line: end of headers
         $lines[] = (string) $email['body'];
 
-        return implode("\r\n", $lines);
+        $message = implode("\r\n", $lines);
+
+        // DKIM-sign the wire bytes when the email (or the Mailer's
+        // defaults) carry a `dkim` config. The signer prepends a
+        // `DKIM-Signature: ...` header to the message.
+        if (isset($email['dkim']) && is_array($email['dkim']) && $email['dkim'] !== []) {
+            $message = DkimSigner::sign($message, $email['dkim']);
+        }
+
+        return $message;
     }
 
     /**

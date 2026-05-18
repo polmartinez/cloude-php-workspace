@@ -300,6 +300,11 @@ abstract class TestCase
         Assert::false($value, $message);
     }
 
+    public static function assertNotFalse(mixed $value, string $message = ''): void
+    {
+        Assert::notFalse($value, $message);
+    }
+
     public static function assertNull(mixed $value, string $message = ''): void
     {
         Assert::null($value, $message);

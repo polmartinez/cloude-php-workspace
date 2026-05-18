@@ -154,13 +154,26 @@ final class ConfigTest extends TestCase
     public function testLoadWithoutConfigPathThrows(): void
     {
         Config::reset();
-        // Reset configPath via reflection (the API doesn't expose unset).
+        // Clear every search path via reflection (the public API has no
+        // "unset" — this is test scaffolding). We also short-circuit
+        // corePath() to null so the framework's bundled config/ doesn't
+        // count as "a path".
         $rc = new \ReflectionClass(Config::class);
-        $rp = $rc->getProperty('configPath');
-        $rp->setValue(null, null);
+        $rc->getProperty('appPath')->setValue(null, null);
+        $rc->getProperty('extraPaths')->setValue(null, []);
+        $coreResolved = $rc->getProperty('coreResolved');
+        $corePath     = $rc->getProperty('corePath');
+        $coreResolved->setValue(null, true);
+        $corePath->setValue(null, null);
 
-        $this->expectException(\RuntimeException::class);
-        Config::load('app');
+        try {
+            $this->expectException(\RuntimeException::class);
+            Config::load('app');
+        } finally {
+            // Restore so the next test sees the bundled config/ again.
+            $coreResolved->setValue(null, false);
+            $corePath->setValue(null, null);
+        }
     }
 
     // ── typed accessors ──────────────────────────────────────────────────
@@ -240,5 +253,57 @@ final class ConfigTest extends TestCase
 
         self::assertSame('/fallback', Config::path('cache', '/fallback'));
         self::assertNull(Config::path('cache'));
+    }
+
+    // ── multi-path search (framework defaults + app overrides) ───────────
+
+    public function testFrameworkBundledConfigIsAutoRegistered(): void
+    {
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        // Framework ships config/email.php — should be in the search list.
+        $paths = Config::paths();
+        self::assertGreaterThan(1, count($paths), 'core path should auto-prepend');
+        self::assertStringEndsWith('/config', $paths[0]);
+    }
+
+    public function testAppConfigDeepMergesOverCoreDefaults(): void
+    {
+        // App declares only 'transport' + 'host' + 'from'; the framework's
+        // bundled config/email.php contributes 'port', 'tls', 'timeout'.
+        file_put_contents($this->tmp . '/email.php', "<?php return [
+            'transport' => 'smtp',
+            'host'      => 'smtp.app.test',
+            'from'      => 'app@example.com',
+        ];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        $merged = Config::get('email');
+        // App wins.
+        self::assertSame('smtp', $merged['transport']);
+        self::assertSame('smtp.app.test', $merged['host']);
+        // Core defaults flow through.
+        self::assertSame(587, $merged['port']);
+        self::assertTrue($merged['tls']);
+        self::assertSame(30, $merged['timeout']);
+    }
+
+    public function testAddPathAppendsAdditionalSearchLocation(): void
+    {
+        $extra = sys_get_temp_dir() . '/cloude-extra-' . bin2hex(random_bytes(4));
+        mkdir($extra, 0755, true);
+        file_put_contents($extra . '/widget.php', "<?php return ['color' => 'red'];");
+
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+        Config::addPath($extra);
+        try {
+            self::assertSame('red', Config::get('widget.color'));
+        } finally {
+            @unlink($extra . '/widget.php');
+            @rmdir($extra);
+        }
     }
 }

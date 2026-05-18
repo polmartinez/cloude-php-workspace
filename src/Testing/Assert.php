@@ -86,6 +86,14 @@ final class Assert
         self::$count++;
     }
 
+    public static function notFalse(mixed $value, string $message = ''): void
+    {
+        if ($value === false) {
+            self::fail(self::join($message, 'Failed asserting that value is not false'));
+        }
+        self::$count++;
+    }
+
     public static function null(mixed $value, string $message = ''): void
     {
         if ($value !== null) {

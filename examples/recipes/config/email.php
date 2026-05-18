@@ -55,4 +55,20 @@ return [
     // becomes the fallback when a `send()` call omits the field.
     'from'     => Config::env('MAIL_FROM', 'no-reply@example.com'),
     'reply_to' => Config::env('MAIL_REPLY_TO'),
+
+    // ── Optional: DKIM signing ───────────────────────────────────────────
+    //
+    // Uncomment and fill in to sign every outbound message with DKIM.
+    // The signer (Cloude\Mail\DkimSigner) uses relaxed/relaxed
+    // canonicalization + RSA-SHA256. Publish the matching public key in
+    // DNS as `<selector>._domainkey.<domain>` TXT and you're done.
+    //
+    // 'dkim' => [
+    //     'domain'      => 'example.com',
+    //     'selector'    => Config::env('DKIM_SELECTOR', 'default'),
+    //     // Source order tried: inline PEM, 'env:VAR', 'file://path', plain path.
+    //     'private_key' => Config::env('DKIM_PRIVATE_KEY_PATH', '/etc/dkim/private.pem'),
+    //     'passphrase'  => Config::env('DKIM_PASSPHRASE'),    // optional
+    //     'headers'     => ['From', 'To', 'Subject', 'Date', 'MIME-Version', 'Content-Type'],
+    // ],
 ];

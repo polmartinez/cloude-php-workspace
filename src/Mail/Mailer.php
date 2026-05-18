@@ -33,8 +33,9 @@ use Cloude\Mail\Transport\SmtpTransport;
  *
  *   4. Auto-config from `Cloude\Config::get('email')` — the call site
  *      shrinks to one line when `Cloude\Config::configure(...)` ran at
- *      boot and `app/config/email.php` exists. The legacy key `'mail'`
- *      is still honoured for back-compat:
+ *      boot. The framework ships defaults at `config/email.php`
+ *      (port 587, TLS on, sendmail fallback); the app's
+ *      `app/config/email.php` is deep-merged on top:
  *
  *      $mailer = Mailer::forge();
  *
@@ -117,15 +118,12 @@ final class Mailer
         if ($config === null) {
             $loaded = Config::get('email');
             if (!is_array($loaded) || $loaded === []) {
-                // Back-compat: pre-v1.1 the key was 'mail'.
-                $loaded = Config::get('mail');
-            }
-            if (!is_array($loaded) || $loaded === []) {
                 throw new \InvalidArgumentException(
                     "Mailer::forge() with no args expects an 'email' "
                     . 'entry in Cloude\\Config (app/config/email.php). '
-                    . "The legacy 'mail' key is still honoured. "
-                    . 'Either set one up or pass the config array explicitly.',
+                    . 'The framework ships defaults at config/email.php; '
+                    . "make sure Cloude\\Config::configure(APPPATH . '/config') "
+                    . 'ran at boot, or pass the config array explicitly.',
                 );
             }
             $config = $loaded;
@@ -158,6 +156,11 @@ final class Mailer
             if (isset($config[$k])) {
                 $defaults[$k] = $config[$k];
             }
+        }
+        if (isset($config['dkim']) && is_array($config['dkim']) && $config['dkim'] !== []) {
+            // Carried into every send() so Message::build() can sign;
+            // overridable per-send by passing a different 'dkim' array.
+            $defaults['dkim'] = $config['dkim'];
         }
 
         return new self($transport, $defaults);
