@@ -413,6 +413,27 @@ class Config
     }
 
     /**
+     * Returns the configured default timezone (`app.timezone`), with a
+     * `'UTC'` fallback. Used by `Bootstrap::run()` to seed
+     * `date_default_timezone_set()` at boot — but callable directly
+     * any time you need the canonical value (e.g. when minting a
+     * `\DateTimeZone` for a per-request override).
+     *
+     *   Config::timezone();              // → 'UTC' (or app override)
+     *   Config::timezone('Europe/Madrid'); // → fallback when nothing's set
+     */
+    public static function timezone(string $default = 'UTC'): string
+    {
+        if (self::paths() !== []) {
+            $value = self::get('app.timezone');
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+        return $default;
+    }
+
+    /**
      * @return array{0:string, 1:string}
      */
     private static function splitPath(string $path): array

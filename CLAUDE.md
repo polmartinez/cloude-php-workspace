@@ -130,7 +130,7 @@ The framework only relies on three directory constants (`DOCROOT`,
 `APPPATH`, `BASEPATH`), defined by `Bootstrap::initPaths()`.
 Everything else (base URL, debug flag, data/views paths, DB, mail, …)
 goes through `Config::get(...)` / `Config::baseUrl()` / `Config::debug()`
-/ `Config::path(...)`. The legacy `defineBaseUrl()` / `defineDebug()` +
+/ `Config::path(...)` / `Config::timezone()`. The legacy `defineBaseUrl()` / `defineDebug()` +
 ad-hoc `DATA_DIR` style still works for back-compat but new code
 should be Config-driven.
 

@@ -1200,6 +1200,7 @@ Config::environment();                    // current env name ('dev' default)
 // Typed accessors — the recommended way to read framework knobs
 Config::baseUrl(['example.com']);         // memoized; reads app.base_url, then env, then auto-detect
 Config::debug();                          // bool — reads app.debug, then env DEBUG
+Config::timezone();                       // string — reads app.timezone (FW ships 'UTC' default)
 Config::path('data');                     // app.paths.data
 Config::path('cache', '/tmp/c');          // with fallback
 
@@ -1228,12 +1229,17 @@ app/config/
 return [
     'base_url' => Cloude\Config::env('BASE_URL'),    // null → auto-detect
     'debug'    => Cloude\Config::boolEnv('DEBUG'),
+    'timezone' => Cloude\Config::env('TZ', 'UTC'),   // Bootstrap::run() applies this
     'paths' => [
         'data'  => BASEPATH . '/data',
         'views' => APPPATH . '/views',
     ],
 ];
 ```
+
+The framework ships `config/app.php` with `'timezone' => 'UTC'` as a
+baseline. Apps that don't override the key inherit `UTC`; otherwise
+the app's value wins (deep-merge).
 
 `baseUrl()` resolves in this order: `BASE_URL` global constant (if
 already defined), `app.base_url` config, `BASE_URL` env var,

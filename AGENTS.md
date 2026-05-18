@@ -88,12 +88,17 @@ $router->dispatch();
 return [
     'base_url' => \Cloude\Config::env('BASE_URL'),    // null → auto-detect
     'debug'    => \Cloude\Config::boolEnv('DEBUG'),
+    'timezone' => \Cloude\Config::env('TZ', 'UTC'),   // applied by Bootstrap::run()
     'paths' => [
         'data'  => BASEPATH . '/data',
         'views' => APPPATH . '/views',
     ],
 ];
 ```
+
+The framework ships `config/app.php` with `'timezone' => 'UTC'` as a
+default. Your `app/config/app.php` overrides any key you set (deep-merge);
+omit `'timezone'` to inherit `'UTC'`.
 
 Then anywhere in the app:
 
@@ -191,6 +196,7 @@ coercion, not DDL.
 | Look up a project path | `Config::path('data')` / `Config::path('views')` | Reads `app.paths.{name}` — preferred over `DATA_DIR`-style globals |
 | Resolve the base URL | `Config::baseUrl(['example.com'])` | Memoized; reads `app.base_url` → env → auto-detect |
 | Read the debug flag | `Config::debug()` | Reads `app.debug` → env → false |
+| Read the configured timezone | `Config::timezone()` | Reads `app.timezone`. FW ships `'UTC'` as default; `Bootstrap::run()` calls `date_default_timezone_set()` at boot |
 | Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](README.md#cloudeconfig) |
 | Send a JSON response | `Http\Response::json($data, $status, $pretty)` | Don't `header()` + `echo json_encode()` by hand |
 | 404 / redirect / 204 | `Response::notFound`, `redirect`, `noContent` | |

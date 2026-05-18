@@ -290,6 +290,44 @@ final class ConfigTest extends TestCase
         self::assertSame(30, $merged['timeout']);
     }
 
+    public function testTimezoneReadsFromAppConfig(): void
+    {
+        file_put_contents($this->tmp . '/app.php', "<?php return ['timezone' => 'Europe/Madrid'];");
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('Europe/Madrid', Config::timezone());
+    }
+
+    public function testTimezoneInheritsFrameworkDefault(): void
+    {
+        // No app/config/app.php → the framework's bundled config/app.php
+        // (ships with 'timezone' => 'UTC') flows through unchanged.
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('UTC', Config::timezone());
+    }
+
+    public function testTimezoneFallsBackToDefaultArg(): void
+    {
+        // Even without ANY config path, the explicit default kicks in.
+        Config::reset();
+        $rc = new \ReflectionClass(Config::class);
+        $rc->getProperty('appPath')->setValue(null, null);
+        $rc->getProperty('extraPaths')->setValue(null, []);
+        $coreResolved = $rc->getProperty('coreResolved');
+        $corePath     = $rc->getProperty('corePath');
+        $coreResolved->setValue(null, true);
+        $corePath->setValue(null, null);
+        try {
+            self::assertSame('America/Mexico_City', Config::timezone('America/Mexico_City'));
+        } finally {
+            $coreResolved->setValue(null, false);
+            $corePath->setValue(null, null);
+        }
+    }
+
     public function testAddPathAppendsAdditionalSearchLocation(): void
     {
         $extra = sys_get_temp_dir() . '/cloude-extra-' . bin2hex(random_bytes(4));

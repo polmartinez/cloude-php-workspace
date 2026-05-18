@@ -87,6 +87,58 @@ PHP;
         self::assertSame('/srv/myapp/app', $lines[1]);
     }
 
+    public function testRunAppliesFrameworkDefaultTimezone(): void
+    {
+        // Bootstrap::run() sets the PHP default timezone from Config.
+        // With no app/config/app.php, the framework's bundled
+        // config/app.php (ships 'timezone' => 'UTC') flows through.
+        // Subprocess so the global state doesn't leak between tests.
+        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
+        $code = <<<PHP
+<?php
+date_default_timezone_set('Asia/Tokyo');     // start somewhere NON-UTC
+require {$this->phpString($autoload)};
+\\Cloude\\Config::configure(sys_get_temp_dir());
+\\Cloude\\Bootstrap::run();
+echo date_default_timezone_get();
+PHP;
+        $tmp = tempnam(sys_get_temp_dir(), 'bp_');
+        file_put_contents($tmp, $code);
+        $cmd = escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+        $output = trim((string) shell_exec($cmd));
+        @unlink($tmp);
+
+        self::assertStringEndsWith('UTC', $output);
+    }
+
+    public function testRunAppliesAppTimezoneOverride(): void
+    {
+        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
+        $appDir = sys_get_temp_dir() . '/cloude-tz-' . bin2hex(random_bytes(4));
+        @mkdir($appDir, 0755, true);
+        file_put_contents($appDir . '/app.php', "<?php return ['timezone' => 'Europe/Madrid'];");
+        try {
+            $code = <<<PHP
+<?php
+date_default_timezone_set('UTC');
+require {$this->phpString($autoload)};
+\\Cloude\\Config::configure({$this->phpString($appDir)});
+\\Cloude\\Bootstrap::run();
+echo date_default_timezone_get();
+PHP;
+            $tmp = tempnam(sys_get_temp_dir(), 'bp_');
+            file_put_contents($tmp, $code);
+            $cmd = escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+            $output = trim((string) shell_exec($cmd));
+            @unlink($tmp);
+
+            self::assertStringEndsWith('Europe/Madrid', $output);
+        } finally {
+            @unlink($appDir . '/app.php');
+            @rmdir($appDir);
+        }
+    }
+
     private function phpString(string $s): string
     {
         return var_export($s, true);
