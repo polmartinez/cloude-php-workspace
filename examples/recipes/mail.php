@@ -102,7 +102,7 @@ $mailer->send([
 
 // ── 4. Testing — swap the transport, no network involved ────────────────────
 //
-// In PHPUnit setUp() / test fixture:
+// In a Cloude\Testing\TestCase setUp() / test fixture:
 //
 //   use Cloude\Mail\Mailer;
 //   use Cloude\Mail\Transport\MemoryTransport;

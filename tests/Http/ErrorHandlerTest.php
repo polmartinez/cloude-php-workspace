@@ -61,7 +61,7 @@ class ErrorHandlerTest extends TestCase
 
     public function testCliRenderWritesPlainTextNotHtmlInSubprocess(): void
     {
-        // PHPUnit runs under PHP_SAPI === 'cli', but render() in the same
+        // cloude-test runs under PHP_SAPI === 'cli', but render() in the same
         // process would write to STDERR and pollute the test output. Spawn a
         // PHP subprocess so we can capture stderr cleanly.
         $autoload = dirname(__DIR__, 2) . '/vendor/autoload.php';

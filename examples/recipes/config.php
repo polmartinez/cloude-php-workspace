@@ -139,7 +139,7 @@ $rows = User::storage()->pdo()->query('SELECT ... JOIN ...')->fetchAll();
 
 // ── 6. Testing: swap config + override the pool ──────────────────────────────
 //
-// In a PHPUnit setUp():
+// In a Cloude\Testing\TestCase setUp():
 //
 //   use Cloude\Model\Storage\ArrayStorage;
 //

@@ -40,9 +40,8 @@ my-app/
 │   ├── cli/               ← command-line scripts
 │   └── views/             ← plain PHP templates
 ├── data/                  ← JSON / Markdown per entity
-├── tests/
-├── composer.json
-└── phpunit.xml.dist
+├── tests/                    ← Cloude\Testing — run with `vendor/bin/cloude-test`
+└── composer.json
 ```
 
 ## Canonical front controller (`www/index.php`)
@@ -439,7 +438,7 @@ If you need any of these, install a dedicated library — don't wait for Cloude 
 
 ```bash
 composer install
-composer test          # phpunit
+composer test          # cloude-test (Cloude\Testing\Runner)
 composer cs-check      # php-cs-fixer dry-run — MUST pass before commit
 composer cs-fix        # apply fixes
 ```
