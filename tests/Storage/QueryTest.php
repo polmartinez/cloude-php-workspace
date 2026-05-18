@@ -479,4 +479,80 @@ final class QueryTest extends TestCase
         self::assertStringContainsString('FROM `users` AS `u`', $sql);
         self::assertStringContainsString('`u`.`name` AS `who`', $sql);
     }
+
+    public function testAliasedColumnsExecuteAndReturnAliasedKeys(): void
+    {
+        // Smoke test the original bug end-to-end: the SQL must execute
+        // and the result rows must be keyed by the chosen aliases.
+        $row = $this->q()
+            ->select('name AS user_name', 'email AS user_email')
+            ->where('id', 1)
+            ->first();
+        self::assertSame(['user_name' => 'Ada', 'user_email' => 'ada@x'], $row);
+    }
+
+    public function testAliasedTableExecutesEndToEnd(): void
+    {
+        // Build the whole query from string forms (no TableRef), aliasing
+        // both the table and a column.
+        $rows = (new Query($this->pdo, 'users AS u'))
+            ->select('u.name AS who', 'u.role AS r')
+            ->where('u.role', 'admin')
+            ->orderBy('u.id')
+            ->get();
+        self::assertSame([
+            ['who' => 'Ada',   'r' => 'admin'],
+            ['who' => 'Grace', 'r' => 'admin'],
+        ], $rows);
+    }
+
+    public function testAliasedJoinExecutesEndToEnd(): void
+    {
+        // The exact shape the user hit: a JOIN of two tables that both
+        // have a `name` column, projecting each into a different alias.
+        $this->seedOrders();
+        $rows = $this->q()
+            ->select('users.name AS user_name', 'orders.total AS order_total')
+            ->join('orders', 'orders.user_id', '=', 'users.id')
+            ->where('orders.status', 'paid')
+            ->orderBy('users.name')
+            ->get();
+        self::assertSame([
+            ['user_name' => 'Ada',   'order_total' => 100],
+            ['user_name' => 'Grace', 'order_total' => 200],
+        ], $rows);
+    }
+
+    public function testJoinAcceptsAliasedTableString(): void
+    {
+        $this->seedOrders();
+        $rows = (new Query($this->pdo, 'users AS u'))
+            ->select('u.name AS user_name', 'o.total AS amount')
+            ->join('orders AS o', 'o.user_id', '=', 'u.id')
+            ->where('o.status', 'paid')
+            ->orderBy('u.name')
+            ->get();
+        self::assertSame([
+            ['user_name' => 'Ada',   'amount' => 100],
+            ['user_name' => 'Grace', 'amount' => 200],
+        ], $rows);
+    }
+
+    public function testAliasLowercaseAsAndExtraWhitespace(): void
+    {
+        // `as` (lowercase) and extra whitespace around it are normalised.
+        $row = $this->q()
+            ->select('name   as   nick')
+            ->where('id', 1)
+            ->first();
+        self::assertSame(['nick' => 'Ada'], $row);
+    }
+
+    public function testFunctionExpressionAliasStillRejected(): void
+    {
+        // The aliased side must be a single bare identifier; expressions
+        // are out of scope for the framework Query and keep throwing.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->q()->select('COUNT(*) AS total')->get();
+    }
 }
