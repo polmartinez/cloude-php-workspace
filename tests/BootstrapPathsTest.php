@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Cloude\Tests;
 
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 /**
  * `Bootstrap::initPaths()` defines global constants — once per process —

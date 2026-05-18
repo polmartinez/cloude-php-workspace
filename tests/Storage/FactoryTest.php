@@ -12,7 +12,7 @@ use Cloude\Model\Storage\MarkdownStorage;
 use Cloude\Model\Storage\PdoStorage;
 use Cloude\Storage\Connection;
 use Cloude\Storage\Factory;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class FactoryTest extends TestCase
 {

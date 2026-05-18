@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Model;
 
 use Cloude\Model\Storage\ArrayStorage;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class ArrayStorageTest extends TestCase
 {

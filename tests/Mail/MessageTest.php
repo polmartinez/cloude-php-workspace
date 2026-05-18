@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Mail;
 
 use Cloude\Mail\Message;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class MessageTest extends TestCase
 {

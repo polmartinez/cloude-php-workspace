@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Storage;
 
 use Cloude\Storage\Query;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class QueryTest extends TestCase
 {

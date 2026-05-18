@@ -1,0 +1,25 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Try common autoload locations: consumer install (../../autoload.php),
+// in-tree development (../vendor/autoload.php), then current cwd.
+$candidates = [
+    __DIR__ . '/../../../autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+    getcwd() . '/vendor/autoload.php',
+];
+foreach ($candidates as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+if (!class_exists(\Cloude\Testing\Runner::class)) {
+    fwrite(STDERR, "Could not locate vendor/autoload.php — run 'composer install' first.\n");
+    exit(1);
+}
+
+exit(\Cloude\Testing\Runner::main($argv));

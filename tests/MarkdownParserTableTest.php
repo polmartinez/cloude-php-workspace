@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests;
 
 use Cloude\Markdown\Parser;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class MarkdownParserTableTest extends TestCase
 {

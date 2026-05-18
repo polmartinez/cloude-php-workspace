@@ -6,7 +6,7 @@ namespace Cloude\Tests\Storage;
 
 use Cloude\Storage\Identifier;
 use Cloude\Storage\TableRef;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class TableRefTest extends TestCase
 {

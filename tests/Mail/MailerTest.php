@@ -8,7 +8,7 @@ use Cloude\Mail\Mailer;
 use Cloude\Mail\Transport\MemoryTransport;
 use Cloude\Mail\Transport\SendmailTransport;
 use Cloude\Mail\Transport\SmtpTransport;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class MailerTest extends TestCase
 {
@@ -175,7 +175,7 @@ final class MailerTest extends TestCase
      * — the test verifies the factory accepts each shape and produces the
      * right adapter type. Real-network integration is out of scope.
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('providerConfigs')]
+    #[\Cloude\Testing\DataProvider('providerConfigs')]
     public function testForgeAcceptsTransactionalProviderConfigs(string $name, array $config): void
     {
         $mailer = Mailer::forge($config);

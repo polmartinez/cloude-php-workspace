@@ -7,7 +7,7 @@ namespace Cloude\Tests\Domain;
 use Cloude\Domain\AggregateRoot;
 use Cloude\Domain\DomainEvent;
 use Cloude\Domain\DomainException;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class BookBorrowed implements DomainEvent
 {

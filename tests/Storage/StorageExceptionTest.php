@@ -12,7 +12,7 @@ use Cloude\Storage\Query;
 use Cloude\Storage\StorageException;
 use Cloude\Storage\SyntaxErrorException;
 use Cloude\Storage\TableNotFoundException;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class StorageExceptionTest extends TestCase
 {

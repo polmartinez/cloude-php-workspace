@@ -7,7 +7,7 @@ namespace Cloude\Tests\Model;
 use Cloude\Model\Cast;
 use Cloude\Model\Model;
 use Cloude\Model\Storage\ArrayStorage;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 enum Status: string
 {

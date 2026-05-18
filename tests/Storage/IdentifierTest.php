@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Storage;
 
 use Cloude\Storage\Identifier;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class IdentifierTest extends TestCase
 {

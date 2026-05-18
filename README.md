@@ -101,12 +101,13 @@ cloude-php-workspace/
       JsonRpc.php        # JSON-RPC 2.0 + MCP error codes
       McpException.php
     views/               # Default 404 / 500 / 500-debug views (overridable)
-  tests/                 # PHPUnit tests
+  tests/                 # Cloude\Testing — run with `vendor/bin/cloude-test`
   examples/              # Runnable sample apps (see examples/README.md)
     recipes/             # Cookbook snippets for sitemap, JSON-LD, ...
     contacts/            # Mini address-book: form + live search demo
+  bin/
+    cloude-test          # Test runner entry-point (no PHPUnit dependency)
   composer.json          # Package manifest (name: cloude/framework)
-  phpunit.xml.dist
   .php-cs-fixer.dist.php
   LICENSE
   README.md
@@ -186,6 +187,17 @@ cloude-php-workspace/
 |---|---|
 | `Cloude\Mcp\Server` | MCP server (Model Context Protocol) over HTTP / JSON-RPC 2.0, with auto `inputSchema` validation |
 | `Cloude\Mcp\JsonRpc` | Constants for JSON-RPC 2.0 + MCP error codes |
+
+### `Cloude\Testing\…` — built-in test framework (no PHPUnit dependency)
+
+| Class | Responsibility |
+|---|---|
+| `Cloude\Testing\TestCase` | Test base class. Lifecycle (`setUp`/`tearDown`), PHPUnit-compatible assertion surface (`assertSame`/`assertTrue`/`assertInstanceOf`/…), exception expectations, Cloude-specific helpers (`useArrayModel`, `useSqliteModel`, `useMockModel`, `captureHttp`, `freezeTime`, …) |
+| `Cloude\Testing\Assert` | Static assertion library used by `TestCase`. Each method increments an internal counter shown in the runner's summary |
+| `Cloude\Testing\Runner` | Discovery + execution + reporting. `bin/cloude-test` calls `Runner::main($argv)`. Supports `--filter=PATTERN` and one or more path arguments |
+| `Cloude\Testing\DataProvider` | `#[DataProvider('cases')]` attribute — name a static method returning an iterable of arg arrays; one test invocation per row |
+| `Cloude\Testing\AssertionFailedException` | Thrown by `Assert` methods on failure. The runner catches it to flag the test as failed (vs. errored) |
+| `Cloude\Testing\MockStorage` | Recording wrapper around `ArrayStorage` for behaviour assertions (`$store->received('update', times: 1)`) |
 | `Cloude\Mcp\McpException` | Structured-error throwable for tool / resource handlers |
 
 ## Quick start
@@ -1461,7 +1473,7 @@ Each recipe is a single self-contained file with comments — copy, paste, edit.
 
 ```bash
 composer install
-composer test        # phpunit
+composer test        # cloude-test (Cloude\Testing\Runner)
 composer cs-check    # php-cs-fixer in dry-run mode
 composer cs-fix      # apply fixes
 ```
@@ -1556,12 +1568,89 @@ to the application, dispatch how you want), repository base class
 (write a domain-specific interface + a Cloude-backed adapter, see
 [`examples/library/`](examples/library/)), specification pattern.
 
-### `Cloude\Testing\TestCase` — test base class
+### `Cloude\Testing` — standalone test framework
 
-Drop-in replacement for `\PHPUnit\Framework\TestCase` that adds the
-helpers every Cloude project ends up writing. PHPUnit features (data
-providers, attributes, mocking, coverage) keep working unchanged —
-this is a wrapper, not a replacement.
+Cloude ships its own test runner — no PHPUnit dependency. The CLI
+entry point lives at `bin/cloude-test` (or run it via `composer test`).
+
+```bash
+vendor/bin/cloude-test                       # run tests/ (default)
+vendor/bin/cloude-test tests/Storage         # scope to a directory
+vendor/bin/cloude-test --filter=Cast         # regex match on ClassName::method
+vendor/bin/cloude-test --help                # usage summary
+```
+
+The runner discovers `*Test.php` files recursively, instantiates every
+class extending `Cloude\Testing\TestCase`, and runs each public
+method whose name starts with `test`. Dots / `F` / `E` printed
+PHPUnit-style; final summary lists failures and errors with stack
+traces. Exit code 0 on green, 1 on anything red.
+
+**Why ship a custom runner?** The framework's philosophy is small,
+hand-rolled, no dependencies the user didn't ask for. Dropping PHPUnit
+(15+ MB in `vendor/`) keeps `composer install` lean for downstream
+consumers; the runner itself is < 500 LOC across `Runner.php`,
+`TestCase.php`, `Assert.php` and `bin/cloude-test`. PHPUnit's API
+shape (method names, attributes, lifecycle) is mirrored so the muscle
+memory transfers and existing tests migrate with two `use`
+substitutions.
+
+#### Writing a test
+
+```php
+use Cloude\Testing\DataProvider;
+use Cloude\Testing\TestCase;
+
+final class StrTest extends TestCase
+{
+    protected function setUp(): void { /* per-test fixture */ }
+    protected function tearDown(): void { /* per-test cleanup */ }
+
+    public function testSlugAscii(): void
+    {
+        self::assertSame('hello-world', \Cloude\Str::slug('Hello World'));
+    }
+
+    public function testInvalidInputThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('empty');
+        \Cloude\Str::slug('');
+    }
+
+    #[DataProvider('truthyCases')]
+    public function testBool(string $input, bool $expected): void
+    {
+        self::assertSame($expected, \Cloude\Config::boolEnv($input, false));
+    }
+
+    public static function truthyCases(): array
+    {
+        return [
+            'yes'   => ['yes',   true],
+            'no'    => ['no',    false],
+            'empty' => ['',      false],
+        ];
+    }
+}
+```
+
+#### Assertions
+
+PHPUnit-compatible names (`assertSame`, `assertTrue`, etc.) are
+available both as `$this->...` and `self::...` (route to the same
+implementation). The full list:
+
+| Equality        | `assertSame`, `assertNotSame`, `assertEquals` |
+| Booleans / null | `assertTrue`, `assertFalse`, `assertNull`, `assertNotNull` |
+| Containers      | `assertCount`, `assertEmpty`, `assertNotEmpty`, `assertContains`, `assertArrayHasKey`, `assertArrayNotHasKey` |
+| Type            | `assertInstanceOf`, `assertNotInstanceOf`, `assertIsString` |
+| Strings         | `assertStringContainsString`, `assertStringNotContainsString`, `assertStringStartsWith`, `assertStringEndsWith`, `assertMatchesRegularExpression`, `assertJson` |
+| Comparison      | `assertGreaterThan`, `assertLessThan`, `assertLessThanOrEqual` |
+| Filesystem      | `assertFileExists`, `assertDirectoryExists` |
+| Escape hatch    | `fail($message)` |
+
+#### Cloude-specific helpers
 
 | Helper                                     | Purpose                                                                                  |
 |--------------------------------------------|------------------------------------------------------------------------------------------|

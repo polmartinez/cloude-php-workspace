@@ -56,7 +56,7 @@ my-app/
 ├── views/                     ← plain PHP templates, `.html.php` extension
 │   └── layout.html.php        ← (double extension separates views from PHP code)
 ├── data/                      ← JSON / Markdown content (or use Cloude\Model for relational)
-└── tests/                     ← PHPUnit
+└── tests/                     ← Cloude\Testing — run with `vendor/bin/cloude-test`
 ```
 
 ## From zero to "Hello, world" in 6 steps
@@ -249,7 +249,7 @@ validate the same way, and `Response::redirect` on success.
 | Freeze time in a test | `$this->freezeTime('2026-05-18 12:00:00')` (inside `Cloude\Testing\TestCase`) or `DateTime::setTestNow($when)` | Released automatically in `tearDown()` so leaks fail the next test instead of polluting the suite |
 | Domain value object | `final class Money extends \Cloude\Domain\ValueObject { public function __construct(public readonly int $cents, public readonly string $ccy) {…} public function __toString(): string {…} }` | Structural `equals()` comes for free. Throw `\Cloude\Domain\DomainException` from the constructor to enforce invariants |
 | Domain aggregate w/ events | `class Book extends \Cloude\Domain\AggregateRoot` — call `$this->recordEvent(new BookBorrowed(...))` inside domain methods; application code calls `$book->pullDomainEvents()` after persistence | `Cloude\Domain\DomainEvent` is the marker interface. No event bus shipped — handle the returned list however your app wants |
-| Test base class | `class FooTest extends \Cloude\Testing\TestCase` — provides `useArrayModel()`, `useSqliteModel()`, `useMockModel()`, `captureHttp()`, `assertJsonResponse()`, `assertHttpException()`, `freezeTime()`, `assertModelHas()`. Wraps PHPUnit, doesn't replace it |
+| Test base class | `class FooTest extends \Cloude\Testing\TestCase` — provides `useArrayModel()`, `useSqliteModel()`, `useMockModel()`, `captureHttp()`, `assertJsonResponse()`, `assertHttpException()`, `freezeTime()`, `assertModelHas()`. Run with `vendor/bin/cloude-test` |
 | Mock a Model and assert calls | `$s = $this->useMockModel(User::class, $rows); /* run code */; $this->assertModelReceived($s, 'delete', times: 1); $s->lastCall('update')` | `Cloude\Testing\MockStorage` — recording wrapper on `ArrayStorage`. For `Model::query()` (SQL builder) tests, use `useSqliteModel()` — faking the builder is brittle |
 | Multi-env config (dev / prod / anything) | `Config::configure($path, $env)` + `Config::get('db.default.dsn')` | [`examples/recipes/config.php`](examples/recipes/config.php), [`tests/ConfigTest.php`](tests/ConfigTest.php) |
 | Send email (SMTP or sendmail) | `Mailer::forge()->send([...])` (reads `Config::get('mail')`) | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`src/Mail/`](src/Mail/) |
@@ -300,18 +300,23 @@ Things to put in the prompt:
 1. **Closest example or recipe** — saves Claude 2-3 wrong guesses.
 2. **The data shape** — JSON Schema or a field list, not just "a form".
 3. **Where it should be wired** — `Routes.php`, a new controller, a new repo subclass.
-4. **Whether to add a test** — drop a PHPUnit case under `tests/` if so.
+4. **Whether to add a test** — drop a `Cloude\Testing\TestCase` subclass under `tests/` if so.
 
 ## Testing & lint
 
 ```bash
-composer test       # PHPUnit
-composer cs-check   # php-cs-fixer dry-run
-composer cs-fix     # apply fixes
+composer test                              # Cloude\Testing runner — equivalent to `vendor/bin/cloude-test`
+composer test -- --filter=Cast             # run only tests matching /Cast/
+composer test -- tests/Storage             # scope to a directory
+composer cs-check                          # php-cs-fixer dry-run
+composer cs-fix                            # apply fixes
 ```
 
 Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
-`App\Tests\` mapped in `phpunit.xml.dist` for consumer projects).
+`App\Tests\` in consumer projects — just map it in `composer.json`).
+Each test class extends `Cloude\Testing\TestCase`; method names start
+with `test`. No `phpunit.xml.dist` — the runner discovers `*Test.php`
+files under any path passed on the CLI (default `tests/`).
 
 ## Deployment
 

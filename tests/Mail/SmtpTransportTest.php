@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Mail;
 
 use Cloude\Mail\Transport\SmtpTransport;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 /**
  * Unit-testing a full SMTP exchange requires a real (or fake) server,

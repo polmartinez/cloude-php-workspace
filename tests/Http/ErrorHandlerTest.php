@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Cloude\Tests\Http;
 
 use Cloude\Http\ErrorHandler;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\DataProvider;
+use Cloude\Testing\TestCase;
 
 class ErrorHandlerTest extends TestCase
 {

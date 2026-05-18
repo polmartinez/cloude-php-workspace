@@ -6,7 +6,7 @@ namespace Cloude\Tests\Storage;
 
 use Cloude\Config;
 use Cloude\Storage\Connection;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class ConnectionTest extends TestCase
 {

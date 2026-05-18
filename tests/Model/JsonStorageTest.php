@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests\Model;
 
 use Cloude\Model\Storage\JsonStorage;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class JsonStorageTest extends TestCase
 {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude\Tests;
 
 use Cloude\Config;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class ConfigTest extends TestCase
 {

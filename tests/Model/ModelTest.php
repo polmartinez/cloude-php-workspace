@@ -9,7 +9,7 @@ use Cloude\Model\Model;
 use Cloude\Model\Storage\ArrayStorage;
 use Cloude\Model\Storage\PdoStorage;
 use Cloude\Storage\Connection;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class TestUser extends Model
 {

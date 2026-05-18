@@ -6,7 +6,7 @@ namespace Cloude\Tests\Domain;
 
 use Cloude\Domain\DomainException;
 use Cloude\Domain\ValueObject;
-use PHPUnit\Framework\TestCase;
+use Cloude\Testing\TestCase;
 
 final class Money extends ValueObject
 {

@@ -1,6 +1,6 @@
 {
     "name": "cloude/framework",
-    "description": "Minimalist PHP 8.3+ micro-framework: router, input, views, markdown and string helpers. No magic, no service container. Optional persistence: file-based (JSON, Markdown) and a thin PDO Active Record via Cloude\\Model.",
+    "description": "Minimalist PHP 8.3+ micro-framework: router, input, views, markdown and string helpers. No magic, no service container. Optional persistence: file-based (JSON, Markdown) and a thin PDO Active Record via Cloude\\Model. Ships its own test runner (bin/cloude-test).",
     "type": "library",
     "keywords": ["php", "framework", "router", "micro-framework", "cloude", "psr-4", "psr-12"],
     "license": "MIT",
@@ -8,7 +8,6 @@
         "php": ">=8.3"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.0",
         "friendsofphp/php-cs-fixer": "^3.60"
     },
     "suggest": {
@@ -24,8 +23,11 @@
             "Cloude\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/cloude-test"
+    ],
     "scripts": {
-        "test": "phpunit",
+        "test": "cloude-test",
         "cs-check": "php-cs-fixer fix --dry-run --diff",
         "cs-fix": "php-cs-fixer fix"
     },
