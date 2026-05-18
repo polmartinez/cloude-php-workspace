@@ -133,6 +133,7 @@ cloude-php-workspace/
 | `Cloude\Logger` | File-backed logger with daily rotation and `debug/info/warn/error` |
 | `Cloude\TaskRunner` | CLI task runner. `prefix:method` dispatch over registered callables or static class methods, with auto `list` / `help` |
 | `Cloude\Router` | Router with `/{param}`, `/{param?}`, `/{param:regex}` patterns, nested route groups, and `get/post/put/patch/delete/any` helpers |
+| `Cloude\Session` | Static façade over `$_SESSION` with hardened cookie defaults (`httponly`, `samesite=Lax`, `secure` on HTTPS). Typed `get/set/has/forget/all`, flash messages (`flash`/`pullFlash`/`reflash`), CSRF helpers (`csrfToken`/`checkCsrf`), `regenerate()` for login flows |
 | `Cloude\Str` | String utilities: `upTo`/`truncate`/`truncateMiddle`/`words`/`after`/`afterLast`/`between`/`squish`/`mask`, `slug`/`ascii`, `camel`/`pascal`/`snake`/`kebab`, `random`/`uuid`/`hash` |
 | `Cloude\View` | Plain PHP template rendering with variable extraction and HTML escape |
 
@@ -171,6 +172,7 @@ cloude-php-workspace/
 | `Cloude\Storage\Connection` | Named PDO pool keyed off `Config::get('storage.{name}')` |
 | `Cloude\Storage\Factory` | Builds a Storage adapter from a config row (dispatches on `driver`) |
 | `Cloude\Storage\StorageException` | Framework-level wrapper around `\PDOException`. Public readonly `$sqlState`, `$sql`, `$bindings`. Specialised subclasses: `TableNotFoundException` (42S02/42P01), `ColumnNotFoundException` (42S22/42703), `DuplicateKeyException` (23000+1062, 23505), `IntegrityConstraintException` (23xxx), `ConnectionException` (08xxx), `SyntaxErrorException` (42000/42601) |
+| `Cloude\Storage\Schema` | DDL emitter — produces `CREATE TABLE` / `DROP TABLE` SQL from structured arrays. Indexes (`UNIQUE`/`INDEX`), foreign keys (`ON DELETE`/`ON UPDATE`), `DEFAULT NULL`, composite primary keys, MySQL + Postgres dialects. **Not a migration framework** — feed the SQL to your existing tooling |
 
 ### `Cloude\Markdown\…`
 
@@ -859,6 +861,123 @@ Public readonly fields on every instance:
 | `$sql`       | `string`            | The SQL that failed (with `?` placeholders)                 |
 | `$bindings`  | `list<mixed>`       | Bind values in order — may carry secrets; never echo        |
 | `getPrevious()` | `\PDOException`  | Original driver exception (`errorInfo` preserved)           |
+
+### `Cloude\Storage\Schema` — DDL emitter
+
+Tiny declarative `CREATE TABLE` builder. **Not a migration framework**:
+no versioning, no up/down, no diffing. Produces SQL strings that you
+feed to `phinx` / `doctrine/migrations` / `pdo->exec()` / a one-off
+install script — whatever fits the project. Targets MySQL (default)
+and Postgres (`dialect: 'pgsql'`).
+
+```php
+use Cloude\Storage\Schema;
+
+$sql = Schema::createTableSql('users', [
+    'id'         => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false, 'auto_increment' => true, 'primary' => true],
+    'email'      => ['type' => 'VARCHAR(255)', 'null' => false],
+    'role_id'    => ['type' => 'BIGINT',       'unsigned' => true, 'null' => true,  'default' => null],
+    'created_at' => ['type' => 'DATETIME',     'null' => false, 'default' => 'CURRENT_TIMESTAMP'],
+], indexes: [
+    ['type' => 'unique', 'columns' => ['email']],
+    ['type' => 'index',  'columns' => ['role_id']],
+], foreignKeys: [
+    [
+        'columns'    => ['role_id'],
+        'references' => 'roles',
+        'on'         => ['id'],
+        'on_delete'  => 'set null',
+        'on_update'  => 'cascade',
+    ],
+]);
+// → CREATE TABLE `users` (
+//     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+//     `email` VARCHAR(255) NOT NULL,
+//     `role_id` BIGINT UNSIGNED NULL DEFAULT NULL,
+//     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+//     UNIQUE KEY `uq_users_email` (`email`),
+//     KEY `idx_users_role_id` (`role_id`),
+//     CONSTRAINT `fk_users_role_id` FOREIGN KEY (`role_id`)
+//       REFERENCES `roles` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+//   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+```
+
+When you have a `Cloude\Model\Model` subclass with `$columns /
+$indexes / $foreignKeys` declared, the shortcut is:
+
+```php
+echo User::createTableSql();      // mysql by default
+echo User::dropTableSql('pgsql'); // → DROP TABLE IF EXISTS "users"
+```
+
+**Column descriptor** keys: `type` (required), `null` (default `true`),
+`default` (omitted unless set; `null` emits `DEFAULT NULL`, SQL
+keywords like `CURRENT_TIMESTAMP` pass through, anything else gets
+quoted with `'…'`), `auto_increment` (MySQL), `unsigned` (MySQL),
+`primary` (composite PKs get a table-level `PRIMARY KEY (col1, col2)`
+declaration automatically), `comment`.
+
+**Foreign-key referential actions**: `cascade`, `set null`, `restrict`,
+`no action`, `set default` (case-insensitive). Anything else throws.
+
+**SQLite caveat:** the generated SQL uses MySQL-style `UNIQUE KEY <name> (cols)`
+inside the CREATE which SQLite doesn't parse. Either skip the indexes
+on SQLite or write them as `UNIQUE (cols)` (no name) by hand. Schema's
+primary target is MySQL/Postgres.
+
+### `Cloude\Session` — session façade
+
+```php
+use Cloude\Session;
+
+// Start once per handler that needs a session.
+Session::start();
+
+// Typed access
+Session::set('user_id', 42);
+$id = Session::get('user_id', $default = null);
+Session::has('user_id');
+Session::forget('user_id');
+$snapshot = Session::all();        // excludes internal flash/CSRF buckets
+
+// Flash — value survives exactly one redirect
+Session::flash('success', 'Saved.');
+$msg = Session::pullFlash('success');   // null on the originating request,
+                                        // 'Saved.' on the next one (then gone)
+Session::reflash('success');            // keep it for one more cycle
+
+// CSRF
+$token = Session::csrfToken();          // minted on first call, stable per session
+if (!Session::checkCsrf((string) Input::post('_csrf'))) {
+    throw new \Cloude\Http\HttpException(419, 'CSRF token mismatch');
+}
+
+// On login (prevents fixation)
+Session::regenerate();
+
+// On logout
+Session::destroy();
+```
+
+**Hardened defaults applied by `start()`**: `httponly = true`,
+`samesite = 'Lax'`, `secure = true` when HTTPS is on. Override via
+the second arg:
+
+```php
+Session::start([], cookieParams: [
+    'samesite' => 'Strict',
+    'domain'   => '.example.com',
+]);
+```
+
+**Not auto-started** by `Bootstrap::run()`. Call `Session::start()`
+explicitly in routes that need it; API endpoints / MCP / stateless
+JSON usually don't.
+
+**Out of scope** (deliberately): user / role / permission models,
+"remember me" cookies, login throttling, OAuth / OIDC clients,
+session-backed queue. Build those on top using `Cloude\Model` for
+storage and `Session` for the cookie layer.
 
 ### `Cloude\Bootstrap`
 

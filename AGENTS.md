@@ -141,6 +141,10 @@ pace; **prefer the Config-driven approach in new code**.
 | Nested AND/OR predicates | `$q->where('active', 1)->whereGroup(fn ($g) => $g->where('role', 'admin')->orWhere('role', 'editor'))` | Use `orWhereGroup` for the OR-joined variant |
 | INNER / LEFT / RIGHT / CROSS JOIN | `$q->leftJoin('orders', 'orders.user_id', '=', 'users.id')` | Columns may be `'table.col'` strings; quoted automatically |
 | Static table / column references | `User::table()`, `User::field('email')`, `User::as('u')` | Avoid hand-writing `'users.email'` literals; pair `as()` with `Query::from()`/`join()` for typed joins |
+| Declare a table's schema on the model | `protected static array $columns / $indexes / $foreignKeys` | Each entry uses the structured shape — see `Cloude\Storage\Schema` docblock. `User::createTableSql()` emits the full `CREATE TABLE` |
+| Emit DDL for a model | `User::createTableSql('mysql')` or `User::dropTableSql()` | Dialects: `mysql` (default), `pgsql`. **Not a migration framework** — feed the SQL to `phinx` / `doctrine/migrations` / `pdo->exec()` as you like |
+| Foreign key with ON DELETE / ON UPDATE | `['columns' => ['role_id'], 'references' => 'roles', 'on' => ['id'], 'on_delete' => 'set null', 'on_update' => 'cascade']` | Inside `$foreignKeys`. Actions: `cascade`, `set null`, `restrict`, `no action`, `set default` (case-insensitive) |
+| Sessions | `Session::start()` then `set/get/has/forget/all`. Flash via `flash/pullFlash/reflash`. CSRF via `csrfToken/checkCsrf`. Auth flow: `regenerate()` after login | `Cloude\Session` — hardened defaults (`httponly`, `samesite=Lax`, `secure` on HTTPS). Opt-in: doesn't auto-start in `Bootstrap::run()` |
 | Alias a column in SELECT | `$q->select('id', ['name', 'type_name'])` (preferred), or `User::alias('name', 'type_name')`, or `$u->alias('name', 'who')` | Each emits the `[column, alias]` tuple that `select()` accepts. Legacy `'name AS alias'` string still works |
 | Catch a SQL error | `catch (\Cloude\Storage\StorageException $e)` | Subclasses: `TableNotFoundException`, `ColumnNotFoundException`, `DuplicateKeyException`, `IntegrityConstraintException`, `ConnectionException`, `SyntaxErrorException`. `$e->sql`, `$e->bindings`, `$e->sqlState` are public readonly. `getPrevious()` is the original `\PDOException` |
 | Cast model attributes | `protected static array $casts = ['age' => 'int', 'price' => 'decimal:2', 'tags' => 'json', 'created_at' => 'datetime', 'status' => 'enum:' . Status::class]` | Applied on hydrate (read) and save (write); null passes through. See `Cloude\Model\Cast` for the type catalogue (`int`, `float`, `string`, `bool`, `decimal[:N]`, `json`/`array`, `datetime[:FMT]`, `date[:FMT]`, `enum:FQCN`) |
@@ -227,8 +231,11 @@ Don't:
   drop to the underlying PDO connection.
 - **No HTTP client.** Use Guzzle directly.
 - **No template engine.** Plain PHP via `View::render`.
-- **No session / auth helpers.** Use `$_SESSION` and a route-level check
-  before `$router->dispatch()`. For MCP, validate keys inside the handler.
+- **Sessions: thin wrapper, no auth.** `Cloude\Session` covers
+  start/get/set/flash/CSRF over `$_SESSION` with hardened cookie
+  defaults; it's NOT an auth system. Roll user / role / permission
+  models in the app (or before `$router->dispatch()`). For MCP,
+  validate API keys inside the handler.
 - **No SSE or stdio MCP transport.** HTTP only.
 - **No JSON Schema features beyond the listed subset** (`type`, `required`,
   `properties`, `additionalProperties`, `enum`, `items`, `min/maxItems`,

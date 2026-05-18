@@ -96,6 +96,63 @@ abstract class Model
     protected static array $properties = [];
 
     /**
+     * Subclass: optional schema description used by
+     * {@see \Cloude\Storage\Schema} to emit `CREATE TABLE` SQL.
+     *
+     * The framework does NOT track migrations / diffs / versions — this
+     * is metadata for bootstrapping a database or feeding into a real
+     * migration tool. Leave empty when you manage schema separately.
+     *
+     *   protected static array $columns = [
+     *       'id'         => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false, 'auto_increment' => true, 'primary' => true],
+     *       'email'      => ['type' => 'VARCHAR(255)', 'null' => false],
+     *       'role_id'    => ['type' => 'INT', 'unsigned' => true, 'null' => true, 'default' => null],
+     *       'created_at' => ['type' => 'DATETIME', 'null' => false, 'default' => 'CURRENT_TIMESTAMP'],
+     *   ];
+     *
+     * @var array<string, array<string,mixed>>
+     */
+    protected static array $columns = [];
+
+    /**
+     * Subclass: optional UNIQUE / INDEX declarations. Used together with
+     * {@see $columns} by `createTableSql()` / `Schema::createTableSql`.
+     *
+     *   protected static array $indexes = [
+     *       ['type' => 'unique', 'columns' => ['email']],
+     *       ['type' => 'index',  'columns' => ['role_id']],
+     *       ['type' => 'unique', 'columns' => ['tenant_id', 'slug'], 'name' => 'uq_tenant_slug'],
+     *   ];
+     *
+     * `name` is auto-derived (`uq_{table}_{cols}` / `idx_{table}_{cols}`)
+     * when omitted.
+     *
+     * @var list<array<string,mixed>>
+     */
+    protected static array $indexes = [];
+
+    /**
+     * Subclass: optional foreign-key declarations.
+     *
+     *   protected static array $foreignKeys = [
+     *       [
+     *           'columns'    => ['role_id'],
+     *           'references' => 'roles',
+     *           'on'         => ['id'],
+     *           'on_delete'  => 'set null',
+     *           'on_update'  => 'cascade',
+     *       ],
+     *   ];
+     *
+     * Referential actions: `cascade`, `set null`, `restrict`,
+     * `no action`, `set default` (case-insensitive). Anything else
+     * throws when `createTableSql()` runs.
+     *
+     * @var list<array<string,mixed>>
+     */
+    protected static array $foreignKeys = [];
+
+    /**
      * Subclass: optional `column => type` map. The framework normalises
      * values on read (storage → PHP) and write (PHP → storage). Null
      * always passes through untouched, so nullable columns stay nullable.
@@ -302,6 +359,32 @@ abstract class Model
     public static function ref(): \Cloude\Storage\TableRef
     {
         return new \Cloude\Storage\TableRef(static::$table);
+    }
+
+    /**
+     * Render the `CREATE TABLE` SQL for this model from its
+     * {@see $columns}, {@see $indexes} and {@see $foreignKeys}
+     * declarations. Throws when the model has no `$columns`.
+     */
+    public static function createTableSql(string $dialect = 'mysql'): string
+    {
+        if (static::$columns === []) {
+            throw new \LogicException(
+                static::class . '::createTableSql() requires a non-empty $columns declaration',
+            );
+        }
+        return \Cloude\Storage\Schema::createTableSql(
+            static::$table,
+            static::$columns,
+            static::$indexes,
+            static::$foreignKeys,
+            $dialect,
+        );
+    }
+
+    public static function dropTableSql(string $dialect = 'mysql'): string
+    {
+        return \Cloude\Storage\Schema::dropTableSql(static::$table, $dialect);
     }
 
     /**

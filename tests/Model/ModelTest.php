@@ -311,4 +311,57 @@ final class ModelTest extends TestCase
             TestUser::alias('name', 'user_name'),
         );
     }
+
+    public function testCreateTableSqlEmitsModelSchema(): void
+    {
+        $sql = SchemaModel::createTableSql();
+        self::assertStringContainsString('CREATE TABLE `widgets`', $sql);
+        self::assertStringContainsString('`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY', $sql);
+        self::assertStringContainsString('`name` VARCHAR(120) NOT NULL', $sql);
+        self::assertStringContainsString('UNIQUE KEY `uq_widgets_name` (`name`)', $sql);
+        self::assertStringContainsString(
+            'CONSTRAINT `fk_widgets_owner_id` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`)',
+            $sql,
+        );
+        self::assertStringContainsString('ON DELETE CASCADE', $sql);
+    }
+
+    public function testDropTableSqlEmitsForTable(): void
+    {
+        self::assertSame('DROP TABLE IF EXISTS `widgets`', SchemaModel::dropTableSql());
+    }
+
+    public function testCreateTableSqlThrowsWhenNoColumnsDeclared(): void
+    {
+        $this->expectException(\LogicException::class);
+        TestUser::createTableSql();
+    }
+}
+
+final class SchemaModel extends \Cloude\Model\Model
+{
+    protected static string $table = 'widgets';
+
+    /** @var array<string, array<string,mixed>> */
+    protected static array $columns = [
+        'id'       => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false, 'auto_increment' => true, 'primary' => true],
+        'owner_id' => ['type' => 'BIGINT', 'unsigned' => true, 'null' => true,  'default' => null],
+        'name'     => ['type' => 'VARCHAR(120)', 'null' => false],
+    ];
+
+    /** @var list<array<string,mixed>> */
+    protected static array $indexes = [
+        ['type' => 'unique', 'columns' => ['name']],
+    ];
+
+    /** @var list<array<string,mixed>> */
+    protected static array $foreignKeys = [
+        [
+            'columns'    => ['owner_id'],
+            'references' => 'users',
+            'on'         => ['id'],
+            'on_delete'  => 'cascade',
+            'on_update'  => 'cascade',
+        ],
+    ];
 }
