@@ -290,42 +290,23 @@ final class ConfigTest extends TestCase
         self::assertSame(30, $merged['timeout']);
     }
 
-    public function testTimezoneReadsFromAppConfig(): void
+    public function testTimezoneInheritsFrameworkDefaultViaConfigGet(): void
+    {
+        // The framework ships config/app.php with 'timezone' => 'UTC'.
+        // With no app override, Config::get('app.timezone') returns it.
+        Config::reset();
+        Config::setConfigPath($this->tmp);
+
+        self::assertSame('UTC', Config::get('app.timezone'));
+    }
+
+    public function testTimezoneAppOverrideWinsViaConfigGet(): void
     {
         file_put_contents($this->tmp . '/app.php', "<?php return ['timezone' => 'Europe/Madrid'];");
         Config::reset();
         Config::setConfigPath($this->tmp);
 
-        self::assertSame('Europe/Madrid', Config::timezone());
-    }
-
-    public function testTimezoneInheritsFrameworkDefault(): void
-    {
-        // No app/config/app.php → the framework's bundled config/app.php
-        // (ships with 'timezone' => 'UTC') flows through unchanged.
-        Config::reset();
-        Config::setConfigPath($this->tmp);
-
-        self::assertSame('UTC', Config::timezone());
-    }
-
-    public function testTimezoneFallsBackToDefaultArg(): void
-    {
-        // Even without ANY config path, the explicit default kicks in.
-        Config::reset();
-        $rc = new \ReflectionClass(Config::class);
-        $rc->getProperty('appPath')->setValue(null, null);
-        $rc->getProperty('extraPaths')->setValue(null, []);
-        $coreResolved = $rc->getProperty('coreResolved');
-        $corePath     = $rc->getProperty('corePath');
-        $coreResolved->setValue(null, true);
-        $corePath->setValue(null, null);
-        try {
-            self::assertSame('America/Mexico_City', Config::timezone('America/Mexico_City'));
-        } finally {
-            $coreResolved->setValue(null, false);
-            $corePath->setValue(null, null);
-        }
+        self::assertSame('Europe/Madrid', Config::get('app.timezone'));
     }
 
     public function testAddPathAppendsAdditionalSearchLocation(): void

@@ -10,11 +10,9 @@ declare(strict_types=1);
  * `app/config/app.php` is deep-merged onto this base, so projects
  * only need to declare the keys that differ.
  *
- * Picked up automatically by:
- *   - `Bootstrap::run()`            → sets the PHP default timezone
- *   - `Config::timezone()`          → typed accessor
- *
- * Everything else here is read on demand via `Config::get('app.*')`.
+ * `Bootstrap::run()` reads `app.timezone` and calls
+ * `date_default_timezone_set()` at boot. Everything else here is read
+ * on demand via `Config::get('app.*')`.
  */
 
 return [

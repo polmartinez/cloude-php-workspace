@@ -1200,7 +1200,6 @@ Config::environment();                    // current env name ('dev' default)
 // Typed accessors — the recommended way to read framework knobs
 Config::baseUrl(['example.com']);         // memoized; reads app.base_url, then env, then auto-detect
 Config::debug();                          // bool — reads app.debug, then env DEBUG
-Config::timezone();                       // string — reads app.timezone (FW ships 'UTC' default)
 Config::path('data');                     // app.paths.data
 Config::path('cache', '/tmp/c');          // with fallback
 

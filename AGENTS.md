@@ -196,7 +196,7 @@ coercion, not DDL.
 | Look up a project path | `Config::path('data')` / `Config::path('views')` | Reads `app.paths.{name}` — preferred over `DATA_DIR`-style globals |
 | Resolve the base URL | `Config::baseUrl(['example.com'])` | Memoized; reads `app.base_url` → env → auto-detect |
 | Read the debug flag | `Config::debug()` | Reads `app.debug` → env → false |
-| Read the configured timezone | `Config::timezone()` | Reads `app.timezone`. FW ships `'UTC'` as default; `Bootstrap::run()` calls `date_default_timezone_set()` at boot |
+| Read the configured timezone | `Config::get('app.timezone', 'UTC')` | FW ships `config/app.php` with `'timezone' => 'UTC'` default; `Bootstrap::run()` calls `date_default_timezone_set()` with the resolved value at boot |
 | Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](README.md#cloudeconfig) |
 | Send a JSON response | `Http\Response::json($data, $status, $pretty)` | Don't `header()` + `echo json_encode()` by hand |
 | 404 / redirect / 204 | `Response::notFound`, `redirect`, `noContent` | |

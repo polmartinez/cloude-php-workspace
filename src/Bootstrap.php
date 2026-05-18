@@ -96,8 +96,8 @@ class Bootstrap
 
     /**
      * Standard front-controller bootstrap:
-     *   1. Default timezone — applied from `Config::timezone()`
-     *      (which reads `app.timezone`; ships as `'UTC'`).
+     *   1. Default timezone — applied from `Config::get('app.timezone')`
+     *      (FW ships `config/app.php` with `'timezone' => 'UTC'`).
      *   2. ob_start() — so the error handler can swap a partial response for
      *      a 503 if an exception fires mid-render.
      *   3. ErrorHandler::register() — global 503 handler with HTML/JSON/MD
@@ -116,9 +116,10 @@ class Bootstrap
         // Apply the configured timezone before anything date-related runs.
         // `Cloude\DateTime`, the mail `Date:` header, and every native PHP
         // date function use the default timezone — setting it once at boot
-        // is the only sane place. Defaults to 'UTC' via the FW's
-        // bundled `config/app.php`.
-        date_default_timezone_set(Config::timezone());
+        // is the only sane place. Falls back to 'UTC' if the FW's bundled
+        // `config/app.php` is somehow not on the search path.
+        $tz = Config::get('app.timezone', 'UTC');
+        date_default_timezone_set(is_string($tz) && $tz !== '' ? $tz : 'UTC');
 
         ob_start();
 
