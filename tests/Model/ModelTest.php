@@ -312,4 +312,55 @@ final class ModelTest extends TestCase
         );
     }
 
+    // ── $indexes / $foreignKeys emitters ─────────────────────────────────
+
+    public function testIndexesSqlReturnsListOfStatements(): void
+    {
+        self::assertSame(
+            [
+                'CREATE UNIQUE INDEX `uq_widgets_slug` ON `widgets` (`slug`)',
+                'CREATE INDEX `idx_widgets_owner_id` ON `widgets` (`owner_id`)',
+            ],
+            ConstrainedWidget::indexesSql(),
+        );
+    }
+
+    public function testForeignKeysSqlReturnsListOfStatements(): void
+    {
+        self::assertSame(
+            [
+                'ALTER TABLE `widgets` ADD CONSTRAINT `fk_widgets_owner_id` FOREIGN KEY (`owner_id`)'
+                . ' REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE',
+            ],
+            ConstrainedWidget::foreignKeysSql(),
+        );
+    }
+
+    public function testEmptyDeclarationsReturnEmptyLists(): void
+    {
+        self::assertSame([], TestUser::indexesSql());
+        self::assertSame([], TestUser::foreignKeysSql());
+    }
+}
+
+final class ConstrainedWidget extends \Cloude\Model\Model
+{
+    protected static string $table = 'widgets';
+
+    /** @var list<array<string,mixed>> */
+    protected static array $indexes = [
+        ['type' => 'unique', 'columns' => ['slug']],
+        ['type' => 'index',  'columns' => ['owner_id']],
+    ];
+
+    /** @var list<array<string,mixed>> */
+    protected static array $foreignKeys = [
+        [
+            'columns'    => ['owner_id'],
+            'references' => 'users',
+            'on'         => ['id'],
+            'on_delete'  => 'cascade',
+            'on_update'  => 'cascade',
+        ],
+    ];
 }

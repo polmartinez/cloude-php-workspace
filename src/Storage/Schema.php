@@ -124,6 +124,83 @@ final class Schema
         return 'DROP TABLE IF EXISTS ' . self::quote($table, $q);
     }
 
+    /**
+     * Standalone `CREATE [UNIQUE] INDEX` for a single index descriptor.
+     * Use when the table already exists and you only want to attach
+     * indexes (common when columns come from a separate migration
+     * step). The inline form embedded in {@see createTableSql()} is
+     * different SQL — this one is portable across MySQL / Postgres /
+     * SQLite without the `UNIQUE KEY <name> (...)` quirk.
+     *
+     *   CREATE UNIQUE INDEX `uq_users_email` ON `users` (`email`);
+     *   CREATE INDEX        `idx_users_role` ON `users` (`role_id`);
+     *
+     * @param array<string,mixed> $idx
+     */
+    public static function indexSql(string $table, array $idx, string $dialect = 'mysql'): string
+    {
+        $q       = self::quoteCharFor($dialect);
+        $type    = strtolower((string) ($idx['type'] ?? 'index'));
+        $columns = (array) ($idx['columns'] ?? throw new \InvalidArgumentException(
+            "Index on '$table' is missing 'columns'",
+        ));
+        if ($columns === []) {
+            throw new \InvalidArgumentException("Index on '$table' has empty 'columns'");
+        }
+        $name = (string) ($idx['name'] ?? self::derivedIndexName($table, $columns, $type));
+
+        $kw = match ($type) {
+            'unique', 'uq' => 'CREATE UNIQUE INDEX',
+            'index',  'ix' => 'CREATE INDEX',
+            default        => throw new \InvalidArgumentException(
+                "Index on '$table' has unknown type '$type' (use 'unique' or 'index')",
+            ),
+        };
+        return $kw . ' ' . self::quote($name, $q)
+            . ' ON ' . self::quote($table, $q)
+            . ' (' . self::quoteList($columns, $q) . ')';
+    }
+
+    /**
+     * Standalone `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ...`.
+     * Same purpose as {@see indexSql()}: attach an FK to an existing
+     * table without rewriting the CREATE.
+     *
+     *   ALTER TABLE `users` ADD CONSTRAINT `fk_users_role_id`
+     *     FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
+     *     ON DELETE SET NULL ON UPDATE CASCADE;
+     *
+     * @param array<string,mixed> $fk
+     */
+    public static function foreignKeySql(string $table, array $fk, string $dialect = 'mysql'): string
+    {
+        $q          = self::quoteCharFor($dialect);
+        $columns    = (array) ($fk['columns'] ?? throw new \InvalidArgumentException(
+            "FK on '$table' is missing 'columns'",
+        ));
+        $references = (string) ($fk['references'] ?? throw new \InvalidArgumentException(
+            "FK on '$table' is missing 'references'",
+        ));
+        $on         = (array) ($fk['on'] ?? throw new \InvalidArgumentException(
+            "FK on '$table' is missing 'on' (target column list)",
+        ));
+        $name = (string) ($fk['name'] ?? self::derivedFkName($table, $columns));
+
+        $sql = 'ALTER TABLE ' . self::quote($table, $q)
+            . ' ADD CONSTRAINT ' . self::quote($name, $q)
+            . ' FOREIGN KEY (' . self::quoteList($columns, $q) . ')'
+            . ' REFERENCES ' . self::quote($references, $q)
+            . ' (' . self::quoteList($on, $q) . ')';
+
+        if (isset($fk['on_delete'])) {
+            $sql .= ' ON DELETE ' . self::referentialAction((string) $fk['on_delete']);
+        }
+        if (isset($fk['on_update'])) {
+            $sql .= ' ON UPDATE ' . self::referentialAction((string) $fk['on_update']);
+        }
+        return $sql;
+    }
+
     // ── building blocks ──────────────────────────────────────────────────
 
     /**

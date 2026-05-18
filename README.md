@@ -902,10 +902,50 @@ $sql = Schema::createTableSql('users', [
 //   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ```
 
-`Schema` is **standalone** — `Cloude\Model\Model` deliberately does
-NOT carry schema-emission methods. Models declare `$types` for
-runtime cast behaviour; DDL stays a separate concern that you call
-explicitly when you need it.
+**Standalone index / FK emitters** — when the table already exists and
+you only want to attach indexes or foreign keys after the fact:
+
+```php
+echo Schema::indexSql('users', ['type' => 'unique', 'columns' => ['email']]);
+// → CREATE UNIQUE INDEX `uq_users_email` ON `users` (`email`)
+
+echo Schema::foreignKeySql('orders', [
+    'columns'    => ['user_id'],
+    'references' => 'users',
+    'on'         => ['id'],
+    'on_delete'  => 'set null',
+]);
+// → ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id`
+//   FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+```
+
+**On the Model side** — subclasses can declare `$indexes` and
+`$foreignKeys` and get the same SQL through two convenience methods.
+Columns themselves stay in your migrations (the Model doesn't carry
+`$columns`); these properties describe the constraint surface for
+documentation + on-demand emission:
+
+```php
+class User extends Model {
+    protected static string $table = 'users';
+
+    protected static array $indexes = [
+        ['type' => 'unique', 'columns' => ['email']],
+        ['type' => 'index',  'columns' => ['role_id']],
+    ];
+
+    protected static array $foreignKeys = [
+        ['columns' => ['role_id'], 'references' => 'roles', 'on' => ['id'],
+         'on_delete' => 'set null', 'on_update' => 'cascade'],
+    ];
+}
+
+foreach (User::indexesSql() as $sql) { $pdo->exec($sql); }
+foreach (User::foreignKeysSql() as $sql) { $pdo->exec($sql); }
+```
+
+`User::indexesSql()` / `foreignKeysSql()` return `list<string>` —
+empty when nothing's declared.
 
 **Column descriptor** keys: `type` (required), `null` (default `true`),
 `default` (omitted unless set; `null` emits `DEFAULT NULL`, SQL

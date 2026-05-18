@@ -117,6 +117,47 @@ abstract class Model
      */
     protected static array $types = [];
 
+    /**
+     * Subclass: optional UNIQUE / INDEX declarations attached to this
+     * table. Column types live in your migrations (or wherever you
+     * manage DDL); these only describe the indexes the application
+     * cares about — for emission via `indexesSql()` and for documenting
+     * the constraint surface alongside the data.
+     *
+     *   protected static array $indexes = [
+     *       ['type' => 'unique', 'columns' => ['email']],
+     *       ['type' => 'index',  'columns' => ['role_id']],
+     *       ['type' => 'unique', 'columns' => ['tenant_id', 'slug'], 'name' => 'uq_tenant_slug'],
+     *   ];
+     *
+     * Names auto-derive (`uq_{table}_{cols}` / `idx_{table}_{cols}`)
+     * when omitted.
+     *
+     * @var list<array<string,mixed>>
+     */
+    protected static array $indexes = [];
+
+    /**
+     * Subclass: optional foreign-key declarations.
+     *
+     *   protected static array $foreignKeys = [
+     *       [
+     *           'columns'    => ['role_id'],
+     *           'references' => 'roles',
+     *           'on'         => ['id'],
+     *           'on_delete'  => 'set null',
+     *           'on_update'  => 'cascade',
+     *       ],
+     *   ];
+     *
+     * Referential actions: `cascade`, `set null`, `restrict`,
+     * `no action`, `set default` (case-insensitive). Anything else
+     * throws when `foreignKeysSql()` runs.
+     *
+     * @var list<array<string,mixed>>
+     */
+    protected static array $foreignKeys = [];
+
     /** @var array<class-string, Storage> */
     private static array $storages = [];
 
@@ -302,6 +343,45 @@ abstract class Model
     public static function ref(): \Cloude\Storage\TableRef
     {
         return new \Cloude\Storage\TableRef(static::$table);
+    }
+
+    /**
+     * Standalone `CREATE [UNIQUE] INDEX` statements for every entry in
+     * {@see $indexes}. Returns a list — empty when nothing's declared.
+     *
+     *   foreach (User::indexesSql() as $sql) {
+     *       $pdo->exec($sql);
+     *   }
+     *
+     * `$dialect`: `'mysql'` (default) or `'pgsql'`.
+     *
+     * @return list<string>
+     */
+    public static function indexesSql(string $dialect = 'mysql'): array
+    {
+        return array_map(
+            static fn (array $idx) => \Cloude\Storage\Schema::indexSql(static::$table, $idx, $dialect),
+            static::$indexes,
+        );
+    }
+
+    /**
+     * Standalone `ALTER TABLE ... ADD CONSTRAINT ...` statements for
+     * every entry in {@see $foreignKeys}. Returns a list — empty when
+     * nothing's declared.
+     *
+     *   foreach (User::foreignKeysSql() as $sql) {
+     *       $pdo->exec($sql);
+     *   }
+     *
+     * @return list<string>
+     */
+    public static function foreignKeysSql(string $dialect = 'mysql'): array
+    {
+        return array_map(
+            static fn (array $fk) => \Cloude\Storage\Schema::foreignKeySql(static::$table, $fk, $dialect),
+            static::$foreignKeys,
+        );
     }
 
     /**

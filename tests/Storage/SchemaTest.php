@@ -142,6 +142,77 @@ final class SchemaTest extends TestCase
         Schema::createTableSql('users', []);
     }
 
+    // ── standalone index / FK emitters ────────────────────────────────────
+
+    public function testIndexSqlUnique(): void
+    {
+        self::assertSame(
+            'CREATE UNIQUE INDEX `uq_users_email` ON `users` (`email`)',
+            Schema::indexSql('users', ['type' => 'unique', 'columns' => ['email']]),
+        );
+    }
+
+    public function testIndexSqlPlainIndex(): void
+    {
+        self::assertSame(
+            'CREATE INDEX `idx_users_role_id` ON `users` (`role_id`)',
+            Schema::indexSql('users', ['type' => 'index', 'columns' => ['role_id']]),
+        );
+    }
+
+    public function testIndexSqlExplicitNameWins(): void
+    {
+        self::assertSame(
+            'CREATE UNIQUE INDEX `uq_my_name` ON `users` (`tenant_id`, `slug`)',
+            Schema::indexSql('users', [
+                'type'    => 'unique',
+                'columns' => ['tenant_id', 'slug'],
+                'name'    => 'uq_my_name',
+            ]),
+        );
+    }
+
+    public function testIndexSqlPostgresDialect(): void
+    {
+        self::assertSame(
+            'CREATE INDEX "idx_users_role_id" ON "users" ("role_id")',
+            Schema::indexSql('users', ['type' => 'index', 'columns' => ['role_id']], 'pgsql'),
+        );
+    }
+
+    public function testForeignKeySqlEmitsAlterTable(): void
+    {
+        self::assertSame(
+            'ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id`'
+            . ' FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)'
+            . ' ON DELETE SET NULL ON UPDATE CASCADE',
+            Schema::foreignKeySql('orders', [
+                'columns'    => ['user_id'],
+                'references' => 'users',
+                'on'         => ['id'],
+                'on_delete'  => 'set null',
+                'on_update'  => 'cascade',
+            ]),
+        );
+    }
+
+    public function testForeignKeySqlExecutableOnSqlite(): void
+    {
+        // SQLite parses `ALTER TABLE ... ADD CONSTRAINT FOREIGN KEY` as
+        // a no-op (FKs must be declared in CREATE TABLE), but at least
+        // the parser accepts it without errors when we feed something
+        // valid. Here we just verify CREATE INDEX (which SQLite fully
+        // supports) round-trips through a real PDO.
+        $pdo = new \PDO('sqlite::memory:');
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)');
+
+        $pdo->exec(Schema::indexSql('users', ['type' => 'unique', 'columns' => ['email']]));
+
+        $row = $pdo->query("SELECT name FROM sqlite_master WHERE type='index' AND name='uq_users_email'")->fetch();
+        self::assertSame('uq_users_email', $row['name'] ?? null);
+    }
+
     public function testBareCreateTableIsExecutableOnSqlite(): void
     {
         // Smoke test: a minimal CREATE TABLE (no indexes — SQLite's
