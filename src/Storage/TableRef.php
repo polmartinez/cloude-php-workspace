@@ -53,6 +53,26 @@ final class TableRef implements \Stringable
     }
 
     /**
+     * Build the typed `[column, alias]` pair that `Query::select()`
+     * accepts. The column is qualified by this TableRef's name (its
+     * alias when present, otherwise the table name):
+     *
+     *   $u = User::as('u');
+     *   $u->alias('name', 'who');
+     *   // → ['u.name', 'who']
+     *
+     *   User::query()->from($u)
+     *       ->select($u->alias('name', 'who'))
+     *       ->get();
+     *
+     * @return array{0:string, 1:string}
+     */
+    public function alias(string $column, string $alias): array
+    {
+        return [$this->field($column), $alias];
+    }
+
+    /**
      * The FROM / JOIN clause expression with proper identifier quoting.
      *
      *   (new TableRef('users'))->expression();           // `users`

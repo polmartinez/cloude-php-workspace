@@ -303,4 +303,12 @@ final class ModelTest extends TestCase
         self::assertNull($ref->alias);
         self::assertSame('users.email', $ref->field('email'));
     }
+
+    public function testAliasHelperReturnsTuple(): void
+    {
+        self::assertSame(
+            ['users.name', 'user_name'],
+            TestUser::alias('name', 'user_name'),
+        );
+    }
 }

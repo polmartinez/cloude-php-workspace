@@ -555,4 +555,42 @@ final class QueryTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->q()->select('COUNT(*) AS total')->get();
     }
+
+    // ── [column, alias] tuple form (preferred) ───────────────────────────
+
+    public function testSelectAcceptsArrayTupleForAlias(): void
+    {
+        $row = $this->q()
+            ->select('id', ['name', 'type_name'])
+            ->where('id', 1)
+            ->first();
+        self::assertSame(['id' => 1, 'type_name' => 'Ada'], $row);
+    }
+
+    public function testSelectArrayTupleWithQualifiedColumn(): void
+    {
+        $row = $this->q()
+            ->select(['users.name', 'user_name'])
+            ->where('id', 1)
+            ->first();
+        self::assertSame(['user_name' => 'Ada'], $row);
+    }
+
+    public function testSelectMixedStringAndArrayForms(): void
+    {
+        $row = $this->q()
+            ->select('email', ['name', 'who'], 'role AS r')
+            ->where('id', 1)
+            ->first();
+        self::assertSame(
+            ['email' => 'ada@x', 'who' => 'Ada', 'r' => 'admin'],
+            $row,
+        );
+    }
+
+    public function testSelectArrayTupleRejectsWrongShape(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->q()->select(['only-one-element'])->first();
+    }
 }

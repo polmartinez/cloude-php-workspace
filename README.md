@@ -647,6 +647,7 @@ Every subclass exposes four static helpers built on top of `$table`:
 | `User::field('email')`| `'users.email'`                  | Qualified column references in `select` / `where` / `join` |
 | `User::ref()`         | `TableRef('users', null)`        | Pass as `from()` / `join()` target without aliasing |
 | `User::as('u')`       | `TableRef('users', 'u')`         | Aliased FROM / JOIN — call `$u->field('email')` for `'u.email'` |
+| `User::alias('name', 'user_name')` | `['users.name', 'user_name']` | Tuple `[col, alias]` for `Query::select()`. Same shape via `TableRef::alias()` when you want the table's alias instead of its name |
 
 Use them instead of hand-writing string literals — refactoring a table
 name then changes one constant and the rest follows.
@@ -722,10 +723,28 @@ $rows = User::query()
     ->get();
 ```
 
-Columns can be qualified strings (`'users.name'`) and may carry an alias
-(`'users.name AS user_name'`, `'name AS type_name'`) — the builder
-quotes both sides automatically via `Identifier::qualify()`. Same for
-tables passed as strings to `from()` / `join()` (`'users AS u'`).
+Columns can be qualified strings (`'users.name'`) — the builder quotes
+them automatically via `Identifier::qualify()`. Same for tables passed
+as strings to `from()` / `join()` (`'users AS u'`).
+
+**Aliasing a column.** Two shapes; the tuple is preferred:
+
+```php
+$q->select('id', ['name', 'type_name']);          // recommended — typed tuple
+$q->select('id', 'name AS type_name');            // also accepted (legacy / hand-written)
+
+// Same with helpers that emit the tuple shape:
+$q->select('id', User::alias('name', 'type_name'));
+//   ['users.name', 'type_name']  → `users`.`name` AS `type_name`
+
+$u = User::as('u');
+$q->from($u)->select($u->alias('name', 'who'));
+//   ['u.name', 'who']            → `u`.`name` AS `who`
+```
+
+The tuple form (`[column, alias]`) sidesteps any whitespace / keyword
+parsing and composes naturally with `Model::alias()` and
+`TableRef::alias()`. Use it for any aliased column in new code.
 
 For typed aliased joins, pair `Model::as()` with `from()`:
 

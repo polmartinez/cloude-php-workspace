@@ -202,6 +202,23 @@ $rows = User::query()->from($u)
 
 $sql = 'SELECT * FROM ' . User::table() . ' WHERE ' . User::field('active') . ' = 1';
 
+// Column aliases. The preferred form is a [column, alias] tuple — both
+// Model::alias() and TableRef::alias() emit exactly that shape, so you
+// can drop them into select() as-is.
+
+$rows = User::query()
+    ->select('id', ['name', 'user_name'])              // raw tuple
+    ->select('id', User::alias('name', 'user_name'))   // model-qualified tuple
+    ->get();
+
+$u = User::as('u');
+$rows = User::query()->from($u)
+    ->select($u->alias('name', 'who'), $u->alias('email', 'addr'))
+    ->get();
+
+// The legacy 'name AS user_name' string form still works — useful when
+// you're hand-writing or migrating older code.
+
 // ── Beyond the builder: drop to PDO ──────────────────────────────────────────
 //
 // The builder covers SELECT/INSERT/UPDATE/DELETE + WHERE + JOIN + ORDER/LIMIT.

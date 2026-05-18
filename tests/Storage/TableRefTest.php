@@ -105,4 +105,13 @@ final class TableRefTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         Identifier::qualify('COUNT(*) AS total');
     }
+
+    public function testAliasHelperReturnsTuple(): void
+    {
+        $t = new TableRef('users');
+        self::assertSame(['users.name', 'user_name'], $t->alias('name', 'user_name'));
+
+        $u = new TableRef('users', 'u');
+        self::assertSame(['u.name', 'who'], $u->alias('name', 'who'));
+    }
 }

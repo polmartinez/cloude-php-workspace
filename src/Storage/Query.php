@@ -136,11 +136,41 @@ final class Query
 
     /**
      * Pick which columns to SELECT. Pass none to reset to `*`. Each
-     * column may be qualified (`'u.email'`, `'orders.*'`).
+     * column may be:
+     *
+     *   - a plain identifier:    `'email'`
+     *   - a qualified one:       `'u.email'`, `'orders.*'`
+     *   - an aliased pair (**recommended**): `['name', 'type_name']`
+     *     compiles to `` `name` AS `type_name` ``
+     *   - a legacy `AS` string:  `'name AS type_name'` — still accepted
+     *
+     * The two-element-array form is preferred because it composes with
+     * helpers like `Model::alias()` and `TableRef::alias()` (which both
+     * emit the same shape), and because it sidesteps any whitespace /
+     * keyword parsing.
+     *
+     * @param string|array{0:string, 1:string} ...$columns
      */
-    public function select(string ...$columns): static
+    public function select(string|array ...$columns): static
     {
-        $this->select = $columns === [] ? ['*'] : array_values($columns);
+        if ($columns === []) {
+            $this->select = ['*'];
+            return $this;
+        }
+        $normalised = [];
+        foreach ($columns as $col) {
+            if (is_array($col)) {
+                if (count($col) !== 2 || !isset($col[0], $col[1])) {
+                    throw new \InvalidArgumentException(
+                        'Aliased column must be a two-element [column, alias] array',
+                    );
+                }
+                $normalised[] = $col[0] . ' AS ' . $col[1];
+            } else {
+                $normalised[] = $col;
+            }
+        }
+        $this->select = $normalised;
         return $this;
     }
 

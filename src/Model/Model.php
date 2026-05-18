@@ -304,6 +304,23 @@ abstract class Model
         return new \Cloude\Storage\TableRef(static::$table);
     }
 
+    /**
+     * Build the typed `[column, alias]` pair that `Query::select()`
+     * accepts. The column is qualified by this model's table:
+     *
+     *   User::alias('name', 'user_name');
+     *   // → ['users.name', 'user_name']
+     *
+     *   User::query()->select('id', User::alias('name', 'user_name'))->get();
+     *   // SELECT `id`, `users`.`name` AS `user_name` FROM `users`
+     *
+     * @return array{0:string, 1:string}
+     */
+    public static function alias(string $column, string $alias): array
+    {
+        return [static::$table . '.' . $column, $alias];
+    }
+
     // ── static finders ─────────────────────────────────────────────────────
 
     public static function find(mixed $id): ?static
