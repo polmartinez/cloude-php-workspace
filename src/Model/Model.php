@@ -96,63 +96,6 @@ abstract class Model
     protected static array $properties = [];
 
     /**
-     * Subclass: optional schema description used by
-     * {@see \Cloude\Storage\Schema} to emit `CREATE TABLE` SQL.
-     *
-     * The framework does NOT track migrations / diffs / versions — this
-     * is metadata for bootstrapping a database or feeding into a real
-     * migration tool. Leave empty when you manage schema separately.
-     *
-     *   protected static array $columns = [
-     *       'id'         => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false, 'auto_increment' => true, 'primary' => true],
-     *       'email'      => ['type' => 'VARCHAR(255)', 'null' => false],
-     *       'role_id'    => ['type' => 'INT', 'unsigned' => true, 'null' => true, 'default' => null],
-     *       'created_at' => ['type' => 'DATETIME', 'null' => false, 'default' => 'CURRENT_TIMESTAMP'],
-     *   ];
-     *
-     * @var array<string, array<string,mixed>>
-     */
-    protected static array $columns = [];
-
-    /**
-     * Subclass: optional UNIQUE / INDEX declarations. Used together with
-     * {@see $columns} by `createTableSql()` / `Schema::createTableSql`.
-     *
-     *   protected static array $indexes = [
-     *       ['type' => 'unique', 'columns' => ['email']],
-     *       ['type' => 'index',  'columns' => ['role_id']],
-     *       ['type' => 'unique', 'columns' => ['tenant_id', 'slug'], 'name' => 'uq_tenant_slug'],
-     *   ];
-     *
-     * `name` is auto-derived (`uq_{table}_{cols}` / `idx_{table}_{cols}`)
-     * when omitted.
-     *
-     * @var list<array<string,mixed>>
-     */
-    protected static array $indexes = [];
-
-    /**
-     * Subclass: optional foreign-key declarations.
-     *
-     *   protected static array $foreignKeys = [
-     *       [
-     *           'columns'    => ['role_id'],
-     *           'references' => 'roles',
-     *           'on'         => ['id'],
-     *           'on_delete'  => 'set null',
-     *           'on_update'  => 'cascade',
-     *       ],
-     *   ];
-     *
-     * Referential actions: `cascade`, `set null`, `restrict`,
-     * `no action`, `set default` (case-insensitive). Anything else
-     * throws when `createTableSql()` runs.
-     *
-     * @var list<array<string,mixed>>
-     */
-    protected static array $foreignKeys = [];
-
-    /**
      * Subclass: optional `column => type` map. The framework normalises
      * values on read (storage → PHP) and write (PHP → storage). Null
      * always passes through untouched, so nullable columns stay nullable.
@@ -362,22 +305,50 @@ abstract class Model
     }
 
     /**
-     * Render the `CREATE TABLE` SQL for this model from its
-     * {@see $columns}, {@see $indexes} and {@see $foreignKeys}
-     * declarations. Throws when the model has no `$columns`.
+     * Render the `CREATE TABLE` SQL for this model. The subclass
+     * declares its own static properties — the base class doesn't ship
+     * empty `$columns` / `$indexes` / `$foreignKeys` to keep the
+     * surface lean for models that don't emit DDL:
+     *
+     *   class User extends Model {
+     *       protected static string $table = 'users';
+     *
+     *       protected static array $columns = [
+     *           'id'    => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false,
+     *                       'auto_increment' => true, 'primary' => true],
+     *           'email' => ['type' => 'VARCHAR(255)', 'null' => false],
+     *       ];
+     *
+     *       protected static array $indexes = [
+     *           ['type' => 'unique', 'columns' => ['email']],
+     *       ];
+     *
+     *       protected static array $foreignKeys = [
+     *           // optional FKs with on_delete / on_update
+     *       ];
+     *   }
+     *
+     *   echo User::createTableSql();
+     *
+     * Throws `\LogicException` when the subclass hasn't declared
+     * `$columns` (or declared it empty) — there's nothing to emit.
      */
     public static function createTableSql(string $dialect = 'mysql'): string
     {
-        if (static::$columns === []) {
+        $columns     = self::readSchemaProperty('columns');
+        $indexes     = self::readSchemaProperty('indexes');
+        $foreignKeys = self::readSchemaProperty('foreignKeys');
+
+        if ($columns === []) {
             throw new \LogicException(
-                static::class . '::createTableSql() requires a non-empty $columns declaration',
+                static::class . '::createTableSql() requires a non-empty $columns declaration on the subclass',
             );
         }
         return \Cloude\Storage\Schema::createTableSql(
             static::$table,
-            static::$columns,
-            static::$indexes,
-            static::$foreignKeys,
+            $columns,
+            $indexes,
+            $foreignKeys,
             $dialect,
         );
     }
@@ -385,6 +356,24 @@ abstract class Model
     public static function dropTableSql(string $dialect = 'mysql'): string
     {
         return \Cloude\Storage\Schema::dropTableSql(static::$table, $dialect);
+    }
+
+    /**
+     * Read a static property by name from the late-bound class, falling
+     * back to an empty array when the subclass hasn't declared it.
+     * Lets the base `Model` skip declaring optional schema metadata
+     * without breaking late-binding for subclasses that DO declare it.
+     *
+     * @return array<mixed>
+     */
+    private static function readSchemaProperty(string $name): array
+    {
+        if (!property_exists(static::class, $name)) {
+            return [];
+        }
+        /** @var array<mixed> $value */
+        $value = static::${$name};
+        return $value;
     }
 
     /**
