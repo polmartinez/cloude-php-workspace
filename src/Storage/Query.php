@@ -686,12 +686,15 @@ final class Query
         return Identifier::qualify($identifier, $this->quoteChar);
     }
 
-    /** Render a FROM / JOIN target, honoring TableRef aliases. */
+    /**
+     * Render a FROM / JOIN target. Honors `TableRef` aliases, and also
+     * accepts string forms — bare (`'users'`) or aliased (`'users AS u'`).
+     */
     private function qualifyTable(string|TableRef $table): string
     {
         return $table instanceof TableRef
             ? $table->expression($this->quoteChar)
-            : Identifier::quote($table, $this->quoteChar);
+            : Identifier::qualify($table, $this->quoteChar);
     }
 
     /** For pluck/value: column results are keyed by the last dot segment. */

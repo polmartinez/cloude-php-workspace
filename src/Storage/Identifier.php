@@ -37,19 +37,33 @@ final class Identifier
     }
 
     /**
-     * Quotes a (possibly dotted) column reference. Handles three shapes:
+     * Quotes a (possibly dotted, possibly aliased) reference. Handles:
      *
-     *   qualify('email');         // → `email`
-     *   qualify('users.email');   // → `users`.`email`
-     *   qualify('users.*');       // → `users`.*
-     *   qualify('*');             // → *
+     *   qualify('email');                       // → `email`
+     *   qualify('users.email');                 // → `users`.`email`
+     *   qualify('users.*');                     // → `users`.*
+     *   qualify('*');                           // → *
+     *   qualify('name AS type_name');           // → `name` AS `type_name`
+     *   qualify('users.name AS user_name');     // → `users`.`name` AS `user_name`
+     *   qualify('users AS u');                  // → `users` AS `u`     (table form)
      *
-     * Anything outside `column` / `table.column` / `table.*` / `*` throws.
-     * No other dotted forms (`db.schema.table.col`) are supported — drop
-     * to raw SQL when you need three-part names.
+     * The `AS` keyword is matched case-insensitively with surrounding
+     * whitespace. The aliased side must be a single bare identifier —
+     * complex expressions (`COUNT(*) AS total`, function calls, raw
+     * concatenations) still throw. Drop to raw PDO for those.
+     *
+     * Three-part dotted names (`db.schema.table.col`) are rejected; drop
+     * to raw SQL.
      */
     public static function qualify(string $expr, string $quoteChar = '`'): string
     {
+        // Split off the alias first: `<left> AS <alias>` (case-insensitive).
+        if (preg_match('/^(.+?)\s+AS\s+(.+)$/i', $expr, $m) === 1) {
+            $left  = self::qualify(trim($m[1]), $quoteChar);
+            $alias = self::quote(trim($m[2]), $quoteChar);
+            return $left . ' AS ' . $alias;
+        }
+
         if ($expr === '*') {
             return '*';
         }

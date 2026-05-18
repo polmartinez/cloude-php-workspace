@@ -441,4 +441,42 @@ final class QueryTest extends TestCase
         $names = $this->q()->orderBy('id')->pluck('users.name');
         self::assertSame(['Ada', 'Alan', 'Grace', 'Linus', 'None'], $names);
     }
+
+    // ── column aliases in SELECT ─────────────────────────────────────────
+
+    public function testSelectColumnAlias(): void
+    {
+        $rows = $this->q()
+            ->select('name AS user_name')
+            ->where('id', 1)
+            ->get();
+        self::assertSame([['user_name' => 'Ada']], $rows);
+    }
+
+    public function testSelectQualifiedColumnAliasWithJoin(): void
+    {
+        // Repro of the user-reported bug: `name AS type_name` in a SELECT
+        // alongside a join used to throw `Invalid SQL identifier`.
+        $this->seedOrders();
+        $this->pdo->exec('CREATE TABLE roles (
+            id   INTEGER PRIMARY KEY,
+            name TEXT
+        )');
+        $this->pdo->exec("INSERT INTO roles VALUES (1, 'admin')");
+
+        $sql = $this->q()
+            ->select('users.name AS user_name', 'roles.name AS role_name')
+            ->compile();
+        self::assertStringContainsString('`users`.`name` AS `user_name`', $sql);
+        self::assertStringContainsString('`roles`.`name` AS `role_name`', $sql);
+    }
+
+    public function testFromAcceptsAliasedTableString(): void
+    {
+        $sql = (new Query($this->pdo, 'users AS u'))
+            ->select('u.name AS who')
+            ->compile();
+        self::assertStringContainsString('FROM `users` AS `u`', $sql);
+        self::assertStringContainsString('`u`.`name` AS `who`', $sql);
+    }
 }

@@ -722,9 +722,12 @@ $rows = User::query()
     ->get();
 ```
 
-Columns can be qualified strings (`'users.name'`) — the builder quotes
-them automatically via `Identifier::qualify()`. For aliased joins, pair
-`Model::as()` with `from()`:
+Columns can be qualified strings (`'users.name'`) and may carry an alias
+(`'users.name AS user_name'`, `'name AS type_name'`) — the builder
+quotes both sides automatically via `Identifier::qualify()`. Same for
+tables passed as strings to `from()` / `join()` (`'users AS u'`).
+
+For typed aliased joins, pair `Model::as()` with `from()`:
 
 ```php
 $u = User::as('u');

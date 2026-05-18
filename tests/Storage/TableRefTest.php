@@ -69,4 +69,40 @@ final class TableRefTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         Identifier::qualify('users.id; DROP TABLE');
     }
+
+    public function testIdentifierQualifyHandlesAliasedColumns(): void
+    {
+        self::assertSame(
+            '`name` AS `type_name`',
+            Identifier::qualify('name AS type_name'),
+        );
+        self::assertSame(
+            '`users`.`name` AS `user_name`',
+            Identifier::qualify('users.name AS user_name'),
+        );
+        // Lower-case `as` keyword and extra whitespace.
+        self::assertSame(
+            '`name` AS `n`',
+            Identifier::qualify('name   as   n'),
+        );
+    }
+
+    public function testIdentifierQualifyHandlesAliasedTables(): void
+    {
+        self::assertSame(
+            '`users` AS `u`',
+            Identifier::qualify('users AS u'),
+        );
+        self::assertSame(
+            '"users" AS "u"',
+            Identifier::qualify('users AS u', '"'),
+        );
+    }
+
+    public function testIdentifierQualifyRejectsExpressionAlias(): void
+    {
+        // The aliased side must be a single bare identifier.
+        $this->expectException(\InvalidArgumentException::class);
+        Identifier::qualify('COUNT(*) AS total');
+    }
 }
