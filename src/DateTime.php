@@ -49,7 +49,7 @@ namespace Cloude;
  *   $d->diffInMinutes(...);    // … and `Hours`, `Seconds`
  *   $d->diffForHumans();       // "in 3 days", "2 hours ago" — English
  *
- * Cast integration: declaring `'col' => 'datetime'` in `Model::$casts`
+ * Cast integration: declaring `'col' => 'datetime'` in `Model::$types`
  * yields instances of this class, so the helpers are available without
  * any extra wiring.
  */

@@ -160,8 +160,8 @@ cloude-php-workspace/
 
 | Class | Responsibility |
 |---|---|
-| `Cloude\Model\Model` | Abstract Active Record. Subclass with `protected static string $table` + `$connection` (+ optional `$casts`). CRUD via `find` / `findBy` / `create` / `save` / `delete`. Static helpers: `table()`, `field('col')`, `as('alias')`, `ref()`, `query()` |
-| `Cloude\Model\Cast` | Opt-in attribute coercion driven by the `$casts` map: `int`, `float`, `string`, `bool`, `decimal[:N]`, `json`/`array`, `datetime[:FMT]`, `date[:FMT]`, `enum:FQCN`. Null passes through |
+| `Cloude\Model\Model` | Abstract Active Record. Subclass with `protected static string $table` + `$connection` (+ optional `$types`). CRUD via `find` / `findBy` / `create` / `save` / `delete`. Static helpers: `table()`, `field('col')`, `as('alias')`, `ref()`, `query()` |
+| `Cloude\Model\Cast` | Opt-in attribute coercion driven by the `$types` map: `int`, `float`, `string`, `bool`, `decimal[:N]`, `json`/`array`, `datetime[:FMT]`, `date[:FMT]`, `enum:FQCN`. Null passes through |
 | `Cloude\Model\Storage\PdoStorage` | PDO-backed adapter. Driven by `Cloude\Storage\Connection` named pool |
 | `Cloude\Model\Storage\JsonStorage` | One JSON file per row (collection mode) or one big array (collection storage) |
 | `Cloude\Model\Storage\MarkdownStorage` | Markdown body + frontmatter as a row |
@@ -598,9 +598,9 @@ entirely (e.g. sharded sub-directories).
 the chainable pipeline is one method call away — see the
 [recipe](examples/recipes/data.php) for the full pattern.
 
-### `Cloude\Model\Model` — typed attribute casts
+### `Cloude\Model\Model` — `$types` (attribute coercion)
 
-Declare a `$casts` map on the subclass and the framework normalises
+Declare a `$types` map on the subclass and the framework normalises
 values when reading (storage → PHP) and writing (PHP → storage). Null
 always passes through — nullable columns stay nullable.
 
@@ -612,7 +612,7 @@ enum Status: string { case Active = 'active'; case Banned = 'banned'; }
 class Product extends Model
 {
     protected static string $table = 'products';
-    protected static array  $casts = [
+    protected static array  $types = [
         'id'          => 'int',
         'price'       => 'decimal:2',
         'in_stock'    => 'bool',
@@ -647,7 +647,7 @@ Apply points: `Model::hydrate()` (called by `find` / `findBy` / `all`),
 returns the raw PHP-typed attributes; pass `serialize: true` to get the
 write-cast scalars (handy for `Response::json($u->toArray(true))`).
 
-Leave `$casts` empty (the default) to opt out — the model behaves
+Leave `$types` empty (the default) to opt out — the model behaves
 exactly as before. Unknown cast types throw `\InvalidArgumentException`
 so typos surface fast.
 
@@ -902,13 +902,10 @@ $sql = Schema::createTableSql('users', [
 //   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ```
 
-When you have a `Cloude\Model\Model` subclass with `$columns /
-$indexes / $foreignKeys` declared, the shortcut is:
-
-```php
-echo User::createTableSql();      // mysql by default
-echo User::dropTableSql('pgsql'); // → DROP TABLE IF EXISTS "users"
-```
+`Schema` is **standalone** — `Cloude\Model\Model` deliberately does
+NOT carry schema-emission methods. Models declare `$types` for
+runtime cast behaviour; DDL stays a separate concern that you call
+explicitly when you need it.
 
 **Column descriptor** keys: `type` (required), `null` (default `true`),
 `default` (omitted unless set; `null` emits `DEFAULT NULL`, SQL
@@ -1130,7 +1127,7 @@ The result is memoized for the request — `Config::reset()` clears it.
 
 Tiny immutable date helper extending `\DateTimeImmutable`. Drop-in for
 any `\DateTimeInterface` consumer; adds the shortcuts you'd otherwise
-copy-paste between projects. The `datetime` cast in `Model::$casts`
+copy-paste between projects. The `datetime` cast in `Model::$types`
 hydrates into this class automatically, so the helpers work on attribute
 values without any extra wiring.
 

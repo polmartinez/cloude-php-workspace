@@ -7,7 +7,7 @@ namespace Cloude\Model;
 /**
  * Opt-in attribute type coercion for `Cloude\Model\Model` subclasses.
  *
- * Declare a `$casts` map on the model and the framework will normalise
+ * Declare a `$types` map on the model and the framework will normalise
  * values when reading (storage → PHP) and writing (PHP → storage). Null
  * always passes through untouched — that's by design, so nullable
  * columns don't surprise you with `0` / `''` / wrong defaults.
@@ -16,7 +16,7 @@ namespace Cloude\Model;
  *   {
  *       protected static string $table = 'products';
  *
- *       protected static array $casts = [
+ *       protected static array $types = [
  *           'id'          => 'int',
  *           'price'       => 'decimal:2',     // string "12.50" both ways
  *           'in_stock'    => 'bool',

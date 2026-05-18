@@ -102,7 +102,7 @@ abstract class Model
      *
      * See {@see \Cloude\Model\Cast} for the type catalogue. Typical use:
      *
-     *   protected static array $casts = [
+     *   protected static array $types = [
      *       'id'          => 'int',
      *       'price'       => 'decimal:2',
      *       'in_stock'    => 'bool',
@@ -115,7 +115,7 @@ abstract class Model
      *
      * @var array<string,string>
      */
-    protected static array $casts = [];
+    protected static array $types = [];
 
     /** @var array<class-string, Storage> */
     private static array $storages = [];
@@ -305,78 +305,6 @@ abstract class Model
     }
 
     /**
-     * Render the `CREATE TABLE` SQL for this model. The subclass
-     * declares its own static properties — the base class doesn't ship
-     * empty `$columns` / `$indexes` / `$foreignKeys` to keep the
-     * surface lean for models that don't emit DDL:
-     *
-     *   class User extends Model {
-     *       protected static string $table = 'users';
-     *
-     *       protected static array $columns = [
-     *           'id'    => ['type' => 'BIGINT', 'unsigned' => true, 'null' => false,
-     *                       'auto_increment' => true, 'primary' => true],
-     *           'email' => ['type' => 'VARCHAR(255)', 'null' => false],
-     *       ];
-     *
-     *       protected static array $indexes = [
-     *           ['type' => 'unique', 'columns' => ['email']],
-     *       ];
-     *
-     *       protected static array $foreignKeys = [
-     *           // optional FKs with on_delete / on_update
-     *       ];
-     *   }
-     *
-     *   echo User::createTableSql();
-     *
-     * Throws `\LogicException` when the subclass hasn't declared
-     * `$columns` (or declared it empty) — there's nothing to emit.
-     */
-    public static function createTableSql(string $dialect = 'mysql'): string
-    {
-        $columns     = self::readSchemaProperty('columns');
-        $indexes     = self::readSchemaProperty('indexes');
-        $foreignKeys = self::readSchemaProperty('foreignKeys');
-
-        if ($columns === []) {
-            throw new \LogicException(
-                static::class . '::createTableSql() requires a non-empty $columns declaration on the subclass',
-            );
-        }
-        return \Cloude\Storage\Schema::createTableSql(
-            static::$table,
-            $columns,
-            $indexes,
-            $foreignKeys,
-            $dialect,
-        );
-    }
-
-    public static function dropTableSql(string $dialect = 'mysql'): string
-    {
-        return \Cloude\Storage\Schema::dropTableSql(static::$table, $dialect);
-    }
-
-    /**
-     * Read a static property by name from the late-bound class, falling
-     * back to an empty array when the subclass hasn't declared it.
-     * Lets the base `Model` skip declaring optional schema metadata
-     * without breaking late-binding for subclasses that DO declare it.
-     *
-     * @return array<mixed>
-     */
-    private static function readSchemaProperty(string $name): array
-    {
-        if (!property_exists(static::class, $name)) {
-            return [];
-        }
-        /** @var array<mixed> $value */
-        $value = static::${$name};
-        return $value;
-    }
-
-    /**
      * Build the typed `[column, alias]` pair that `Query::select()`
      * accepts. The column is qualified by this model's table:
      *
@@ -505,10 +433,10 @@ abstract class Model
      */
     public function toArray(bool $serialize = false): array
     {
-        if (!$serialize || static::$casts === []) {
+        if (!$serialize || static::$types === []) {
             return $this->attributes;
         }
-        return self::applyCasts($this->attributes, /* write: */ true);
+        return self::applyTypes($this->attributes, /* write: */ true);
     }
 
     /**
@@ -519,9 +447,9 @@ abstract class Model
     {
         $this->beforeSave();
 
-        $payload = static::$casts === []
+        $payload = static::$types === []
             ? $this->attributes
-            : self::applyCasts($this->attributes, /* write: */ true);
+            : self::applyTypes($this->attributes, /* write: */ true);
 
         if ($this->isPersisted && $this->id() !== null) {
             unset($payload[static::$primaryKey]);                // never re-write PK
@@ -561,9 +489,9 @@ abstract class Model
         }
         $row = static::storage()->find($this->id());
         if ($row !== null) {
-            $this->attributes = static::$casts === []
+            $this->attributes = static::$types === []
                 ? $row
-                : self::applyCasts($row, /* write: */ false);
+                : self::applyTypes($row, /* write: */ false);
         }
         return $this;
     }
@@ -590,7 +518,7 @@ abstract class Model
     public static function hydrate(array $row): static
     {
         $instance = new static();
-        $instance->attributes  = static::$casts === [] ? $row : self::applyCasts($row, /* write: */ false);
+        $instance->attributes  = static::$types === [] ? $row : self::applyTypes($row, /* write: */ false);
         $instance->isPersisted = true;
         return $instance;
     }
@@ -601,9 +529,9 @@ abstract class Model
      * @param  array<string,mixed> $attrs
      * @return array<string,mixed>
      */
-    private static function applyCasts(array $attrs, bool $write): array
+    private static function applyTypes(array $attrs, bool $write): array
     {
-        foreach (static::$casts as $col => $type) {
+        foreach (static::$types as $col => $type) {
             if (!array_key_exists($col, $attrs)) {
                 continue;
             }

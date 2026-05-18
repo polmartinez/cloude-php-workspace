@@ -52,7 +52,7 @@ class User extends Model
      *
      * @var array<string,string>
      */
-    protected static array $casts = [
+    protected static array $types = [
         'id'         => 'int',
         'active'     => 'bool',
         'tags'       => 'json',

@@ -26,7 +26,7 @@ final class TypedUser extends Model
     /** @var list<string> */
     protected static array $properties = ['id', 'email', 'age', 'score', 'price', 'verified', 'tags', 'created_at', 'status'];
     /** @var array<string,string> */
-    protected static array $casts = [
+    protected static array $types = [
         'id'         => 'int',
         'age'        => 'int',
         'score'      => 'float',
@@ -216,7 +216,7 @@ final class CastTest extends TestCase
 
     public function testCastsAreOptional(): void
     {
-        // A model without $casts behaves exactly as before — no coercion.
+        // A model without $types behaves exactly as before — no coercion.
         $u = NoCastUser::hydrate(['id' => '7', 'name' => 'Ada']);
         self::assertSame('7', $u->id);   // stays string
         self::assertSame('Ada', $u->name);
