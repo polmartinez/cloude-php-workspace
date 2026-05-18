@@ -125,7 +125,11 @@ final class Cast
 
     private static function readDateTime(string $value): \DateTimeImmutable
     {
-        return new \DateTimeImmutable($value);
+        // Return the framework's `Cloude\DateTime` (subclass of
+        // DateTimeImmutable) so all the helper methods are available
+        // without any extra wiring. Still polymorphic — every existing
+        // `\DateTimeInterface` consumer keeps working.
+        return new \Cloude\DateTime($value);
     }
 
     /**

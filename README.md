@@ -123,6 +123,7 @@ cloude-php-workspace/
 | `Cloude\Cli` | Argv parsing + colored output for `app/cli/` scripts |
 | `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
 | `Cloude\Config` | Env helpers (`env`/`boolEnv`); multi-env file loader (`configure`/`load`/`get`); typed accessors (`baseUrl`/`debug`/`path`); legacy `defineBaseUrl`/`defineDebug` |
+| `Cloude\DateTime` | Tiny immutable date helper extending `\DateTimeImmutable`. Static constructors (`now`/`today`/`parse`/`fromTimestamp`); format shortcuts (`toDateString`/`toTimeString`/`toDateTimeString`/`toIsoString`); arithmetic (`addDays`/`addHours`/`addMinutes`/…); boundaries (`startOfDay`/`endOfMonth`/…); comparisons (`isPast`/`isToday`/`isSameDay`/…); signed `diffIn{Days,Hours,Minutes,Seconds}` and English `diffForHumans()`. Used automatically by the `datetime` cast |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
@@ -971,6 +972,61 @@ already defined), `app.base_url` config, `BASE_URL` env var,
 auto-detected scheme + Host (validated against the optional allowlist;
 non-allowed hosts collapse to `localhost` to prevent header injection).
 The result is memoized for the request — `Config::reset()` clears it.
+
+### `Cloude\DateTime`
+
+Tiny immutable date helper extending `\DateTimeImmutable`. Drop-in for
+any `\DateTimeInterface` consumer; adds the shortcuts you'd otherwise
+copy-paste between projects. The `datetime` cast in `Model::$casts`
+hydrates into this class automatically, so the helpers work on attribute
+values without any extra wiring.
+
+```php
+use Cloude\DateTime;
+
+// Static constructors
+DateTime::now();                        // current moment
+DateTime::today();                      // today at 00:00:00
+DateTime::parse('2026-05-18 14:30');    // throws \InvalidArgumentException on bad input
+DateTime::fromTimestamp(1716000000);
+
+// Format shortcuts
+$d->toDateString();        // 'Y-m-d'         → '2026-05-18'
+$d->toTimeString();        // 'H:i:s'         → '14:30:00'
+$d->toDateTimeString();    // 'Y-m-d H:i:s'   → '2026-05-18 14:30:00'
+$d->toIsoString();         // 'c' / RFC 3339  → '2026-05-18T14:30:00+02:00'
+
+// Arithmetic (immutable — always returns a new instance)
+$d->addDays(7)->subHours(2)->addMinutes(30);
+$d->addWeeks(1); $d->addMonths(1); $d->addYears(1);
+$d->subSeconds(10); $d->subDays(3); // ... etc
+
+// Boundaries
+$d->startOfDay();          // 00:00:00
+$d->endOfDay();            // 23:59:59
+$d->startOfMonth();        // 1st of the month at 00:00:00
+$d->endOfMonth();          // last of the month at 23:59:59
+
+// Comparisons
+$d->isPast();     $d->isFuture();
+$d->isToday();    $d->isYesterday();  $d->isTomorrow();
+$d->isBefore($other);  $d->isAfter($other);  $d->isSameDay($other);
+
+// Signed diffs — positive when $other is later than $this
+$d->diffInSeconds($other);
+$d->diffInMinutes($other);
+$d->diffInHours($other);
+$d->diffInDays($other);
+
+// English "5 minutes ago" / "in 3 days"
+$d->diffForHumans();           // vs now()
+$d->diffForHumans($reference); // vs explicit reference (testable)
+```
+
+**Not in scope** by design: localised relative strings (use
+`IntlDateFormatter::formatRelative` for multi-language), business-day
+arithmetic, calendar systems. Standard PHP `format()` / `setTimezone()`
+/ `setTime()` / `modify()` etc. are inherited untouched.
 
 ### `Cloude\Http\ErrorHandler`
 
