@@ -266,6 +266,11 @@ abstract class Model
      * `no action`, `set default` (case-insensitive). Anything else
      * throws when `foreignKeysSql()` runs.
      *
+     * **Both `on_delete` and `on_update` are always emitted in the
+     * SQL**, defaulting to `NO ACTION` when not declared. The generated
+     * `ALTER TABLE` carries explicit referential semantics every time —
+     * no fallback to driver / engine implicit defaults.
+     *
      * @var list<array<string,mixed>>
      */
     protected static array $foreignKeys = [];

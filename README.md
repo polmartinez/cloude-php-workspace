@@ -1016,6 +1016,25 @@ declaration automatically), `comment`.
 **Foreign-key referential actions**: `cascade`, `set null`, `restrict`,
 `no action`, `set default` (case-insensitive). Anything else throws.
 
+**Always emitted.** `ON DELETE` and `ON UPDATE` are written into every
+emitted FK statement, even when the declaration omits one or both
+keys. The default is `NO ACTION` (the SQL standard). This keeps the
+generated SQL explicit — the database (and any reader of the ALTER
+TABLE) sees the exact referential semantics, with no fallback to
+driver / engine implicit defaults.
+
+```php
+Schema::foreignKeySql('orders', [
+    'columns'    => ['user_id'],
+    'references' => 'users',
+    'on'         => ['id'],
+    // on_delete / on_update omitted
+]);
+// → ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id`
+//   FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+//   ON DELETE NO ACTION ON UPDATE NO ACTION
+```
+
 **SQLite caveat:** the generated SQL uses MySQL-style `UNIQUE KEY <name> (cols)`
 inside the CREATE which SQLite doesn't parse. Either skip the indexes
 on SQLite or write them as `UNIQUE (cols)` (no name) by hand. Schema's

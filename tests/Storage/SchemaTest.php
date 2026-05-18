@@ -196,6 +196,41 @@ final class SchemaTest extends TestCase
         );
     }
 
+    public function testForeignKeySqlEmitsExplicitNoActionDefaults(): void
+    {
+        // When the declaration omits on_delete / on_update, the emitter
+        // fills in `NO ACTION` (the SQL standard default) so the ALTER
+        // statement always carries explicit referential semantics. No
+        // surprises from the driver / engine falling back to its own
+        // implicit default.
+        self::assertSame(
+            'ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id`'
+            . ' FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)'
+            . ' ON DELETE NO ACTION ON UPDATE NO ACTION',
+            Schema::foreignKeySql('orders', [
+                'columns'    => ['user_id'],
+                'references' => 'users',
+                'on'         => ['id'],
+            ]),
+        );
+    }
+
+    public function testForeignKeySqlMixesProvidedAndDefaultedActions(): void
+    {
+        // Only on_delete provided — on_update defaults to NO ACTION.
+        self::assertSame(
+            'ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id`'
+            . ' FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)'
+            . ' ON DELETE CASCADE ON UPDATE NO ACTION',
+            Schema::foreignKeySql('orders', [
+                'columns'    => ['user_id'],
+                'references' => 'users',
+                'on'         => ['id'],
+                'on_delete'  => 'cascade',
+            ]),
+        );
+    }
+
     public function testForeignKeySqlExecutableOnSqlite(): void
     {
         // SQLite parses `ALTER TABLE ... ADD CONSTRAINT FOREIGN KEY` as

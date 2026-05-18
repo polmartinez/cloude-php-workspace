@@ -47,8 +47,13 @@ namespace Cloude\Storage;
  *       'name'       => 'fk_users_role_id',     // optional
  *   ]
  *
- * The `on_delete` / `on_update` strings are validated against the
- * standard ANSI referential-action set. Anything else throws.
+ * Both action keys are validated against the standard ANSI
+ * referential-action set; anything else throws. **`on_delete` and
+ * `on_update` always appear in the emitted SQL**, defaulting to
+ * `NO ACTION` (the SQL standard) when not declared. The output is
+ * always explicit so the database — and any reader of the
+ * generated `ALTER TABLE` — knows exactly what each constraint
+ * does, no implicit defaults left to driver / engine.
  */
 final class Schema
 {
@@ -190,14 +195,9 @@ final class Schema
             . ' ADD CONSTRAINT ' . self::quote($name, $q)
             . ' FOREIGN KEY (' . self::quoteList($columns, $q) . ')'
             . ' REFERENCES ' . self::quote($references, $q)
-            . ' (' . self::quoteList($on, $q) . ')';
-
-        if (isset($fk['on_delete'])) {
-            $sql .= ' ON DELETE ' . self::referentialAction((string) $fk['on_delete']);
-        }
-        if (isset($fk['on_update'])) {
-            $sql .= ' ON UPDATE ' . self::referentialAction((string) $fk['on_update']);
-        }
+            . ' (' . self::quoteList($on, $q) . ')'
+            . ' ON DELETE ' . self::referentialAction((string) ($fk['on_delete'] ?? 'no action'))
+            . ' ON UPDATE ' . self::referentialAction((string) ($fk['on_update'] ?? 'no action'));
         return $sql;
     }
 
@@ -288,14 +288,9 @@ final class Schema
         $sql = 'CONSTRAINT ' . self::quote($name, $q)
             . ' FOREIGN KEY (' . self::quoteList($columns, $q) . ')'
             . ' REFERENCES ' . self::quote($references, $q)
-            . ' (' . self::quoteList($on, $q) . ')';
-
-        if (isset($fk['on_delete'])) {
-            $sql .= ' ON DELETE ' . self::referentialAction((string) $fk['on_delete']);
-        }
-        if (isset($fk['on_update'])) {
-            $sql .= ' ON UPDATE ' . self::referentialAction((string) $fk['on_update']);
-        }
+            . ' (' . self::quoteList($on, $q) . ')'
+            . ' ON DELETE ' . self::referentialAction((string) ($fk['on_delete'] ?? 'no action'))
+            . ' ON UPDATE ' . self::referentialAction((string) ($fk['on_update'] ?? 'no action'));
         return $sql;
     }
 
