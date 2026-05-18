@@ -137,6 +137,10 @@ pace; **prefer the Config-driven approach in new code**.
 | Truncate by the middle | `Str::truncateMiddle($path, 25)` | Keeps both ends, drops the middle — paths, hashes, breadcrumbs |
 | Dot-path access | `Arr::get($a, 'foo.bar.baz', $default)` | Also `set/has/forget/pluck/dot/undot/merge` |
 | Pipeline data | `Collection::make($rows)->filter(...)->sortBy(...)->take(...)->pluck(...)->all()` | Implements `ArrayAccess`, `Countable`, iterable |
+| Build a SQL query | `User::query()->where('age', '>', 18)->orderBy('name')->get()` | `Cloude\Storage\Query` — SELECT/INSERT/UPDATE/DELETE + WHERE/JOIN/ORDER BY |
+| Nested AND/OR predicates | `$q->where('active', 1)->whereGroup(fn ($g) => $g->where('role', 'admin')->orWhere('role', 'editor'))` | Use `orWhereGroup` for the OR-joined variant |
+| INNER / LEFT / RIGHT / CROSS JOIN | `$q->leftJoin('orders', 'orders.user_id', '=', 'users.id')` | Columns may be `'table.col'` strings; quoted automatically |
+| Static table / column references | `User::table()`, `User::field('email')`, `User::as('u')` | Avoid hand-writing `'users.email'` literals; pair `as()` with `Query::from()`/`join()` for typed joins |
 | Directory of `.json` per entity | extend `Data\JsonRepository` | Override `transform($data, $slug)` |
 | Directory of `.md` per entity | extend `Data\MarkdownRepository` | Reads `.md.gz` transparently |
 | Markdown → HTML | `Markdown::toHtml($md)` | In-house parser; no Parsedown |
@@ -199,11 +203,12 @@ Don't:
 ## What the framework deliberately does NOT include
 
 - **No migrations, no relations, no observers** in `Cloude\Model`.
-  CRUD by primary key + `findBy` by equality, plus a thin
-  `Cloude\Db\Query` builder for the 80% of queries that aren't joins
-  (SELECT/INSERT/UPDATE/DELETE + WHERE + ORDER BY + LIMIT/OFFSET). For
-  joins, unions, subqueries or aggregations beyond `count()`, drop to
-  the underlying PDO connection.
+  CRUD by primary key + `findBy` by equality, plus a `Cloude\Storage\Query`
+  builder covering SELECT/INSERT/UPDATE/DELETE + WHERE / nested
+  AND/OR groups (`whereGroup` / `orWhereGroup`) + INNER/LEFT/RIGHT/CROSS
+  JOIN with aliased `TableRef` + ORDER BY + LIMIT/OFFSET. For unions,
+  subqueries, window functions, CTEs or aggregations beyond `count()`,
+  drop to the underlying PDO connection.
 - **No HTTP client.** Use Guzzle directly.
 - **No template engine.** Plain PHP via `View::render`.
 - **No session / auth helpers.** Use `$_SESSION` and a route-level check

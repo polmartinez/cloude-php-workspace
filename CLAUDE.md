@@ -239,6 +239,9 @@ validate the same way, and `Response::redirect` on success.
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
 | Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
+| Nested WHERE groups (mix AND/OR with parens) | `$q->where(...)->whereGroup(fn ($g) => $g->where(...)->orWhere(...))->orWhereGroup(...)` | [`src/Storage/Query.php`](src/Storage/Query.php) |
+| JOIN two tables | `$q->join('orders', 'orders.user_id', '=', 'users.id')` (also `leftJoin`/`rightJoin`/`crossJoin`) | Columns may be qualified (`'users.email'`) — they're quoted automatically |
+| Reference table / column statically | `User::table()` / `User::field('email')` / `User::as('u')->field('email')` | Returns plain dotted strings; pair `User::as('u')` with `$q->from()` / `$q->join()` for typed joins |
 | Multi-env config (dev / prod / anything) | `Config::configure($path, $env)` + `Config::get('db.default.dsn')` | [`examples/recipes/config.php`](examples/recipes/config.php), [`tests/ConfigTest.php`](tests/ConfigTest.php) |
 | Send email (SMTP or sendmail) | `Mailer::forge()->send([...])` (reads `Config::get('mail')`) | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`src/Mail/`](src/Mail/) |
 | Named DB connection pool | `Connection::pdo('default')` reads `db.default` from config, caches per name | [`src/Storage/Connection.php`](src/Storage/Connection.php) |
@@ -261,10 +264,11 @@ The framework is intentionally minimal. If you're tempted to ask
 for any of these, **stop and reconsider** — they're absent on purpose:
 
 - A DI container / service locator → wire by hand in `Routes.php`
-- A full ORM (relations, observers, migrations) or a query builder
-  with joins / unions / subqueries → `Cloude\Model` + `Cloude\Db\Query`
-  cover the 80% case; for joins drop down to PDO; for migrations use
-  `phinx` or `doctrine/migrations` directly
+- A full ORM (relations, observers, migrations) → `Cloude\Model` +
+  `Cloude\Storage\Query` cover CRUD, basic joins, nested WHERE groups
+  and aliases. For unions / subqueries / window functions / CTEs drop
+  down to PDO; for migrations use `phinx` or `doctrine/migrations`
+  directly
 - A built-in HTTP client → use `guzzlehttp/guzzle` directly
 - A template engine → plain PHP via `View::render` is the answer
 - Session / auth helpers → `$_SESSION` + a check before `dispatch()`

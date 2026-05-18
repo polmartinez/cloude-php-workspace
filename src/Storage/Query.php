@@ -6,27 +6,30 @@ namespace Cloude\Storage;
 
 /**
  * Minimal SQL query builder. SELECT / INSERT / UPDATE / DELETE plus
- * WHERE, ORDER BY, LIMIT, OFFSET. Defaults to backtick identifier
+ * WHERE, JOIN, ORDER BY, LIMIT, OFFSET. Defaults to backtick identifier
  * quoting (MySQL / SQLite) — pass `'"'` as the third constructor arg
  * for Postgres (or `Identifier::quoteCharFor($pdo)` to auto-detect).
  *
  * Designed to cover the 80% of queries you write by hand without
- * re-implementing a full SQL grammar. **Does not** ship:
+ * re-implementing a full SQL grammar. **Does ship:**
  *
- *   - JOINs, UNIONs, subqueries
- *   - Aggregations beyond `count()`
- *   - Window functions, CTEs, SAVEPOINTs
- *   - Nested AND/OR groups via callables
+ *   - SELECT / INSERT / UPDATE / DELETE
+ *   - WHERE / orWhere / whereIn / whereNull / whereBetween / ...
+ *   - Nested WHERE groups via `whereGroup(fn ($q) => ...)` and
+ *     `orWhereGroup(...)` — for `(a = 1 OR b = 2) AND (c = 3)` style
+ *   - JOIN / leftJoin / rightJoin / crossJoin, with TableRef-aware
+ *     aliases (`User::as('u')`)
+ *   - ORDER BY, LIMIT, OFFSET, `count()`
  *
- * For any of that, drop down to the PDO connection (`Cloude\Db\Query`
- * doesn't hide it — pass your `\PDO` in directly) and write the SQL.
+ * **Does not** ship: UNIONs, subqueries, window functions, CTEs,
+ * SAVEPOINTs, aggregations beyond `count()`, GROUP BY / HAVING. For
+ * any of that, drop down to the PDO connection and write the SQL.
  *
  * Construction:
  *
  *   $q = new Query($pdo, 'users');
- *   // or, when you have a Cloude\Model:
- *   $q = User::storage()->query();
- *   $q = User::query();
+ *   $q = new Query($pdo, User::as('u'));   // aliased
+ *   $q = User::query();                    // via the Model
  *
  * SELECT:
  *
@@ -38,35 +41,49 @@ namespace Cloude\Storage;
  *
  *   $q->where('email', 'a@b.com')->first(); // ?array
  *   $q->where('active', 1)->count();        // int
- *   $q->select('email')->where(...)->pluck('email');           // list<string>
- *   $q->select('id', 'name')->pluck('name', 'id');             // [id => name, ...]
- *   $q->select('email')->where(...)->value('email');           // first scalar
+ *   $q->select('email')->pluck('email');    // list<string>
  *
  * WHERE variants:
  *
  *   $q->where('age', '>', 18);              // explicit op
- *   $q->where('email', 'a@b.com');          // shorthand for op '='
- *   $q->where('email', '=', null);          // auto-rendered as IS NULL
+ *   $q->where('email', 'a@b.com');          // shorthand for '='
  *   $q->whereIn('id', [1, 2, 3]);
- *   $q->whereNotIn('id', [...]);
  *   $q->whereNull('deleted_at');
- *   $q->whereNotNull('email');
  *   $q->whereBetween('age', 18, 65);
- *   $q->orWhere('role', 'admin');           // OR-joined to previous predicate
+ *   $q->orWhere('role', 'admin');           // OR-joined to previous
  *
- * Allowed operators (everything else throws):
- *   = != <> < <= > >= LIKE NOT LIKE IN NOT IN BETWEEN NOT BETWEEN
- *   IS NULL IS NOT NULL
+ * Nested WHERE groups (for OR/AND mixed predicates):
  *
- * Mutation (uses the current WHERE):
+ *   $q->where('active', 1)
+ *     ->whereGroup(fn ($g) =>
+ *         $g->where('role', 'admin')->orWhere('role', 'editor'))
+ *     ->orWhereGroup(fn ($g) =>
+ *         $g->where('country', 'ES')->where('vip', 1));
+ *   // WHERE active = 1
+ *   //   AND (role = 'admin' OR role = 'editor')
+ *   //   OR  (country = 'ES' AND vip = 1)
  *
- *   $id     = $q->insert(['name' => 'Ada', ...]);   // last-insert-id (or null)
- *   $count  = $q->where(...)->update(['active' => 0]);  // affected rows
- *   $count  = $q->where(...)->delete();                  // affected rows
+ * JOINs:
  *
- * UPDATE and DELETE both accept ORDER BY + LIMIT, but those are
- * MySQL/SQLite-specific (Postgres rejects them). You'll know because
- * Postgres throws on execute. The builder won't second-guess your DB.
+ *   $u = User::as('u');
+ *   $o = Order::as('o');
+ *   $q = User::query()->from($u)                 // re-anchors FROM with alias
+ *       ->select($u->field('*'), $o->field('total'))
+ *       ->join($o, $o->field('user_id'), '=', $u->field('id'))
+ *       ->where($o->field('status'), 'paid')
+ *       ->get();
+ *
+ *   // Shortcuts: leftJoin / rightJoin / crossJoin.
+ *   // crossJoin takes no ON condition.
+ *
+ * Mutation (uses the current WHERE; ignores JOINs / SELECT):
+ *
+ *   $id    = $q->insert(['name' => 'Ada', ...]);
+ *   $count = $q->where(...)->update(['active' => 0]);
+ *   $count = $q->where(...)->delete();
+ *
+ * UPDATE/DELETE accept ORDER BY + LIMIT but those are MySQL/SQLite
+ * extensions. Postgres throws on execute.
  *
  * Debugging:
  *
@@ -87,7 +104,12 @@ final class Query
     /** @var list<string> */
     private array $select = ['*'];
 
-    /** @var list<array{conn:string, col:string, op:string, val:mixed}> */
+    private string|TableRef $table;
+
+    /** @var list<array{type:string, table:string|TableRef, left:?string, op:?string, right:?string}> */
+    private array $joins = [];
+
+    /** @var list<WhereClause> */
     private array $wheres = [];
 
     /** @var list<array{col:string, dir:string}> */
@@ -98,9 +120,10 @@ final class Query
 
     public function __construct(
         private \PDO $pdo,
-        private string $table,
+        string|TableRef $table,
         private string $quoteChar = '`',
     ) {
+        $this->table = $table;
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
     }
 
@@ -112,11 +135,22 @@ final class Query
     // ── builder methods ────────────────────────────────────────────────────
 
     /**
-     * Pick which columns to SELECT. Pass none to reset to `*`.
+     * Pick which columns to SELECT. Pass none to reset to `*`. Each
+     * column may be qualified (`'u.email'`, `'orders.*'`).
      */
     public function select(string ...$columns): static
     {
         $this->select = $columns === [] ? ['*'] : array_values($columns);
+        return $this;
+    }
+
+    /**
+     * Replaces the FROM target (e.g. to re-anchor with an alias after
+     * `User::query()` set the bare table). Accepts a string or TableRef.
+     */
+    public function from(string|TableRef $table): static
+    {
+        $this->table = $table;
         return $this;
     }
 
@@ -126,6 +160,8 @@ final class Query
      *   where('col', '=', $value)   // explicit op
      *   where('col', $value)        // shorthand for '='
      *   where('col', 'IS NULL')     // op-only (no value)
+     *
+     * Column may be qualified (`'u.email'`).
      */
     public function where(string $column, mixed $opOrValue = null, mixed $value = null): static
     {
@@ -138,11 +174,31 @@ final class Query
     }
 
     /**
+     * Nested AND-group. The closure receives a fresh Query whose WHERE
+     * clauses are wrapped in parentheses and AND-joined to the outer query.
+     *
+     *   $q->whereGroup(fn ($g) => $g->where('a', 1)->orWhere('b', 2));
+     *   // → AND (a = 1 OR b = 2)
+     *
+     * @param callable(self): mixed $builder
+     */
+    public function whereGroup(callable $builder): static
+    {
+        return $this->addGroup('AND', $builder);
+    }
+
+    /** Like whereGroup() but OR-joined. */
+    public function orWhereGroup(callable $builder): static
+    {
+        return $this->addGroup('OR', $builder);
+    }
+
+    /**
      * @param list<mixed> $values
      */
     public function whereIn(string $column, array $values): static
     {
-        $this->wheres[] = ['conn' => 'AND', 'col' => $column, 'op' => 'IN', 'val' => array_values($values)];
+        $this->wheres[] = WhereClause::predicate('AND', $column, 'IN', array_values($values));
         return $this;
     }
 
@@ -151,25 +207,56 @@ final class Query
      */
     public function whereNotIn(string $column, array $values): static
     {
-        $this->wheres[] = ['conn' => 'AND', 'col' => $column, 'op' => 'NOT IN', 'val' => array_values($values)];
+        $this->wheres[] = WhereClause::predicate('AND', $column, 'NOT IN', array_values($values));
         return $this;
     }
 
     public function whereNull(string $column): static
     {
-        $this->wheres[] = ['conn' => 'AND', 'col' => $column, 'op' => 'IS NULL', 'val' => null];
+        $this->wheres[] = WhereClause::predicate('AND', $column, 'IS NULL', null);
         return $this;
     }
 
     public function whereNotNull(string $column): static
     {
-        $this->wheres[] = ['conn' => 'AND', 'col' => $column, 'op' => 'IS NOT NULL', 'val' => null];
+        $this->wheres[] = WhereClause::predicate('AND', $column, 'IS NOT NULL', null);
         return $this;
     }
 
     public function whereBetween(string $column, mixed $low, mixed $high): static
     {
-        $this->wheres[] = ['conn' => 'AND', 'col' => $column, 'op' => 'BETWEEN', 'val' => [$low, $high]];
+        $this->wheres[] = WhereClause::predicate('AND', $column, 'BETWEEN', [$low, $high]);
+        return $this;
+    }
+
+    // ── joins ─────────────────────────────────────────────────────────────
+
+    /** INNER JOIN. Accepts string or TableRef table, qualified columns. */
+    public function join(string|TableRef $table, string $left, string $op, string $right): static
+    {
+        return $this->addJoin('INNER', $table, $left, $op, $right);
+    }
+
+    public function leftJoin(string|TableRef $table, string $left, string $op, string $right): static
+    {
+        return $this->addJoin('LEFT', $table, $left, $op, $right);
+    }
+
+    public function rightJoin(string|TableRef $table, string $left, string $op, string $right): static
+    {
+        return $this->addJoin('RIGHT', $table, $left, $op, $right);
+    }
+
+    /** CROSS JOIN — no ON condition. */
+    public function crossJoin(string|TableRef $table): static
+    {
+        $this->joins[] = [
+            'type'  => 'CROSS',
+            'table' => $table,
+            'left'  => null,
+            'op'    => null,
+            'right' => null,
+        ];
         return $this;
     }
 
@@ -208,7 +295,6 @@ final class Query
 
     /**
      * Returns the first matching row (after applying ORDER BY) or null.
-     * Internally clamps LIMIT to 1 for the duration of the call.
      *
      * @return array<string,mixed>|null
      */
@@ -226,8 +312,15 @@ final class Query
 
     public function count(): int
     {
-        [$where, $params] = $this->buildWhere();
-        $sql = 'SELECT COUNT(*) FROM ' . $this->q($this->table) . $where;
+        $oldSelect = $this->select;
+        $this->select = ['COUNT_STAR_RAW'];   // sentinel, swapped below
+        try {
+            [$sql, $params] = $this->buildSelect();
+            // Replace the placeholder with literal COUNT(*).
+            $sql = preg_replace('/`COUNT_STAR_RAW`|COUNT_STAR_RAW/', 'COUNT(*)', $sql, 1) ?? $sql;
+        } finally {
+            $this->select = $oldSelect;
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return (int) $stmt->fetchColumn();
@@ -239,15 +332,15 @@ final class Query
     public function value(string $column): mixed
     {
         $row = $this->select($column)->first();
-        return $row[$column] ?? null;
+        return $row[self::lastSegment($column)] ?? null;
     }
 
     /**
      * Extracts a column from every matching row. Optionally re-keys the
      * result by another column.
      *
-     *   $q->pluck('email')           → list<string>
-     *   $q->pluck('name', 'id')      → [id => name, ...]
+     * Column names may be qualified (`'u.email'`); the result is keyed
+     * by the last segment (`'email'`).
      *
      * @return array<int|string, mixed>
      */
@@ -256,12 +349,14 @@ final class Query
         $cols = $key !== null ? [$column, $key] : [$column];
         $rows = $this->select(...$cols)->get();
 
+        $valKey = self::lastSegment($column);
         if ($key === null) {
-            return array_column($rows, $column);
+            return array_column($rows, $valKey);
         }
+        $idxKey = self::lastSegment($key);
         $out = [];
         foreach ($rows as $row) {
-            $out[$row[$key]] = $row[$column];
+            $out[$row[$idxKey]] = $row[$valKey];
         }
         return $out;
     }
@@ -279,7 +374,7 @@ final class Query
             throw new \InvalidArgumentException('insert() requires at least one column');
         }
         $cols = array_keys($data);
-        $sql = 'INSERT INTO ' . $this->q($this->table)
+        $sql = 'INSERT INTO ' . $this->qualifyTable($this->table)
             . ' (' . implode(', ', array_map(fn (string $c) => $this->q($c), $cols)) . ')'
             . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
         $stmt = $this->pdo->prepare($sql);
@@ -294,9 +389,6 @@ final class Query
 
     /**
      * UPDATE matching rows. Returns the number of affected rows.
-     *
-     * Note: with no preceding `where()` call, this updates EVERY row —
-     * just like raw SQL. That's intentional but worth noticing.
      *
      * @param array<string,mixed> $data
      */
@@ -313,8 +405,6 @@ final class Query
 
     /**
      * DELETE matching rows. Returns the number of affected rows.
-     *
-     * Note: with no preceding `where()` call, this empties the table.
      */
     public function delete(): int
     {
@@ -329,14 +419,7 @@ final class Query
     /**
      * Returns the SELECT SQL with bindings inlined as SQL literals — the
      * single string you'd paste into a SQL client to reproduce the query.
-     *
-     * **For debugging only.** Never feed the output back through
-     * `PDO::exec()` or `query()`: prepared statements are the only safe
-     * path. The escaping here is good enough to read with your eyes;
-     * it's not a hardening boundary.
-     *
-     *   echo $q->where('age', '>', 18)->compile();
-     *   // → SELECT * FROM `users` WHERE `age` > 18
+     * **For debugging only.** Never feed it back through PDO::exec().
      */
     public function compile(): string
     {
@@ -348,15 +431,12 @@ final class Query
 
     private function addWhere(string $conn, string $column, mixed $opOrValue, mixed $value, int $argCount): static
     {
-        // Normalise the call shape into (op, value).
         if ($argCount === 1) {
             throw new \InvalidArgumentException(
                 "where() needs at least a value or operator (got just '$column')",
             );
         }
         if ($argCount === 2) {
-            // where('col', $val) shorthand → equality
-            // (or where('col', 'IS NULL') / where('col', 'IS NOT NULL'))
             $op = is_string($opOrValue) && in_array(strtoupper($opOrValue), ['IS NULL', 'IS NOT NULL'], true)
                 ? strtoupper($opOrValue)
                 : '=';
@@ -372,13 +452,45 @@ final class Query
             );
         }
 
-        // Auto-translate "= NULL" / "!= NULL" to IS [NOT] NULL — the
-        // SQL-correct version. Equality vs NULL always returns NULL otherwise.
         if ($val === null && in_array($op, ['=', '!=', '<>'], true)) {
             $op = $op === '=' ? 'IS NULL' : 'IS NOT NULL';
         }
 
-        $this->wheres[] = ['conn' => $conn, 'col' => $column, 'op' => $op, 'val' => $val];
+        $this->wheres[] = WhereClause::predicate($conn, $column, $op, $val);
+        return $this;
+    }
+
+    /**
+     * @param callable(self): mixed $builder
+     */
+    private function addGroup(string $conn, callable $builder): static
+    {
+        $inner = new self($this->pdo, $this->table, $this->quoteChar);
+        $builder($inner);
+        if ($inner->wheres === []) {
+            return $this;   // empty group is a no-op
+        }
+        $this->wheres[] = WhereClause::group($conn, $inner->wheres);
+        return $this;
+    }
+
+    private function addJoin(string $type, string|TableRef $table, string $left, string $op, string $right): static
+    {
+        $op = trim($op);
+        // Allow ON conditions on column-vs-column equality and the common
+        // comparison ops only — never bind a value here.
+        if (!in_array($op, ['=', '!=', '<>', '<', '<=', '>', '>='], true)) {
+            throw new \InvalidArgumentException(
+                "Unsupported JOIN operator '$op' (must be a comparison)",
+            );
+        }
+        $this->joins[] = [
+            'type'  => $type,
+            'table' => $table,
+            'left'  => $left,
+            'op'    => $op,
+            'right' => $right,
+        ];
         return $this;
     }
 
@@ -394,8 +506,8 @@ final class Query
             $set[] = $this->q($col) . ' = ?';
             $params[] = $val;
         }
-        [$where, $whereParams] = $this->buildWhere();
-        $sql = 'UPDATE ' . $this->q($this->table)
+        [$where, $whereParams] = $this->buildWhere($this->wheres);
+        $sql = 'UPDATE ' . $this->qualifyTable($this->table)
             . ' SET ' . implode(', ', $set)
             . $where
             . $this->buildOrderBy()
@@ -408,8 +520,8 @@ final class Query
      */
     private function buildDelete(): array
     {
-        [$where, $params] = $this->buildWhere();
-        $sql = 'DELETE FROM ' . $this->q($this->table)
+        [$where, $params] = $this->buildWhere($this->wheres);
+        $sql = 'DELETE FROM ' . $this->qualifyTable($this->table)
             . $where
             . $this->buildOrderBy()
             . $this->buildLimit();
@@ -417,9 +529,6 @@ final class Query
     }
 
     /**
-     * Substitutes each `?` in $sql with a SQL-literal rendering of the
-     * matching $param. For debug output only — see compile()'s warning.
-     *
      * @param list<mixed> $params
      */
     private static function inlineBindings(string $sql, array $params): string
@@ -430,7 +539,7 @@ final class Query
         $i = 0;
         return (string) preg_replace_callback('/\?/', static function () use (&$i, $params): string {
             if (!array_key_exists($i, $params)) {
-                return '?';                                 // shouldn't happen if buildX was well-formed
+                return '?';
             }
             return self::quoteLiteral($params[$i++]);
         }, $sql);
@@ -456,9 +565,10 @@ final class Query
             ? '*'
             : implode(', ', array_map(fn (string $c) => $this->q($c), $this->select));
 
-        $sql = 'SELECT ' . $cols . ' FROM ' . $this->q($this->table);
+        $sql = 'SELECT ' . $cols . ' FROM ' . $this->qualifyTable($this->table);
+        $sql .= $this->buildJoins();
 
-        [$where, $params] = $this->buildWhere();
+        [$where, $params] = $this->buildWhere($this->wheres);
         $sql .= $where;
         $sql .= $this->buildOrderBy();
         $sql .= $this->buildLimit();
@@ -466,34 +576,67 @@ final class Query
         return [$sql, $params];
     }
 
+    private function buildJoins(): string
+    {
+        if ($this->joins === []) {
+            return '';
+        }
+        $parts = [];
+        foreach ($this->joins as $j) {
+            $expr = $this->qualifyTable($j['table']);
+            if ($j['type'] === 'CROSS') {
+                $parts[] = 'CROSS JOIN ' . $expr;
+                continue;
+            }
+            $verb = $j['type'] === 'INNER' ? 'JOIN' : $j['type'] . ' JOIN';
+            $parts[] = $verb . ' ' . $expr
+                . ' ON ' . $this->q($j['left']) . ' ' . $j['op'] . ' ' . $this->q($j['right']);
+        }
+        return ' ' . implode(' ', $parts);
+    }
+
     /**
+     * @param list<WhereClause> $clauses
      * @return array{0:string, 1:list<mixed>}
      */
-    private function buildWhere(): array
+    private function buildWhere(array $clauses, bool $top = true): array
     {
-        if ($this->wheres === []) {
+        if ($clauses === []) {
             return ['', []];
         }
         $parts  = [];
         $params = [];
-        foreach ($this->wheres as $i => $w) {
-            $col = $this->q($w['col']);
-            $op  = $w['op'];
-            $val = $w['val'];
+        foreach ($clauses as $i => $w) {
+            if ($w->isGroup) {
+                [$inner, $innerParams] = $this->buildWhere($w->children, false);
+                $inner = ltrim($inner);
+                if ($inner === '' || $inner === '()') {
+                    continue;
+                }
+                $expr = '(' . preg_replace('/^WHERE\s+/', '', $inner) . ')';
+                foreach ($innerParams as $p) {
+                    $params[] = $p;
+                }
+                $parts[] = ($i === 0 ? '' : $w->conn . ' ') . $expr;
+                continue;
+            }
+
+            $col = $this->q($w->col);
+            $op  = $w->op;
+            $val = $w->val;
 
             $expr = match ($op) {
                 'IS NULL', 'IS NOT NULL' => "$col $op",
                 'IN' => is_array($val) && $val !== []
                     ? "$col IN (" . implode(', ', array_fill(0, count($val), '?')) . ')'
-                    : '1=0',                                            // empty IN → never matches
+                    : '1=0',
                 'NOT IN' => is_array($val) && $val !== []
                     ? "$col NOT IN (" . implode(', ', array_fill(0, count($val), '?')) . ')'
-                    : '1=1',                                            // empty NOT IN → always matches
+                    : '1=1',
                 'BETWEEN', 'NOT BETWEEN' => "$col $op ? AND ?",
                 default => "$col $op ?",
             };
 
-            // Collect bind params in the same order as ?-placeholders above.
             if ($op === 'IN' || $op === 'NOT IN') {
                 if (is_array($val)) {
                     foreach ($val as $v) {
@@ -509,9 +652,13 @@ final class Query
                 $params[] = $val;
             }
 
-            $parts[] = ($i === 0 ? '' : $w['conn'] . ' ') . $expr;
+            $parts[] = ($i === 0 ? '' : $w->conn . ' ') . $expr;
         }
-        return [' WHERE ' . implode(' ', $parts), $params];
+        if ($parts === []) {
+            return ['', $params];
+        }
+        $prefix = $top ? ' WHERE ' : '';
+        return [$prefix . implode(' ', $parts), $params];
     }
 
     private function buildOrderBy(): string
@@ -538,8 +685,24 @@ final class Query
         return $sql;
     }
 
+    /** Quote a column identifier — supports dotted (`u.email`) names. */
     private function q(string $identifier): string
     {
-        return Identifier::quote($identifier, $this->quoteChar);
+        return Identifier::qualify($identifier, $this->quoteChar);
+    }
+
+    /** Render a FROM / JOIN target, honoring TableRef aliases. */
+    private function qualifyTable(string|TableRef $table): string
+    {
+        return $table instanceof TableRef
+            ? $table->expression($this->quoteChar)
+            : Identifier::quote($table, $this->quoteChar);
+    }
+
+    /** For pluck/value: column results are keyed by the last dot segment. */
+    private static function lastSegment(string $name): string
+    {
+        $dot = strrpos($name, '.');
+        return $dot === false ? $name : substr($name, $dot + 1);
     }
 }

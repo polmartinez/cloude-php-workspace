@@ -295,4 +295,150 @@ final class QueryTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $bad->get();
     }
+
+    // ── nested where groups ───────────────────────────────────────────────
+
+    public function testWhereGroupCombinesPredicatesWithParens(): void
+    {
+        // active = 1 AND (role = 'admin' OR age <= 18) → Ada, Grace, Alan
+        $rows = $this->q()
+            ->where('active', 1)
+            ->whereGroup(static fn ($g) =>
+                $g->where('role', 'admin')->orWhere('age', '<=', 18))
+            ->orderBy('name')
+            ->get();
+        self::assertSame(['Ada', 'Alan', 'Grace'], array_column($rows, 'name'));
+    }
+
+    public function testOrWhereGroup(): void
+    {
+        // role = 'admin' OR (age >= 18 AND active = 1) → Ada, Alan, Grace
+        $rows = $this->q()
+            ->where('role', 'admin')
+            ->orWhereGroup(static fn ($g) =>
+                $g->where('age', '>=', 18)->where('active', 1))
+            ->orderBy('name')
+            ->get();
+        self::assertContains('Ada', array_column($rows, 'name'));
+        self::assertContains('Alan', array_column($rows, 'name'));
+        self::assertContains('Grace', array_column($rows, 'name'));
+    }
+
+    public function testWhereGroupCompilesWithParentheses(): void
+    {
+        $sql = $this->q()
+            ->where('active', 1)
+            ->whereGroup(static fn ($g) => $g->where('role', 'admin')->orWhere('age', '<=', 18))
+            ->compile();
+        self::assertStringContainsString('(`role` = \'admin\' OR `age` <= 18)', $sql);
+    }
+
+    public function testEmptyWhereGroupIsNoOp(): void
+    {
+        $rows = $this->q()->where('active', 1)->whereGroup(static fn ($g) => $g)->get();
+        self::assertCount(4, $rows);  // same as plain where('active', 1)
+    }
+
+    // ── joins ─────────────────────────────────────────────────────────────
+
+    private function seedOrders(): void
+    {
+        $this->pdo->exec('CREATE TABLE orders (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            total   INTEGER,
+            status  TEXT
+        )');
+        $stmt = $this->pdo->prepare('INSERT INTO orders (user_id, total, status) VALUES (?, ?, ?)');
+        $stmt->execute([1, 100, 'paid']);    // Ada
+        $stmt->execute([1,  50, 'pending']); // Ada
+        $stmt->execute([3, 200, 'paid']);    // Grace
+    }
+
+    public function testInnerJoinUsesDottedColumns(): void
+    {
+        $this->seedOrders();
+        $rows = $this->q()
+            ->select('users.name', 'orders.total')
+            ->join('orders', 'orders.user_id', '=', 'users.id')
+            ->where('orders.status', 'paid')
+            ->orderBy('users.name')
+            ->get();
+        self::assertSame([
+            ['name' => 'Ada',   'total' => 100],
+            ['name' => 'Grace', 'total' => 200],
+        ], $rows);
+    }
+
+    public function testLeftJoinIncludesUsersWithoutOrders(): void
+    {
+        $this->seedOrders();
+        $rows = $this->q()
+            ->select('users.name', 'orders.total')
+            ->leftJoin('orders', 'orders.user_id', '=', 'users.id')
+            ->orderBy('users.name')
+            ->get();
+        self::assertCount(6, $rows);   // 3 orders + 3 users w/ no orders
+    }
+
+    public function testJoinWithTableRefAlias(): void
+    {
+        $this->seedOrders();
+        $u = new \Cloude\Storage\TableRef('users', 'u');
+        $o = new \Cloude\Storage\TableRef('orders', 'o');
+
+        $rows = (new Query($this->pdo, $u))
+            ->select($u->field('name'), $o->field('total'))
+            ->join($o, $o->field('user_id'), '=', $u->field('id'))
+            ->where($o->field('status'), 'paid')
+            ->orderBy($u->field('name'))
+            ->get();
+        self::assertSame([
+            ['name' => 'Ada',   'total' => 100],
+            ['name' => 'Grace', 'total' => 200],
+        ], $rows);
+    }
+
+    public function testJoinCompileQuotesAliasedColumns(): void
+    {
+        $u = new \Cloude\Storage\TableRef('users', 'u');
+        $o = new \Cloude\Storage\TableRef('orders', 'o');
+        $sql = (new Query($this->pdo, $u))
+            ->select($u->field('email'))
+            ->join($o, $o->field('user_id'), '=', $u->field('id'))
+            ->compile();
+        self::assertStringContainsString('FROM `users` AS `u`', $sql);
+        self::assertStringContainsString('JOIN `orders` AS `o` ON `o`.`user_id` = `u`.`id`', $sql);
+        self::assertStringContainsString('`u`.`email`', $sql);
+    }
+
+    public function testCrossJoinHasNoOnClause(): void
+    {
+        $this->seedOrders();
+        $sql = $this->q()->crossJoin('orders')->compile();
+        self::assertStringContainsString('CROSS JOIN `orders`', $sql);
+        self::assertStringNotContainsString(' ON ', $sql);
+    }
+
+    public function testJoinRejectsInvalidOperator(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->q()->join('orders', 'orders.user_id', 'INVALID', 'users.id');
+    }
+
+    public function testFromReanchorsAlias(): void
+    {
+        $u = new \Cloude\Storage\TableRef('users', 'u');
+        $sql = $this->q()->from($u)->where($u->field('id'), 1)->compile();
+        self::assertStringContainsString('FROM `users` AS `u`', $sql);
+        self::assertStringContainsString('`u`.`id`', $sql);
+    }
+
+    // ── pluck/value with qualified names ─────────────────────────────────
+
+    public function testPluckHandlesQualifiedColumn(): void
+    {
+        $names = $this->q()->orderBy('id')->pluck('users.name');
+        self::assertSame(['Ada', 'Alan', 'Grace', 'Linus', 'None'], $names);
+    }
 }

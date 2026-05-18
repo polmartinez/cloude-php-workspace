@@ -153,6 +153,21 @@ cloude-php-workspace/
 | `Cloude\Data\JsonRepository` | One `.json` per entity. Atomic writes, per-request read cache via `JsonFile` |
 | `Cloude\Data\MarkdownRepository` | One `.md` (or `.md.gz`) per entity. Read returns frontmatter + parsed HTML via `Markdown::parse` |
 
+### `Cloude\Model\…` and `Cloude\Storage\…`
+
+| Class | Responsibility |
+|---|---|
+| `Cloude\Model\Model` | Abstract Active Record. Subclass with `protected static string $table` + `$connection`. CRUD via `find` / `findBy` / `create` / `save` / `delete`. Static helpers: `table()`, `field('col')`, `as('alias')`, `ref()`, `query()` |
+| `Cloude\Model\Storage\PdoStorage` | PDO-backed adapter. Driven by `Cloude\Storage\Connection` named pool |
+| `Cloude\Model\Storage\JsonStorage` | One JSON file per row (collection mode) or one big array (collection storage) |
+| `Cloude\Model\Storage\MarkdownStorage` | Markdown body + frontmatter as a row |
+| `Cloude\Model\Storage\ArrayStorage` | In-memory rows; ideal for tests |
+| `Cloude\Storage\Query` | Fluent SQL builder. SELECT / INSERT / UPDATE / DELETE + WHERE (with nested AND/OR groups) + INNER/LEFT/RIGHT/CROSS JOIN + ORDER BY + LIMIT/OFFSET + `count()` |
+| `Cloude\Storage\TableRef` | Lightweight `(table, alias)` value object. Pair with `Model::as('u')` for typed joins; `__toString()` yields the quoted FROM/JOIN expression |
+| `Cloude\Storage\Identifier` | SQL identifier-quoting helper. `quote()` for single names, `qualify()` for `table.column` / `table.*` / `*` |
+| `Cloude\Storage\Connection` | Named PDO pool keyed off `Config::get('storage.{name}')` |
+| `Cloude\Storage\Factory` | Builds a Storage adapter from a config row (dispatches on `driver`) |
+
 ### `Cloude\Markdown\…`
 
 | Class | Responsibility |
@@ -565,6 +580,141 @@ entirely (e.g. sharded sub-directories).
 `all()` returns a `Cloude\Collection`, so once you have a Repository
 the chainable pipeline is one method call away — see the
 [recipe](examples/recipes/data.php) for the full pattern.
+
+### `Cloude\Model\Model` — static table / field / alias helpers
+
+Every subclass exposes four static helpers built on top of `$table`:
+
+| Call                  | Returns                          | Used for                                            |
+|-----------------------|----------------------------------|-----------------------------------------------------|
+| `User::table()`       | `'users'`                        | Raw SQL, FROM clauses                               |
+| `User::field('email')`| `'users.email'`                  | Qualified column references in `select` / `where` / `join` |
+| `User::ref()`         | `TableRef('users', null)`        | Pass as `from()` / `join()` target without aliasing |
+| `User::as('u')`       | `TableRef('users', 'u')`         | Aliased FROM / JOIN — call `$u->field('email')` for `'u.email'` |
+
+Use them instead of hand-writing string literals — refactoring a table
+name then changes one constant and the rest follows.
+
+### `Cloude\Storage\Query` — SQL builder
+
+```php
+$q = User::query();              // shorthand
+$q = new Query($pdo, 'users');   // direct
+$q = new Query($pdo, User::as('u'));   // aliased
+```
+
+**SELECT.** Fluent, immutable-ish (one `Query` instance per call site):
+
+```php
+$q->where('active', 1)
+  ->where('age', '>', 18)
+  ->orderBy('name')
+  ->limit(10)
+  ->get();                                // list<array<string,mixed>>
+
+$q->where('email', 'a@b.com')->first();   // ?array
+$q->where('active', 1)->count();          // int
+$q->select('email')->pluck('email');      // list<string>
+$q->select('id', 'name')->pluck('name', 'id');   // [id => name, ...]
+$q->select('name')->where(...)->value('name');   // first scalar
+```
+
+**WHERE variants.**
+
+```php
+$q->where('age', '>', 18);
+$q->where('email', 'a@b.com');           // shorthand → '='
+$q->where('age', '=', null);             // auto-rewritten as IS NULL
+$q->whereIn('id', [1, 2, 3]);
+$q->whereNotIn('id', [...]);
+$q->whereNull('deleted_at');
+$q->whereNotNull('email');
+$q->whereBetween('age', 18, 65);
+$q->orWhere('role', 'admin');            // OR-joined to previous predicate
+```
+
+Allowed operators: `= != <> < <= > >= LIKE NOT LIKE IN NOT IN BETWEEN
+NOT BETWEEN IS NULL IS NOT NULL`. Anything else throws.
+
+**Nested AND/OR groups.** When you want mixed predicates with explicit
+parentheses, pass a closure:
+
+```php
+$q->where('active', 1)
+  ->whereGroup(fn ($g) =>
+      $g->where('role', 'admin')->orWhere('role', 'editor'))
+  ->orWhereGroup(fn ($g) =>
+      $g->where('country', 'ES')->where('vip', 1));
+
+// → WHERE active = 1
+//      AND (role = 'admin' OR role = 'editor')
+//      OR  (country = 'ES' AND vip = 1)
+```
+
+The closure receives a fresh `Query` whose WHEREs are spliced into the
+parent's clause list as one parenthesised block. Empty groups are no-ops.
+
+**JOINs.** `join` / `leftJoin` / `rightJoin` take the joined table plus a
+column-vs-column ON condition. `crossJoin` takes only the table.
+
+```php
+$rows = User::query()
+    ->select('users.name', 'orders.total')
+    ->leftJoin('orders', 'orders.user_id', '=', 'users.id')
+    ->where('orders.status', 'paid')
+    ->orderBy('users.name')
+    ->get();
+```
+
+Columns can be qualified strings (`'users.name'`) — the builder quotes
+them automatically via `Identifier::qualify()`. For aliased joins, pair
+`Model::as()` with `from()`:
+
+```php
+$u = User::as('u');
+$o = Order::as('o');
+
+$rows = User::query()->from($u)
+    ->select($u->field('name'), $o->field('total'))
+    ->join($o, $o->field('user_id'), '=', $u->field('id'))
+    ->where($o->field('status'), 'paid')
+    ->get();
+
+// SELECT `u`.`name`, `o`.`total`
+// FROM `users` AS `u`
+// JOIN `orders` AS `o` ON `o`.`user_id` = `u`.`id`
+// WHERE `o`.`status` = ?
+```
+
+The ON operator must be a comparison (`= != <> < <= > >=`) — joins never
+bind values. For multi-condition ON clauses (`ON a = b AND c = d`), add
+the extra predicate as a `where()` instead.
+
+**INSERT / UPDATE / DELETE.**
+
+```php
+$id    = $q->insert(['name' => 'Ada', 'email' => 'a@x']);   // last-insert id
+$count = $q->where('age', '<', 18)->update(['active' => 0]); // affected rows
+$count = $q->where('active', 0)->delete();
+```
+
+Mutations honour the current `where()` chain. `UPDATE` / `DELETE` accept
+`orderBy()` / `limit()` too, but those are MySQL/SQLite extensions —
+Postgres throws on execute. Joins are SELECT-only.
+
+**Debugging.** `compile()` returns the SELECT SQL with bindings inlined
+as SQL literals — paste it into a SQL client to reproduce the query.
+**Never** feed `compile()` output back through `PDO::exec()`: prepared
+statements remain the only safe execution path.
+
+```php
+echo $q->where('age', '>', 18)->compile();
+// SELECT * FROM `users` WHERE `age` > 18
+```
+
+**Not in scope:** UNIONs, subqueries, window functions, CTEs, `GROUP BY`
+/ `HAVING`, aggregations beyond `count()`. Drop to PDO via
+`$q->pdo()` (or `Connection::pdo('default')`) and write the SQL.
 
 ### `Cloude\Bootstrap`
 

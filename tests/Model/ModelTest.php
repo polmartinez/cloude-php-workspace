@@ -272,4 +272,35 @@ final class ModelTest extends TestCase
         self::assertTrue($users[0]->isPersisted());
         self::assertSame('Ada', $users[0]->name);
     }
+
+    // ── static table / field / alias helpers ─────────────────────────────
+
+    public function testTableReturnsStaticTableName(): void
+    {
+        self::assertSame('users', TestUser::table());
+    }
+
+    public function testFieldQualifiesColumn(): void
+    {
+        self::assertSame('users.email', TestUser::field('email'));
+        self::assertSame('users.*', TestUser::field('*'));
+    }
+
+    public function testAsReturnsTableRefWithAlias(): void
+    {
+        $ref = TestUser::as('u');
+        self::assertInstanceOf(\Cloude\Storage\TableRef::class, $ref);
+        self::assertSame('users', $ref->table);
+        self::assertSame('u', $ref->alias);
+        self::assertSame('u.email', $ref->field('email'));
+        self::assertSame('`users` AS `u`', $ref->expression());
+    }
+
+    public function testRefReturnsTableRefWithoutAlias(): void
+    {
+        $ref = TestUser::ref();
+        self::assertSame('users', $ref->table);
+        self::assertNull($ref->alias);
+        self::assertSame('users.email', $ref->field('email'));
+    }
 }

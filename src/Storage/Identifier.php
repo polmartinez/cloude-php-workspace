@@ -37,6 +37,36 @@ final class Identifier
     }
 
     /**
+     * Quotes a (possibly dotted) column reference. Handles three shapes:
+     *
+     *   qualify('email');         // → `email`
+     *   qualify('users.email');   // → `users`.`email`
+     *   qualify('users.*');       // → `users`.*
+     *   qualify('*');             // → *
+     *
+     * Anything outside `column` / `table.column` / `table.*` / `*` throws.
+     * No other dotted forms (`db.schema.table.col`) are supported — drop
+     * to raw SQL when you need three-part names.
+     */
+    public static function qualify(string $expr, string $quoteChar = '`'): string
+    {
+        if ($expr === '*') {
+            return '*';
+        }
+        if (!str_contains($expr, '.')) {
+            return self::quote($expr, $quoteChar);
+        }
+        $parts = explode('.', $expr);
+        if (count($parts) !== 2) {
+            throw new \InvalidArgumentException("Invalid qualified identifier: '$expr'");
+        }
+        [$prefix, $col] = $parts;
+        $prefixQ = self::quote($prefix, $quoteChar);
+        $colQ    = $col === '*' ? '*' : self::quote($col, $quoteChar);
+        return $prefixQ . '.' . $colQ;
+    }
+
+    /**
      * Opt-in helper that maps the PDO driver name to the conventional
      * quote character. Use it explicitly when you want auto-detection:
      *

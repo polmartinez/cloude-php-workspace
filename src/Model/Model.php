@@ -226,6 +226,62 @@ abstract class Model
         return $storage->query();
     }
 
+    // ── static table / field / alias helpers ──────────────────────────────
+
+    /**
+     * The SQL table name declared by the subclass. Use it to build joins
+     * and raw SQL without hard-coding string literals:
+     *
+     *   $sql = "SELECT * FROM " . User::table() . " WHERE active = 1";
+     */
+    public static function table(): string
+    {
+        return static::$table;
+    }
+
+    /**
+     * Qualifies a column with this model's table:
+     *
+     *   User::field('email');    // 'users.email'
+     *   User::field('*');        // 'users.*'
+     *
+     * The result is a plain dotted string — the Query builder quotes it
+     * via `Identifier::qualify()` when it appears in SELECT / WHERE /
+     * JOIN clauses, so the same call works everywhere.
+     */
+    public static function field(string $column): string
+    {
+        return static::$table . '.' . $column;
+    }
+
+    /**
+     * Returns a {@see \Cloude\Storage\TableRef} aliasing this table. Pass
+     * it into `Query::from()` or `Query::join()` to drive JOINs in a
+     * typed way:
+     *
+     *   $u = User::as('u');
+     *   $o = Order::as('o');
+     *
+     *   User::query()->from($u)
+     *       ->select($u->field('*'), $o->field('total'))
+     *       ->join($o, $o->field('user_id'), '=', $u->field('id'))
+     *       ->where($o->field('status'), 'paid')
+     *       ->get();
+     */
+    public static function as(string $alias): \Cloude\Storage\TableRef
+    {
+        return new \Cloude\Storage\TableRef(static::$table, $alias);
+    }
+
+    /**
+     * Like {@see as()} but without an alias — useful when you want a
+     * `TableRef` to pass around without renaming the table.
+     */
+    public static function ref(): \Cloude\Storage\TableRef
+    {
+        return new \Cloude\Storage\TableRef(static::$table);
+    }
+
     // ── static finders ─────────────────────────────────────────────────────
 
     public static function find(mixed $id): ?static

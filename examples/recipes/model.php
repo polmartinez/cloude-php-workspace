@@ -133,10 +133,59 @@ $deleted  = User::query()->where('created_at', '<', '2020-01-01')->delete();  //
 echo User::query()->where('age', '>', 18)->orderBy('name')->limit(5)->compile();
 // → SELECT * FROM `users` WHERE `age` > 18 ORDER BY `name` ASC LIMIT 5
 
+// ── Nested AND/OR predicates ────────────────────────────────────────────────
+//
+// When a filter mixes AND with OR you need explicit parentheses. Pass a
+// closure to whereGroup() / orWhereGroup(); the inner query's WHEREs are
+// spliced into the parent's clause list as one parenthesised block.
+
+$admins_or_juniors = User::query()
+    ->where('active', 1)
+    ->whereGroup(fn ($g) =>
+        $g->where('role', 'admin')->orWhere('age', '<=', 18))
+    ->get();
+// → WHERE active = 1 AND (role = 'admin' OR age <= 18)
+
+// ── JOINs (and aliases) ──────────────────────────────────────────────────────
+//
+// The builder ships INNER / LEFT / RIGHT / CROSS joins. Columns may be
+// qualified strings ('users.id') — the builder quotes them automatically.
+
+$paid = User::query()
+    ->select('users.name', 'orders.total')
+    ->join('orders', 'orders.user_id', '=', 'users.id')
+    ->where('orders.status', 'paid')
+    ->orderBy('users.name')
+    ->get();
+
+// For aliased joins, build TableRefs with Model::as() and re-anchor FROM:
+
+class Order extends Model
+{
+    protected static string $table       = 'orders';
+    protected static string $connection  = 'default';
+}
+
+$u = User::as('u');
+$o = Order::as('o');
+
+$rows = User::query()->from($u)
+    ->select($u->field('name'), $o->field('total'))
+    ->leftJoin($o, $o->field('user_id'), '=', $u->field('id'))
+    ->where($o->field('status'), 'paid')
+    ->orderBy($u->field('name'))
+    ->get();
+
+// User::table() / User::field('email') return plain dotted strings, so they
+// also work outside the builder — handy for raw SQL with no string literals:
+
+$sql = 'SELECT * FROM ' . User::table() . ' WHERE ' . User::field('active') . ' = 1';
+
 // ── Beyond the builder: drop to PDO ──────────────────────────────────────────
 //
-// The builder is intentionally narrow — no joins, no unions, no subqueries.
-// For anything outside that scope, reach the raw connection.
+// The builder covers SELECT/INSERT/UPDATE/DELETE + WHERE + JOIN + ORDER/LIMIT.
+// For UNIONs, subqueries, window functions, CTEs or aggregations beyond
+// count(), reach the raw connection.
 
 $top = User::storage()->pdo()
     ->query('SELECT u.id, u.name, COUNT(o.id) AS n
