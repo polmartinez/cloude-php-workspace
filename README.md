@@ -1567,11 +1567,29 @@ this is a wrapper, not a replacement.
 |--------------------------------------------|------------------------------------------------------------------------------------------|
 | `useArrayModel(class, rows = [])`          | Configure a `Model` subclass with `ArrayStorage` + seed rows for the duration of the test |
 | `useSqliteModel(class, createSql)`         | Same, but with an in-memory SQLite + `PdoStorage`. Returns the PDO for extra setup        |
+| `useMockModel(class, rows = [])`           | Like `useArrayModel()` but the storage records every call. Returns a `MockStorage` for assertions |
 | `captureHttp($handler)`                    | Run a route handler; return `['status' => …, 'body' => …]`                               |
 | `assertJsonResponse($expected, $handler)`  | Capture + decode + structural compare. Optional `status:` named arg                       |
 | `assertHttpException($status, $handler)`   | Catch a `Cloude\Http\HttpException`; check status; return the exception for chaining     |
 | `freezeTime($when)` / `unfreezeTime()`     | Pin `DateTime::now()` to a fixed instant for deterministic time-aware tests              |
+| `assertModelReceived($store, $method, times: ?int)` | Assert that a `MockStorage` got `$method` (optionally exactly `$times` times)        |
+| `assertModelDidNotReceive($store, $method)` | Inverse — assert `$method` was never called                                              |
 | `assertModelHas($model, $attributes)`      | Assert each attribute key in `$attributes` matches on the model                          |
+
+**Picking a model helper:**
+
+| Need                                                          | Helper            |
+|---------------------------------------------------------------|-------------------|
+| State-based test ("after doing X, the row has these fields")  | `useArrayModel`   |
+| Behaviour test ("X causes a delete on PK 42")                 | `useMockModel`    |
+| Tests that go through `Model::query()` (joins, raw SQL builder) | `useSqliteModel`  |
+
+`useMockModel` is the right choice when you want to assert _how_ the
+code used the storage. Don't use it for code that calls
+`Model::query()` — faking the SQL builder leads to tests that pass
+even when the underlying SQL is wrong. SQLite in-memory (the
+`useSqliteModel` path) is fast enough that real SQL is the better
+default whenever the query shape matters.
 
 State that bleeds across tests is automatically cleared in
 `setUp()` / `tearDown()`:
@@ -1604,6 +1622,19 @@ final class BorrowingTest extends TestCase
         $events = $book->pullDomainEvents();
         $this->assertCount(1, $events);
         $this->assertSame($when->getTimestamp(), $events[0]->occurredOn()->getTimestamp());
+    }
+
+    public function test_controller_deletes_user_on_ban(): void
+    {
+        $store = $this->useMockModel(User::class, [
+            ['id' => 1, 'email' => 'ada@x', 'active' => 1],
+        ]);
+
+        (new BanUserController())->ban(1);
+
+        $this->assertModelReceived($store, 'update', times: 1);
+        $this->assertModelDidNotReceive($store, 'delete');
+        self::assertSame([1, ['email' => 'ada@x', 'active' => 0]], $store->lastCall('update'));
     }
 }
 ```

@@ -135,6 +135,71 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
         return $pdo;
     }
 
+    /**
+     * Configure a Model subclass to use a {@see MockStorage} — an
+     * in-memory store that **also records every call** so tests can
+     * assert on which storage methods the code under test invoked.
+     *
+     * Returns the storage so you can read calls / mutate seed data
+     * directly.
+     *
+     *   $store = $this->useMockModel(User::class, [
+     *       ['id' => 1, 'email' => 'ada@x', 'active' => 1],
+     *   ]);
+     *
+     *   (new BanUserController())->ban(1);
+     *
+     *   $this->assertModelReceived($store, 'update', times: 1);
+     *   self::assertSame([1, ['active' => 0]], $store->lastCall('update'));
+     *
+     * For tests that go through `Model::query()` (raw SQL builder),
+     * use {@see useSqliteModel()} — faking the builder leads to
+     * brittle tests.
+     *
+     * @template T of Model
+     * @param  class-string<T>            $modelClass
+     * @param  list<array<string,mixed>>  $rows
+     */
+    protected function useMockModel(string $modelClass, array $rows = []): MockStorage
+    {
+        $storage = new MockStorage($rows);
+        $modelClass::configure($storage);
+        $this->configuredModels[$modelClass] = true;
+        return $storage;
+    }
+
+    /**
+     * Assert that $storage received $method at least once (or exactly
+     * `$times` times if specified).
+     */
+    protected function assertModelReceived(MockStorage $storage, string $method, ?int $times = null): void
+    {
+        $actual = $storage->callsTo($method);
+        if ($times === null) {
+            $this->assertGreaterThan(
+                0,
+                $actual,
+                "Expected MockStorage to receive '$method' at least once; got 0",
+            );
+            return;
+        }
+        $this->assertSame(
+            $times,
+            $actual,
+            "Expected MockStorage to receive '$method' $times time(s); got $actual",
+        );
+    }
+
+    protected function assertModelDidNotReceive(MockStorage $storage, string $method): void
+    {
+        $this->assertSame(
+            0,
+            $storage->callsTo($method),
+            "Expected MockStorage NOT to receive '$method'; got "
+                . $storage->callsTo($method) . ' call(s)',
+        );
+    }
+
     // ── HTTP capture ──────────────────────────────────────────────────────
 
     /**
