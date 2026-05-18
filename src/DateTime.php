@@ -55,10 +55,56 @@ namespace Cloude;
  */
 final class DateTime extends \DateTimeImmutable
 {
+    // ── test-only time freezing (Carbon-style) ────────────────────────────
+
+    private static ?\DateTimeImmutable $testNow = null;
+
+    /**
+     * Freeze `now()` to a specific moment. Test-only — production code
+     * must never call this. Pass `null` to release the freeze.
+     *
+     *   DateTime::setTestNow(new DateTime('2026-05-18 12:00:00'));
+     *   DateTime::now()->toDateTimeString();   // '2026-05-18 12:00:00'
+     *   DateTime::clearTestNow();
+     *
+     * `Cloude\Testing\TestCase::setUp()` clears the freeze between tests
+     * so leaks between cases are caught by the very next test that calls
+     * `now()`.
+     */
+    public static function setTestNow(?\DateTimeInterface $when): void
+    {
+        if ($when === null) {
+            self::$testNow = null;
+            return;
+        }
+        // Snapshot to a plain DateTimeImmutable so the frozen moment
+        // can never be mutated externally.
+        self::$testNow = new \DateTimeImmutable(
+            $when->format('Y-m-d H:i:s.u'),
+            $when->getTimezone(),
+        );
+    }
+
+    public static function clearTestNow(): void
+    {
+        self::$testNow = null;
+    }
+
+    public static function hasTestNow(): bool
+    {
+        return self::$testNow !== null;
+    }
+
     // ── static constructors ───────────────────────────────────────────────
 
     public static function now(?\DateTimeZone $tz = null): static
     {
+        if (self::$testNow !== null) {
+            return new static(
+                self::$testNow->format('Y-m-d H:i:s.u'),
+                $tz ?? self::$testNow->getTimezone(),
+            );
+        }
         return new static('now', $tz);
     }
 

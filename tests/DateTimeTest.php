@@ -139,4 +139,29 @@ final class DateTimeTest extends TestCase
         self::assertInstanceOf(DateTime::class, $value);
         self::assertInstanceOf(\DateTimeImmutable::class, $value);
     }
+
+    public function testSetTestNowFreezesNow(): void
+    {
+        DateTime::setTestNow(new DateTime('2026-05-18 12:00:00'));
+        try {
+            self::assertSame('2026-05-18 12:00:00', DateTime::now()->toDateTimeString());
+            usleep(1000);
+            self::assertSame('2026-05-18 12:00:00', DateTime::now()->toDateTimeString());
+            self::assertTrue(DateTime::hasTestNow());
+        } finally {
+            DateTime::clearTestNow();
+        }
+        self::assertFalse(DateTime::hasTestNow());
+    }
+
+    public function testTodayUsesFrozenNow(): void
+    {
+        DateTime::setTestNow(new DateTime('2026-05-18 23:00:00'));
+        try {
+            self::assertSame('2026-05-18', DateTime::today()->toDateString());
+            self::assertSame('00:00:00', DateTime::today()->toTimeString());
+        } finally {
+            DateTime::clearTestNow();
+        }
+    }
 }

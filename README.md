@@ -123,7 +123,7 @@ cloude-php-workspace/
 | `Cloude\Cli` | Argv parsing + colored output for `app/cli/` scripts |
 | `Cloude\Collection` | Fluent, chainable wrapper: `map/filter/reduce/pluck/keyBy/groupBy/sortBy/take/chunk/unique/sum/avg/min/max/...` |
 | `Cloude\Config` | Env helpers (`env`/`boolEnv`); multi-env file loader (`configure`/`load`/`get`); typed accessors (`baseUrl`/`debug`/`path`); legacy `defineBaseUrl`/`defineDebug` |
-| `Cloude\DateTime` | Tiny immutable date helper extending `\DateTimeImmutable`. Static constructors (`now`/`today`/`parse`/`fromTimestamp`); format shortcuts (`toDateString`/`toTimeString`/`toDateTimeString`/`toIsoString`); arithmetic (`addDays`/`addHours`/`addMinutes`/…); boundaries (`startOfDay`/`endOfMonth`/…); comparisons (`isPast`/`isToday`/`isSameDay`/…); signed `diffIn{Days,Hours,Minutes,Seconds}` and English `diffForHumans()`. Used automatically by the `datetime` cast |
+| `Cloude\DateTime` | Tiny immutable date helper extending `\DateTimeImmutable`. Static constructors (`now`/`today`/`parse`/`fromTimestamp`); format shortcuts (`toDateString`/`toTimeString`/`toDateTimeString`/`toIsoString`); arithmetic (`addDays`/`addHours`/`addMinutes`/…); boundaries (`startOfDay`/`endOfMonth`/…); comparisons (`isPast`/`isToday`/`isSameDay`/…); signed `diffIn{Days,Hours,Minutes,Seconds}` and English `diffForHumans()`. Carbon-style `setTestNow()` / `clearTestNow()` for test isolation. Used automatically by the `datetime` cast |
 | `Cloude\EventLog` | Fire-and-forget POST to a webhook for usage analytics |
 | `Cloude\Format` | Yaml / json / xml / markdown encode-decode dispatcher (string ↔ array) |
 | `Cloude\Input` | Wrapper over `$_GET`, `$_POST`, `$_SERVER`, raw body and JSON |
@@ -1482,6 +1482,130 @@ After publication, any project can install it with:
 
 ```bash
 composer require cloude/framework
+```
+
+### `Cloude\Domain\…` — DDD helpers (optional)
+
+A handful of thin base classes for projects organised in the DDD style.
+Everything in this namespace is **opt-in** — the framework still works
+fine for Transaction Script and MVC apps that ignore it entirely. See
+[`PATTERNS.md`](PATTERNS.md) for when each pattern fits.
+
+| Class                              | Responsibility                                                                                |
+|------------------------------------|-----------------------------------------------------------------------------------------------|
+| `Cloude\Domain\ValueObject`        | Abstract base for value objects. Structural `equals()` + `\Stringable` contract               |
+| `Cloude\Domain\DomainException`    | Marker class for invariant violations (extends `\DomainException`)                            |
+| `Cloude\Domain\DomainEvent`        | Marker interface — single method `occurredOn(): \DateTimeImmutable`                           |
+| `Cloude\Domain\AggregateRoot`      | Abstract base that owns a per-instance event queue: `recordEvent()` + `pullDomainEvents()`    |
+
+```php
+use Cloude\Domain\{ValueObject, AggregateRoot, DomainEvent, DomainException};
+
+final class Money extends ValueObject
+{
+    public function __construct(
+        public readonly int $amount,        // cents
+        public readonly string $currency,
+    ) {
+        if ($amount < 0) {
+            throw new DomainException('Money cannot be negative');
+        }
+    }
+    public function __toString(): string {
+        return number_format($this->amount / 100, 2) . ' ' . $this->currency;
+    }
+}
+
+final class BookBorrowed implements DomainEvent
+{
+    public function __construct(
+        public readonly string $isbn,
+        public readonly string $memberId,
+        public readonly \DateTimeImmutable $when,
+    ) {}
+    public function occurredOn(): \DateTimeImmutable { return $this->when; }
+}
+
+final class Book extends AggregateRoot
+{
+    public function __construct(
+        public readonly string $isbn,
+        public readonly string $title,
+        private int $copiesAvailable,
+    ) {}
+
+    public function borrow(string $memberId): void {
+        if ($this->copiesAvailable === 0) {
+            throw new DomainException("No copies of '{$this->title}' available");
+        }
+        $this->copiesAvailable--;
+        $this->recordEvent(new BookBorrowed($this->isbn, $memberId, new \DateTimeImmutable()));
+    }
+}
+
+// Application layer:
+$book->borrow($memberId);
+$repo->save($book);
+foreach ($book->pullDomainEvents() as $event) {
+    $eventLog->record($event);
+}
+```
+
+**Deliberately not shipped:** event bus / dispatcher (return the events
+to the application, dispatch how you want), repository base class
+(write a domain-specific interface + a Cloude-backed adapter, see
+[`examples/library/`](examples/library/)), specification pattern.
+
+### `Cloude\Testing\TestCase` — test base class
+
+Drop-in replacement for `\PHPUnit\Framework\TestCase` that adds the
+helpers every Cloude project ends up writing. PHPUnit features (data
+providers, attributes, mocking, coverage) keep working unchanged —
+this is a wrapper, not a replacement.
+
+| Helper                                     | Purpose                                                                                  |
+|--------------------------------------------|------------------------------------------------------------------------------------------|
+| `useArrayModel(class, rows = [])`          | Configure a `Model` subclass with `ArrayStorage` + seed rows for the duration of the test |
+| `useSqliteModel(class, createSql)`         | Same, but with an in-memory SQLite + `PdoStorage`. Returns the PDO for extra setup        |
+| `captureHttp($handler)`                    | Run a route handler; return `['status' => …, 'body' => …]`                               |
+| `assertJsonResponse($expected, $handler)`  | Capture + decode + structural compare. Optional `status:` named arg                       |
+| `assertHttpException($status, $handler)`   | Catch a `Cloude\Http\HttpException`; check status; return the exception for chaining     |
+| `freezeTime($when)` / `unfreezeTime()`     | Pin `DateTime::now()` to a fixed instant for deterministic time-aware tests              |
+| `assertModelHas($model, $attributes)`      | Assert each attribute key in `$attributes` matches on the model                          |
+
+State that bleeds across tests is automatically cleared in
+`setUp()` / `tearDown()`:
+
+- `Cloude\Config::reset()` — forgets all loaded config files
+- `Cloude\DateTime::clearTestNow()` — releases any frozen `now()`
+
+```php
+use Cloude\Testing\TestCase;
+use Cloude\Http\NotFoundException;
+
+final class BorrowingTest extends TestCase
+{
+    public function test_returns_404_when_book_missing(): void
+    {
+        $this->useArrayModel(Book::class, []);
+        $this->assertHttpException(404, function (): void {
+            Book::find('does-not-exist') ?? throw new NotFoundException('book');
+        });
+    }
+
+    public function test_borrow_records_event_at_frozen_time(): void
+    {
+        $when = $this->freezeTime('2026-05-18 12:00:00');
+        $this->useArrayModel(Book::class, [['isbn' => '978', 'copies' => 1]]);
+
+        $book = Book::find('978');
+        $book->borrow('member-42');
+
+        $events = $book->pullDomainEvents();
+        $this->assertCount(1, $events);
+        $this->assertSame($when->getTimestamp(), $events[0]->occurredOn()->getTimestamp());
+    }
+}
 ```
 
 ## Philosophy

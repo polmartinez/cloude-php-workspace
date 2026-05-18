@@ -239,6 +239,21 @@ lending app with value objects (`Isbn`, `LoanPeriod`), aggregates
 cross-aggregate "no copies left → no loan" invariant), and JSON-backed
 adapters that implement domain interfaces.
 
+**Optional helpers** (since v0.44): the framework ships thin base
+classes under `Cloude\Domain\…` that you can use or ignore freely:
+
+- `Cloude\Domain\ValueObject` — abstract base with structural
+  `equals()` + `\Stringable` contract
+- `Cloude\Domain\AggregateRoot` — abstract base owning a domain-event
+  queue (`recordEvent()` / `pullDomainEvents()`)
+- `Cloude\Domain\DomainEvent` — marker interface
+- `Cloude\Domain\DomainException` — marker class (extends `\DomainException`)
+
+These are pure base classes, no framework hooks. The domain layer
+stays Cloude-free in spirit; you're just using SPL-equivalent helpers.
+See the [`README` Domain section](README.md#cloudedomain--ddd-helpers-optional)
+for snippets.
+
 **Don't use this when**
 
 - The domain is "rows in tables" with no rules beyond CRUD
