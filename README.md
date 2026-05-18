@@ -167,6 +167,7 @@ cloude-php-workspace/
 | `Cloude\Storage\Identifier` | SQL identifier-quoting helper. `quote()` for single names, `qualify()` for `table.column` / `table.*` / `*` |
 | `Cloude\Storage\Connection` | Named PDO pool keyed off `Config::get('storage.{name}')` |
 | `Cloude\Storage\Factory` | Builds a Storage adapter from a config row (dispatches on `driver`) |
+| `Cloude\Storage\StorageException` | Framework-level wrapper around `\PDOException`. Public readonly `$sqlState`, `$sql`, `$bindings`. Specialised subclasses: `TableNotFoundException` (42S02/42P01), `ColumnNotFoundException` (42S22/42703), `DuplicateKeyException` (23000+1062, 23505), `IntegrityConstraintException` (23xxx), `ConnectionException` (08xxx), `SyntaxErrorException` (42000/42601) |
 
 ### `Cloude\Markdown\…`
 
@@ -715,6 +716,60 @@ echo $q->where('age', '>', 18)->compile();
 **Not in scope:** UNIONs, subqueries, window functions, CTEs, `GROUP BY`
 / `HAVING`, aggregations beyond `count()`. Drop to PDO via
 `$q->pdo()` (or `Connection::pdo('default')`) and write the SQL.
+
+### `Cloude\Storage\StorageException` — catchable SQL errors
+
+Every Query / PdoStorage execution that hits PDO is wrapped: a raw
+`\PDOException` never leaks past the storage layer. The wrapper is a
+plain `\RuntimeException` subclass, so an uncaught one renders as the
+usual 503 via `ErrorHandler`. Catch it (or a specialised subclass) to
+turn driver-specific SQLSTATEs into application behaviour:
+
+```php
+use Cloude\Storage\{StorageException, DuplicateKeyException, TableNotFoundException};
+
+try {
+    User::create(['email' => $email, 'name' => $name]);
+} catch (DuplicateKeyException $e) {
+    return Response::json(['error' => 'email_taken'], 409);
+} catch (TableNotFoundException $e) {
+    // Probably a missing migration.
+    Logger::error("missing table", ['sql' => $e->sql]);
+    throw $e;
+} catch (StorageException $e) {
+    // Anything else SQL-related — log structured fields, re-throw or
+    // render. $e->getPrevious() is the original PDOException.
+    Logger::error('db', [
+        'sqlstate' => $e->sqlState,
+        'sql'      => $e->sql,
+        'bindings' => $e->bindings,
+        'message'  => $e->getMessage(),
+    ]);
+    throw $e;
+}
+```
+
+The dispatch table (`StorageException::wrap()`) covers the SQLSTATEs you
+hit in practice:
+
+| SQLSTATE / code              | Subclass                          | Typical cause                                  |
+|------------------------------|-----------------------------------|------------------------------------------------|
+| 42S02 (MySQL/SQLite), 42P01 (PG) | `TableNotFoundException`        | Missing migration / typo in `$table`           |
+| 42S22, 42703                 | `ColumnNotFoundException`         | Typo / stale schema                            |
+| 23000 + driver code 1062 (MySQL), 23505 (PG) | `DuplicateKeyException`     | UNIQUE / PRIMARY KEY collision                 |
+| 23xxx (everything else)      | `IntegrityConstraintException`    | FK / NOT NULL / CHECK violation                |
+| 08xxx                        | `ConnectionException`             | Can't reach the DB                             |
+| 42000, 42601                 | `SyntaxErrorException`            | Builder bug or hand-written SQL                |
+| anything else                | `StorageException`                | Unmapped — base class still carries the fields |
+
+Public readonly fields on every instance:
+
+| Field        | Type                | Notes                                                       |
+|--------------|---------------------|-------------------------------------------------------------|
+| `$sqlState`  | `string`            | The five-character SQLSTATE                                 |
+| `$sql`       | `string`            | The SQL that failed (with `?` placeholders)                 |
+| `$bindings`  | `list<mixed>`       | Bind values in order — may carry secrets; never echo        |
+| `getPrevious()` | `\PDOException`  | Original driver exception (`errorInfo` preserved)           |
 
 ### `Cloude\Bootstrap`
 

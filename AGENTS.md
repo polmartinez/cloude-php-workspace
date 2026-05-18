@@ -141,6 +141,7 @@ pace; **prefer the Config-driven approach in new code**.
 | Nested AND/OR predicates | `$q->where('active', 1)->whereGroup(fn ($g) => $g->where('role', 'admin')->orWhere('role', 'editor'))` | Use `orWhereGroup` for the OR-joined variant |
 | INNER / LEFT / RIGHT / CROSS JOIN | `$q->leftJoin('orders', 'orders.user_id', '=', 'users.id')` | Columns may be `'table.col'` strings; quoted automatically |
 | Static table / column references | `User::table()`, `User::field('email')`, `User::as('u')` | Avoid hand-writing `'users.email'` literals; pair `as()` with `Query::from()`/`join()` for typed joins |
+| Catch a SQL error | `catch (\Cloude\Storage\StorageException $e)` | Subclasses: `TableNotFoundException`, `ColumnNotFoundException`, `DuplicateKeyException`, `IntegrityConstraintException`, `ConnectionException`, `SyntaxErrorException`. `$e->sql`, `$e->bindings`, `$e->sqlState` are public readonly. `getPrevious()` is the original `\PDOException` |
 | Directory of `.json` per entity | extend `Data\JsonRepository` | Override `transform($data, $slug)` |
 | Directory of `.md` per entity | extend `Data\MarkdownRepository` | Reads `.md.gz` transparently |
 | Markdown → HTML | `Markdown::toHtml($md)` | In-house parser; no Parsedown |

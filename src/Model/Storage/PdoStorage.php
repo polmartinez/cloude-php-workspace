@@ -74,8 +74,7 @@ final class PdoStorage implements Storage
     {
         $sql = 'SELECT * FROM ' . $this->q($this->table)
             . ' WHERE ' . $this->q($this->primaryKey) . ' = ? LIMIT 1';
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$id]);
+        $stmt = \Cloude\Storage\StorageException::execute($this->pdo, $sql, [$id]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
         return $row !== false ? $row : null;
     }
@@ -106,8 +105,7 @@ final class PdoStorage implements Storage
             $sql .= ' OFFSET ' . max(0, (int) $offset);
         }
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = \Cloude\Storage\StorageException::execute($this->pdo, $sql, $params);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         return $rows === false ? [] : $rows;
     }
@@ -116,8 +114,7 @@ final class PdoStorage implements Storage
     {
         [$whereSql, $params] = $this->buildWhere($criteria);
         $sql = 'SELECT COUNT(*) FROM ' . $this->q($this->table) . $whereSql;
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = \Cloude\Storage\StorageException::execute($this->pdo, $sql, $params);
         return (int) $stmt->fetchColumn();
     }
 
@@ -132,8 +129,7 @@ final class PdoStorage implements Storage
             . ' (' . implode(', ', array_map($this->q(...), $cols)) . ')'
             . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(array_values($data));
+        \Cloude\Storage\StorageException::execute($this->pdo, $sql, array_values($data));
 
         if (array_key_exists($this->primaryKey, $data)) {
             return $data[$this->primaryKey];
@@ -159,16 +155,16 @@ final class PdoStorage implements Storage
         $sql = 'UPDATE ' . $this->q($this->table)
             . ' SET ' . implode(', ', $set)
             . ' WHERE ' . $this->q($this->primaryKey) . ' = ?';
-        $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute($params);
+        \Cloude\Storage\StorageException::execute($this->pdo, $sql, $params);
+        return true;
     }
 
     public function delete(mixed $id): bool
     {
         $sql = 'DELETE FROM ' . $this->q($this->table)
             . ' WHERE ' . $this->q($this->primaryKey) . ' = ?';
-        $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute([$id]);
+        \Cloude\Storage\StorageException::execute($this->pdo, $sql, [$id]);
+        return true;
     }
 
     /**

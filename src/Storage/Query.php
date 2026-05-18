@@ -287,8 +287,7 @@ final class Query
     public function get(): array
     {
         [$sql, $params] = $this->buildSelect();
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = StorageException::execute($this->pdo, $sql, $params);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         return $rows === false ? [] : $rows;
     }
@@ -321,8 +320,7 @@ final class Query
         } finally {
             $this->select = $oldSelect;
         }
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = StorageException::execute($this->pdo, $sql, $params);
         return (int) $stmt->fetchColumn();
     }
 
@@ -377,8 +375,7 @@ final class Query
         $sql = 'INSERT INTO ' . $this->qualifyTable($this->table)
             . ' (' . implode(', ', array_map(fn (string $c) => $this->q($c), $cols)) . ')'
             . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(array_values($data));
+        StorageException::execute($this->pdo, $sql, array_values($data));
 
         $last = $this->pdo->lastInsertId();
         if ($last === '' || $last === false || $last === '0') {
@@ -398,8 +395,7 @@ final class Query
             return 0;
         }
         [$sql, $params] = $this->buildUpdate($data);
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = StorageException::execute($this->pdo, $sql, $params);
         return $stmt->rowCount();
     }
 
@@ -409,8 +405,7 @@ final class Query
     public function delete(): int
     {
         [$sql, $params] = $this->buildDelete();
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = StorageException::execute($this->pdo, $sql, $params);
         return $stmt->rowCount();
     }
 
