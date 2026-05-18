@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cloude\Mail;
 
+use Cloude\Arr;
 use Cloude\Config;
 use Cloude\Mail\Transport\SendmailTransport;
 use Cloude\Mail\Transport\SmtpTransport;
@@ -111,23 +112,51 @@ final class Mailer
      *       'from'      => 'no-reply@example.com',
      *   ];
      *
+     * **Partial config also merges with `Cloude\Config::get('email')`** —
+     * if you pass an array, it's deep-merged on top of whatever the
+     * framework's `config/email.php` + the app's `app/config/email.php`
+     * already declared. So:
+     *
+     *   Mailer::forge(['transport' => 'smtp', 'host' => 'smtp.mailersend.net']);
+     *
+     * still inherits `port`, `tls`, `timeout`, `from` etc. from your
+     * existing config — you only declare what's different. Pass keys
+     * to NULL them out explicitly if you want to clear something.
+     *
+     * Edge case: if `Config` isn't wired (no `configure()` call) the
+     * passed array is used as-is. Built-in fallbacks for SMTP defaults
+     * (port=587, tls=true, timeout=30) still kick in via the constructor
+     * argument defaults below.
+     *
      * @param array<string,mixed>|null $config
      */
     public static function forge(?array $config = null): self
     {
-        if ($config === null) {
+        // Merge layer: framework defaults (config/email.php) + app
+        // overrides (app/config/email.php) — already deep-merged by
+        // Cloude\Config. We pull this whenever Config is wired, then
+        // overlay the caller-supplied $config (if any) on top.
+        $merged = [];
+        if (Config::paths() !== []) {
             $loaded = Config::get('email');
-            if (!is_array($loaded) || $loaded === []) {
-                throw new \InvalidArgumentException(
-                    "Mailer::forge() with no args expects an 'email' "
-                    . 'entry in Cloude\\Config (app/config/email.php). '
-                    . 'The framework ships defaults at config/email.php; '
-                    . "make sure Cloude\\Config::configure(APPPATH . '/config') "
-                    . 'ran at boot, or pass the config array explicitly.',
-                );
+            if (is_array($loaded)) {
+                $merged = $loaded;
             }
-            $config = $loaded;
         }
+        if ($config !== null) {
+            $merged = $merged === [] ? $config : Arr::merge($merged, $config);
+        }
+
+        if ($merged === []) {
+            throw new \InvalidArgumentException(
+                "Mailer::forge() expects an 'email' entry in "
+                . 'Cloude\\Config (app/config/email.php) or an explicit '
+                . 'config array. The framework ships defaults at config/email.php; '
+                . "make sure Cloude\\Config::configure(APPPATH . '/config') "
+                . 'ran at boot.',
+            );
+        }
+        $config = $merged;
 
         $type = $config['transport'] ?? throw new \InvalidArgumentException(
             "Mail config needs a 'transport' key (use 'smtp' or 'sendmail')",

@@ -155,6 +155,43 @@ final class MailerTest extends TestCase
         }
     }
 
+    public function testForgePartialConfigMergesWithCoreAndAppDefaults(): void
+    {
+        // App config sets a non-standard port. Caller-supplied partial
+        // config (transport+host+from) must inherit it from the merged
+        // Config layer, not from a hardcoded fallback inside forge().
+        $tmp = sys_get_temp_dir() . '/cloude-mailer-partial-' . bin2hex(random_bytes(4));
+        @mkdir($tmp, 0755, true);
+        file_put_contents($tmp . '/email.php', "<?php return [
+            'port'    => 2525,
+            'timeout' => 5,
+        ];");
+
+        \Cloude\Config::reset();
+        \Cloude\Config::setConfigPath($tmp);
+        try {
+            $mailer = Mailer::forge([
+                'transport' => 'smtp',
+                'host'      => 'smtp.example.test',
+                'from'      => 'x@y.test',
+            ]);
+
+            $rc = new \ReflectionClass($mailer);
+            $transport = $rc->getProperty('transport')->getValue($mailer);
+            $tc = new \ReflectionClass($transport);
+
+            self::assertInstanceOf(SmtpTransport::class, $transport);
+            self::assertSame('smtp.example.test', $tc->getProperty('host')->getValue($transport));
+            self::assertSame(2525, $tc->getProperty('port')->getValue($transport));   // from app
+            self::assertSame(5, $tc->getProperty('timeout')->getValue($transport)); // from app
+            self::assertTrue($tc->getProperty('tls')->getValue($transport));           // from FW core (config/email.php)
+        } finally {
+            @unlink($tmp . '/email.php');
+            @rmdir($tmp);
+            \Cloude\Config::reset();
+        }
+    }
+
     public function testForgeMergesFrameworkDefaultsWithAppEmailConfig(): void
     {
         // The framework's bundled config/email.php provides safe defaults
