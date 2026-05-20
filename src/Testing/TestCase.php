@@ -290,6 +290,11 @@ abstract class TestCase
         Assert::equals($expected, $actual, $message);
     }
 
+    public static function assertEqualsWithDelta(mixed $expected, mixed $actual, float $delta, string $message = ''): void
+    {
+        Assert::equalsWithDelta($expected, $actual, $delta, $message);
+    }
+
     public static function assertTrue(mixed $value, string $message = ''): void
     {
         Assert::true($value, $message);

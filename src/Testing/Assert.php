@@ -68,6 +68,36 @@ final class Assert
         self::$count++;
     }
 
+    /**
+     * Numeric equality with a tolerance — `|expected − actual| <= delta`.
+     * The right call for float comparisons where strict `===` is too
+     * tight (rounding error, accumulated arithmetic, etc.).
+     *
+     *   Assert::equalsWithDelta(0.3, 0.1 + 0.2, 1e-9);   // passes
+     */
+    public static function equalsWithDelta(mixed $expected, mixed $actual, float $delta, string $message = ''): void
+    {
+        if (!is_numeric($expected) || !is_numeric($actual)) {
+            self::fail(self::join(
+                $message,
+                'Failed asserting that values are numeric (got '
+                . self::dump($expected) . ' and ' . self::dump($actual) . ')',
+            ));
+        }
+        if ($delta < 0) {
+            throw new \InvalidArgumentException('Assert::equalsWithDelta: $delta must be >= 0');
+        }
+        $diff = abs((float) $expected - (float) $actual);
+        if ($diff > $delta) {
+            self::fail(self::join(
+                $message,
+                'Failed asserting that ' . self::dump($actual) . ' equals ' . self::dump($expected)
+                . " within delta $delta (actual diff: $diff)",
+            ));
+        }
+        self::$count++;
+    }
+
     // ── booleans / nulls ──────────────────────────────────────────────────
 
     public static function true(mixed $value, string $message = ''): void

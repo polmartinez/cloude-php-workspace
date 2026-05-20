@@ -1880,7 +1880,7 @@ PHPUnit-compatible names (`assertSame`, `assertTrue`, etc.) are
 available both as `$this->...` and `self::...` (route to the same
 implementation). The full list:
 
-| Equality        | `assertSame`, `assertNotSame`, `assertEquals` |
+| Equality        | `assertSame`, `assertNotSame`, `assertEquals`, `assertEqualsWithDelta` |
 | Booleans / null | `assertTrue`, `assertFalse`, `assertNull`, `assertNotNull` |
 | Containers      | `assertCount`, `assertEmpty`, `assertNotEmpty`, `assertContains`, `assertArrayHasKey`, `assertArrayNotHasKey` |
 | Type            | `assertInstanceOf`, `assertNotInstanceOf`, `assertIsString` |
