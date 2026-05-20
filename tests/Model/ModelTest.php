@@ -341,6 +341,97 @@ final class ModelTest extends TestCase
         self::assertSame([], TestUser::indexesSql());
         self::assertSame([], TestUser::foreignKeysSql());
     }
+
+    // ── auto-timestamps ──────────────────────────────────────────────────
+
+    public function testInsertAutoStampsCreatedAtAndUpdatedAt(): void
+    {
+        TimestampedThing::configure(new \Cloude\Model\Storage\ArrayStorage([]));
+
+        $now = '2026-05-18 12:00:00';
+        \Cloude\DateTime::setTestNow(new \Cloude\DateTime($now));
+        try {
+            $t = TimestampedThing::create(['name' => 'widget']);
+            self::assertSame($now, $t->created_at);
+            self::assertSame($now, $t->updated_at);
+        } finally {
+            \Cloude\DateTime::clearTestNow();
+        }
+    }
+
+    public function testUpdateOnlyTouchesUpdatedAt(): void
+    {
+        $store = new \Cloude\Model\Storage\ArrayStorage([]);
+        TimestampedThing::configure($store);
+
+        \Cloude\DateTime::setTestNow(new \Cloude\DateTime('2026-05-18 12:00:00'));
+        $t = TimestampedThing::create(['name' => 'widget']);
+        $createdAt = $t->created_at;
+
+        \Cloude\DateTime::setTestNow(new \Cloude\DateTime('2026-05-19 09:00:00'));
+        try {
+            $t->name = 'widget v2';
+            $t->save();
+            self::assertSame($createdAt, $t->created_at);             // not touched on update
+            self::assertSame('2026-05-19 09:00:00', $t->updated_at);  // moved
+        } finally {
+            \Cloude\DateTime::clearTestNow();
+        }
+    }
+
+    public function testExplicitCreatedAtIsNotOverwritten(): void
+    {
+        // Useful for imports — caller supplied created_at explicitly.
+        TimestampedThing::configure(new \Cloude\Model\Storage\ArrayStorage([]));
+        \Cloude\DateTime::setTestNow(new \Cloude\DateTime('2026-05-18 12:00:00'));
+        try {
+            $t = TimestampedThing::create([
+                'name'       => 'imported',
+                'created_at' => '2020-01-01 00:00:00',
+            ]);
+            self::assertSame('2020-01-01 00:00:00', $t->created_at);
+            self::assertSame('2026-05-18 12:00:00', $t->updated_at);
+        } finally {
+            \Cloude\DateTime::clearTestNow();
+        }
+    }
+
+    public function testCustomColumnNamesAreHonoured(): void
+    {
+        CustomTimestamped::configure(new \Cloude\Model\Storage\ArrayStorage([]));
+        \Cloude\DateTime::setTestNow(new \Cloude\DateTime('2026-05-18 12:00:00'));
+        try {
+            $t = CustomTimestamped::create(['name' => 'x']);
+            self::assertSame('2026-05-18 12:00:00', $t->inserted_at);
+            self::assertSame('2026-05-18 12:00:00', $t->modified_at);
+        } finally {
+            \Cloude\DateTime::clearTestNow();
+        }
+    }
+
+    public function testColumnNotInPropertiesIsSilentlySkipped(): void
+    {
+        // TestUser declares only ['id', 'email', 'name', 'active'] —
+        // no created_at / updated_at. Save() must NOT try to write
+        // those fields. (No exception, no silent extra row data.)
+        TestUser::configure(new \Cloude\Model\Storage\ArrayStorage([]));
+        $u = TestUser::create(['email' => 'ada@x', 'name' => 'Ada', 'active' => 1]);
+
+        // Inspect the underlying storage directly to verify nothing
+        // outside the declared shape sneaked in.
+        $row = TestUser::storage()->find($u->id);
+        self::assertArrayNotHasKey('created_at', $row);
+        self::assertArrayNotHasKey('updated_at', $row);
+    }
+
+    public function testTimestampsCanBeDisabledPerModel(): void
+    {
+        // Same shape as TimestampedThing but with $timestamps = false.
+        NoTimestamps::configure(new \Cloude\Model\Storage\ArrayStorage([]));
+        $t = NoTimestamps::create(['name' => 'no-stamps']);
+        self::assertNull($t->created_at);
+        self::assertNull($t->updated_at);
+    }
 }
 
 final class ConstrainedWidget extends \Cloude\Model\Model
@@ -363,4 +454,32 @@ final class ConstrainedWidget extends \Cloude\Model\Model
             'on_update'  => 'cascade',
         ],
     ];
+}
+
+/**
+ * Model with created_at + updated_at columns declared in $properties.
+ * Save() should auto-stamp both on insert, and only updated_at on
+ * subsequent saves.
+ */
+final class TimestampedThing extends \Cloude\Model\Model
+{
+    protected static string $table = 'things';
+    protected static array $properties = ['id', 'name', 'created_at', 'updated_at'];
+}
+
+/** Same with custom column names. */
+final class CustomTimestamped extends \Cloude\Model\Model
+{
+    protected static string $table = 'things';
+    protected static array $properties = ['id', 'name', 'inserted_at', 'modified_at'];
+    protected static ?string $createdAt = 'inserted_at';
+    protected static ?string $updatedAt = 'modified_at';
+}
+
+/** Opt-out: $timestamps = false disables the feature for the model. */
+final class NoTimestamps extends \Cloude\Model\Model
+{
+    protected static string $table = 'things';
+    protected static array $properties = ['id', 'name', 'created_at', 'updated_at'];
+    protected static bool $timestamps = false;
 }
