@@ -275,33 +275,6 @@ abstract class Model
      */
     protected static array $foreignKeys = [];
 
-    /**
-     * Subclass: master switch for automatic timestamp population in
-     * `save()`. When `true` (the default), the framework looks at
-     * {@see $createdAt} and {@see $updatedAt} and fills those columns
-     * with the current `Cloude\DateTime::now()->toDateTimeString()` —
-     * **but only if the column name appears in the {@see $properties}
-     * whitelist**. Columns not in `$properties` are silently skipped,
-     * so models that don't track timestamps don't get spurious writes.
-     *
-     * Set to `false` to disable the behavior entirely for a model.
-     */
-    protected static bool $timestamps = true;
-
-    /**
-     * Subclass: column name used for the "created at" timestamp
-     * (written once on INSERT, never updated). Set to `null` to
-     * disable just this side of the auto-timestamp pair.
-     */
-    protected static ?string $createdAt = 'created_at';
-
-    /**
-     * Subclass: column name used for the "updated at" timestamp
-     * (written on every `save()` — both INSERT and UPDATE). Set to
-     * `null` to disable just this side.
-     */
-    protected static ?string $updatedAt = 'updated_at';
-
     /** @var array<class-string, Storage> */
     private static array $storages = [];
 
@@ -671,11 +644,6 @@ abstract class Model
     {
         $this->beforeSave();
 
-        // Auto-timestamps: stamp `$createdAt` (on first insert only) and
-        // `$updatedAt` (every save), but only when the column appears in
-        // `$properties` so we don't blow up on models without those columns.
-        $this->applyAutoTimestamps();
-
         $payload = static::$types === []
             ? $this->attributes
             : self::applyTypes($this->attributes, /* write: */ true);
@@ -771,44 +739,4 @@ abstract class Model
         return $attrs;
     }
 
-    /**
-     * Stamp `$createdAt` (on first save) and `$updatedAt` (on every
-     * save) with the current `Cloude\DateTime::now()->toDateTimeString()`
-     * value (`Y-m-d H:i:s`, MySQL DATETIME-shaped).
-     *
-     * Skipped silently when:
-     *   - `$timestamps` is `false`, or
-     *   - the column name is `null`, or
-     *   - the column isn't listed in `$properties` (the model just
-     *     doesn't have that column — no spurious writes).
-     *
-     * `$properties === []` (no whitelist) also counts as "not
-     * declared" here — opt-in only, so models that use `$properties`
-     * loosely (e.g. tests) don't get unexpected fields.
-     */
-    private function applyAutoTimestamps(): void
-    {
-        if (!static::$timestamps || static::$properties === []) {
-            return;
-        }
-        // Route through `now()` so `DateTime::setTestNow()` can freeze
-        // the clock for tests.
-        $now = \Cloude\DateTime::now()->toDateTimeString();
-
-        $updatedCol = static::$updatedAt;
-        if ($updatedCol !== null && in_array($updatedCol, static::$properties, true)) {
-            $this->attributes[$updatedCol] = $now;
-        }
-
-        $createdCol = static::$createdAt;
-        if (!$this->isPersisted
-            && $createdCol !== null
-            && in_array($createdCol, static::$properties, true)
-            // Don't overwrite a created_at that was set explicitly (e.g.
-            // when importing rows with their original timestamps).
-            && !array_key_exists($createdCol, $this->attributes)
-        ) {
-            $this->attributes[$createdCol] = $now;
-        }
-    }
 }

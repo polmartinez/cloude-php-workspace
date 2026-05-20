@@ -50,61 +50,58 @@ class User extends \Cloude\Model\Model
 |----------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
 | `$table`       | every storage call                                | the table / collection identifier                                                       |
 | `$primaryKey`  | `find()` / `save()` / `delete()`                  | by-PK lookups; protected from `save()`-time overwrite                                   |
-| `$properties`  | `__set()` / `fill()` / `create()` / auto-timestamps | mass-assignment whitelist (untrusted-input hardening). Empty = disabled                 |
+| `$properties`  | `__set()` / `fill()` / `create()`                 | mass-assignment whitelist (untrusted-input hardening). Empty = disabled                 |
 | `$types`       | `hydrate()` / `save()` / `refresh()` / `toArray(serialize: true)` | per-attribute `Cast::read` / `Cast::write` — **NULL is never coerced**             |
 | `$indexes`     | `indexesSql()`                                    | `list<string>` of `CREATE [UNIQUE] INDEX` statements                                    |
 | `$foreignKeys` | `foreignKeysSql()`                                | `list<string>` of `ALTER TABLE ... ADD CONSTRAINT` statements                            |
-| `$timestamps`  | `save()`                                          | bool master switch for auto-timestamps. Default `true`                                  |
-| `$createdAt`   | `save()` on INSERT                                | column name to auto-fill (default `'created_at'`). Set to `null` to skip                |
-| `$updatedAt`   | `save()` on every write                           | column name to auto-fill (default `'updated_at'`). Set to `null` to skip                |
 
-## Auto-timestamps
+## Recommended: auto-managed `created_at` / `updated_at`
 
-When `$timestamps === true` (the default), `save()` auto-fills the
-`$createdAt` and `$updatedAt` columns with the current
-`Cloude\DateTime::now()->toDateTimeString()`:
+The framework intentionally ships no `$timestamps` built-in for this
+— a `beforeSave()` override is shorter than any opt-in config would
+have been, and stays explicit (no surprise about when the columns get
+written). Copy this pattern verbatim into any model that needs it:
 
 ```php
 class Post extends Model
 {
     protected static string $table = 'posts';
-
-    // Just listing the columns in $properties is enough. Both
-    // 'created_at' and 'updated_at' are auto-filled on save.
-    protected static array $properties = ['id', 'title', 'body', 'created_at', 'updated_at'];
-
-    protected static array $types = [
+    protected static array  $properties = ['id', 'title', 'body', 'created_at', 'updated_at'];
+    protected static array  $types = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    protected function beforeSave(): void
+    {
+        $now = \Cloude\DateTime::now()->toDateTimeString();
+        if (in_array('created_at', static::$properties, true) && !$this->isPersisted()) {
+            $this->created_at ??= $now;
+        }
+        if (in_array('updated_at', static::$properties, true)) {
+            $this->updated_at = $now;
+        }
+    }
 }
-
-$p = Post::create(['title' => 'hi', 'body' => '...']);
-$p->created_at;   // Cloude\DateTime — set automatically
-$p->updated_at;   // same
-
-$p->title = 'hi (edited)';
-$p->save();
-$p->updated_at;   // moved forward; created_at untouched
 ```
 
-**Silent-skip safety net.** If a column name listed in `$createdAt` /
-`$updatedAt` is NOT in `$properties`, the framework skips it without
-throwing. Models that don't track timestamps need no extra wiring —
-the feature is opt-in via the `$properties` declaration. Set
-`$timestamps = false` on the subclass to disable the feature entirely.
+Why this shape:
 
-**Custom column names.** Override `$createdAt` / `$updatedAt` if your
-schema uses different naming (e.g. `'inserted_at'`):
+- **`in_array(..., static::$properties)`** guards against the model
+  *not* having the column. The whole block is a no-op when `created_at`
+  / `updated_at` aren't declared. Lets you drop the same `beforeSave()`
+  into a shared parent / trait and have it just-work across models.
+- **`??=`** preserves an explicit `$model->created_at` (imports /
+  fixtures keep their original timestamps).
+- **`$this->isPersisted()`** distinguishes INSERT from UPDATE so
+  `created_at` is set once.
+- **`\Cloude\DateTime::now()`** routes through the framework clock —
+  `DateTime::setTestNow()` works in tests for deterministic time.
 
-```php
-protected static ?string $createdAt = 'inserted_at';
-protected static ?string $updatedAt = 'modified_at';
-```
-
-**Explicit values win.** An explicitly assigned `$model->created_at`
-isn't overwritten on INSERT — useful for imports / fixtures that keep
-the original timestamps.
+Custom column names? Rename the literals in the block. Different
+behavior on UPDATE? Move the block around. The whole thing is four
+lines of plain PHP that you can read top-to-bottom — no framework
+indirection to chase.
 
 ## Indexes / FKs: declared here, applied elsewhere
 
