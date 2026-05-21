@@ -14,6 +14,7 @@
 | Resolve the base URL | `Config::baseUrl(['example.com'])` | Memoized; reads `app.base_url` → env → auto-detect |
 | Read the debug flag | `Config::debug()` | Reads `app.debug` → env → false |
 | Read the configured timezone | `Config::get('app.timezone', 'UTC')` | FW ships `config/app.php` with `'timezone' => 'UTC'` default; `Bootstrap::run()` calls `date_default_timezone_set()` with the resolved value at boot |
+| Use short names in views (`View::e(...)`, `Str::slug(...)`) without `use` statements | Declare `'aliases' => ['View', 'Input', 'Str']` in `app/config/app.php` | `Bootstrap::run()` calls `class_alias('Cloude\<short>', '<short>')` for each entry. Skipped silently when the short name is already taken — your own classes are never stomped. Alternative: standard PHP `use Cloude\{View, Input, Str};` at the top of each view file |
 | Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](../../README.md#cloudeconfig) |
 | Ship default configs from a library / module | `Cloude\Config::addPath('/path/to/your/config')` | Resolution order is `[core, app, ...extra]` — last entry wins on every key (deep-merge via `Arr::merge`) |
 

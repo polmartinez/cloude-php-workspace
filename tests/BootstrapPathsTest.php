@@ -139,6 +139,97 @@ PHP;
         }
     }
 
+    public function testRunRegistersConfiguredShortNameAliases(): void
+    {
+        // class_alias is process-global, so we drive each test through
+        // a subprocess to keep them isolated.
+        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
+        $appDir = sys_get_temp_dir() . '/cloude-aliases-' . bin2hex(random_bytes(4));
+        @mkdir($appDir, 0755, true);
+        file_put_contents($appDir . '/app.php', "<?php return ['aliases' => ['View', 'Str']];");
+        try {
+            $code = <<<PHP
+<?php
+require {$this->phpString($autoload)};
+\\Cloude\\Config::configure({$this->phpString($appDir)});
+\\Cloude\\Bootstrap::run();
+
+// After Bootstrap::run() the bare names should resolve to Cloude\\* .
+echo (int) class_exists('View',  false), "\n";
+echo (int) class_exists('Str',   false), "\n";
+echo (int) class_exists('Input', false), "\n";
+echo Str::slug('Hello World'), "\n";
+PHP;
+            $tmp = tempnam(sys_get_temp_dir(), 'bp_');
+            file_put_contents($tmp, $code);
+            $cmd = escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+            $output = trim((string) shell_exec($cmd));
+            @unlink($tmp);
+
+            $lines = explode("\n", $output);
+            self::assertSame('1', $lines[0]);                // View aliased
+            self::assertSame('1', $lines[1]);                // Str aliased
+            self::assertSame('0', $lines[2]);                // Input NOT aliased (omitted)
+            self::assertSame('hello-world', $lines[3]);      // short name actually works
+        } finally {
+            @unlink($appDir . '/app.php');
+            @rmdir($appDir);
+        }
+    }
+
+    public function testRunDoesNotRegisterAliasesByDefault(): void
+    {
+        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
+        $code = <<<PHP
+<?php
+require {$this->phpString($autoload)};
+\\Cloude\\Config::configure(sys_get_temp_dir());     // no app.php → no app.aliases
+\\Cloude\\Bootstrap::run();
+echo (int) class_exists('View', false);
+PHP;
+        $tmp = tempnam(sys_get_temp_dir(), 'bp_');
+        file_put_contents($tmp, $code);
+        $cmd = escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+        $output = trim((string) shell_exec($cmd));
+        @unlink($tmp);
+
+        self::assertSame('0', $output);
+    }
+
+    public function testRunSkipsAliasWhenShortNameAlreadyTaken(): void
+    {
+        // If the consumer app already declares a `View` class, the
+        // framework must NOT stomp it.
+        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
+        $appDir = sys_get_temp_dir() . '/cloude-aliases-conflict-' . bin2hex(random_bytes(4));
+        @mkdir($appDir, 0755, true);
+        file_put_contents($appDir . '/app.php', "<?php return ['aliases' => ['View']];");
+        try {
+            $code = <<<PHP
+<?php
+require {$this->phpString($autoload)};
+
+// Pre-declare a conflicting `View` class BEFORE Bootstrap::run().
+class View { public static function e(\$s): string { return 'USER:' . \$s; } }
+
+\\Cloude\\Config::configure({$this->phpString($appDir)});
+\\Cloude\\Bootstrap::run();
+
+echo View::e('hi');     // should still resolve to the user's class
+PHP;
+            $tmp = tempnam(sys_get_temp_dir(), 'bp_');
+            file_put_contents($tmp, $code);
+            $cmd = escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+            $output = trim((string) shell_exec($cmd));
+            @unlink($tmp);
+
+            self::assertStringEndsWith('USER:hi', $output);
+        } finally {
+            @unlink($appDir . '/app.php');
+            @rmdir($appDir);
+        }
+    }
+
     private function phpString(string $s): string
     {
         return var_export($s, true);

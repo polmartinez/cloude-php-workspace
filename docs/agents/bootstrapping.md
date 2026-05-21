@@ -55,12 +55,37 @@ return [
     'base_url' => \Cloude\Config::env('BASE_URL'),    // null → auto-detect
     'debug'    => \Cloude\Config::boolEnv('DEBUG'),
     'timezone' => \Cloude\Config::env('TZ', 'UTC'),   // applied by Bootstrap::run()
+    'aliases'  => ['View', 'Input', 'Str'],           // ← short-name shortcuts (see below)
     'paths' => [
         'data'  => BASEPATH . '/data',
         'views' => APPPATH . '/views',
     ],
 ];
 ```
+
+### Short-name aliases (optional)
+
+The `aliases` key lets `Bootstrap::run()` register process-global
+aliases so views — and any other code — can drop the `Cloude\`
+prefix:
+
+```php
+// In a view (.html.php), no `use` statements needed:
+<title><?= View::e($title) ?></title>
+<input value="<?= View::e(Input::get('q', '')) ?>">
+<a href="/p/<?= Str::slug($post->title) ?>">…</a>
+```
+
+Each entry is the short name of a class under `Cloude\` (e.g.
+`'View'` → `\Cloude\View`). The framework looks the full name up via
+the autoloader and calls `class_alias($full, $short)`. Skipped
+silently when the short name is already taken — your own classes /
+PHP built-ins are never stomped.
+
+Opt-in, no defaults: omit the `aliases` key and **no aliases are
+registered**. If you prefer explicit `use Cloude\{View, Input, Str};`
+at the top of each view, that's the standard PHP shape and works
+without any framework wiring.
 
 The framework ships `config/app.php` with `'timezone' => 'UTC'` as a
 default. Your `app/config/app.php` overrides any key you set

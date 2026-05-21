@@ -121,6 +121,14 @@ class Bootstrap
         $tz = Config::get('app.timezone', 'UTC');
         date_default_timezone_set(is_string($tz) && $tz !== '' ? $tz : 'UTC');
 
+        // Register short-name aliases when declared in `app.aliases`.
+        // Lets views write `View::e(...)` / `Str::slug(...)` instead of
+        // `\Cloude\View::e(...)`. Opt-in, no global pollution by default.
+        $aliases = Config::get('app.aliases');
+        if (is_array($aliases)) {
+            self::registerAliases($aliases);
+        }
+
         ob_start();
 
         $debug ??= Config::debug();
@@ -134,5 +142,49 @@ class Bootstrap
 
         $effective = $viewBase ?? (View::getBasePath() ?: null);
         Http\ErrorHandler::register(debug: $debug, viewBase: $effective);
+    }
+
+    /**
+     * Register short-name aliases for framework classes so views (and
+     * any other code) can drop the `Cloude\` prefix. Driven by the
+     * `app.aliases` config key:
+     *
+     *   // app/config/app.php
+     *   return [
+     *       'aliases' => ['View', 'Input', 'Str', 'DateTime'],
+     *   ];
+     *
+     *   // Anywhere afterwards:
+     *   echo View::e($title);
+     *   echo Str::slug($post->title);
+     *
+     * Each entry must be a string. The framework looks up
+     * `\Cloude\<entry>` and aliases it to the bare short name. Entries
+     * whose short name is already taken (e.g. you have your own
+     * `App\View` aliased globally) are skipped silently — no override
+     * of existing symbols, so consumer code stays safe.
+     *
+     * @param array<mixed> $aliases
+     */
+    private static function registerAliases(array $aliases): void
+    {
+        foreach ($aliases as $short) {
+            if (!is_string($short) || $short === '') {
+                continue;
+            }
+            // Skip when the short name is already taken (user class,
+            // PHP built-in, previous alias). Don't try to be clever.
+            if (class_exists($short, false)
+                || interface_exists($short, false)
+                || trait_exists($short, false)
+            ) {
+                continue;
+            }
+            $full = 'Cloude\\' . $short;
+            if (!class_exists($full, true)) {
+                continue;
+            }
+            class_alias($full, $short);
+        }
     }
 }
