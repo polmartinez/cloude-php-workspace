@@ -390,12 +390,28 @@ View::render('home.php', ['title' => 'Hello', 'user' => $user]);   // prints
 $html = View::capture('home.php', $vars);                          // returns string
 ```
 
-In the template:
+In the template — pick whichever shape fits:
+
 ```php
-<!-- views/home.php -->
+<!-- views/home.html.php — Option A: per-view `use` (explicit) -->
+<?php use Cloude\{View, Input, Str}; ?>
 <h1><?= View::e($title) ?></h1>
 <p>Hello, <?= View::e($user['name']) ?></p>
 ```
+
+```php
+<!-- views/home.html.php — Option B: short-name aliases via app config -->
+<!-- declared once in app/config/app.php:
+       'aliases' => ['View', 'Input', 'Str'],
+     no `use` needed in any view after that -->
+<h1><?= View::e($title) ?></h1>
+<p>Hello, <?= View::e($user['name']) ?></p>
+```
+
+`Bootstrap::run()` reads `app.aliases` and registers each entry as a
+global alias for `Cloude\<short>`. Skipped silently if the short name
+already exists (your own classes are never stomped). Opt-in — no
+aliases registered by default.
 
 ## Logger
 

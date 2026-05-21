@@ -346,6 +346,53 @@ visually separates HTML-producing templates from PHP source files
 (controllers, models) and improves IDE highlighting. The `render()` /
 `capture()` methods don't enforce it; any `require`-able path works.
 
+#### Short names inside views
+
+`include`-based templates run in their own scope, so `View::e()` etc.
+need the framework namespace. Two equally supported shapes — pick the
+one that fits the project:
+
+**Option A — standard `use` statement** (per-view, explicit, IDE-friendly):
+
+```php
+<?php // views/layout.html.php ?>
+<?php use Cloude\{View, Input, Str}; ?>
+<!doctype html>
+<title><?= View::e($title) ?></title>
+<form><input value="<?= View::e(Input::get('q', '')) ?>"></form>
+```
+
+**Option B — declarative aliases in `app/config/app.php`** (one
+declaration, every view inherits):
+
+```php
+// app/config/app.php
+return [
+    'aliases' => ['View', 'Input', 'Str', 'DateTime'],
+    // …other config
+];
+```
+
+```php
+<?php // views/layout.html.php — no `use` needed ?>
+<!doctype html>
+<title><?= View::e($title) ?></title>
+<form><input value="<?= View::e(Input::get('q', '')) ?>"></form>
+<small><?= DateTime::parse($post->created_at)->diffForHumans() ?></small>
+```
+
+`Bootstrap::run()` reads the `aliases` list and calls
+`class_alias('Cloude\<short>', '<short>')` for each entry. The
+framework **skips silently** when the short name is already taken
+(your own classes, PHP built-ins, prior aliases) so user code is
+never stomped. Default config registers no aliases — the feature is
+strictly opt-in.
+
+Bundled examples (`examples/basic/`, `examples/contacts/`,
+`examples/library/`) use Option A so they're explicit about every
+import. Real apps with many views often prefer Option B to drop the
+`use` boilerplate.
+
 ### `Cloude\Markdown`
 
 ```php

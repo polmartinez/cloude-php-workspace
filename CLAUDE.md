@@ -91,12 +91,19 @@ composer dump-autoload
 return [
     'base_url' => \Cloude\Config::env('BASE_URL'),   // null → auto-detect
     'debug'    => \Cloude\Config::boolEnv('DEBUG'),
+    'timezone' => \Cloude\Config::env('TZ', 'UTC'),
+    'aliases'  => ['View', 'Input', 'Str'],          // short names in views (optional)
     'paths' => [
         'data'  => BASEPATH . '/data',
-        'views' => APPPATH . '/../views',  // or wherever you put templates
+        'views' => APPPATH . '/../views',
     ],
 ];
 ```
+
+The `aliases` key lets `Bootstrap::run()` register `class_alias` for
+each entry (`Cloude\View` → `View`, etc.) so views can drop the
+`use` boilerplate. Skip the key if you prefer per-view
+`use Cloude\{View, Input, Str};` statements — both work.
 
 Add as many config files as you want next to this one (`db.php`,
 `mail.php`, …); each is loaded on demand by `Config::load(...)`.
@@ -163,11 +170,15 @@ models) at a glance and improves IDE highlighting.
 
 ```php
 <?php // views/layout.html.php ?>
-<?php use Cloude\View; ?>
 <!doctype html>
 <title><?= View::e($title) ?></title>
 <?php require __DIR__ . '/' . $content; ?>
 ```
+
+The `View::e()` short form above relies on the `'aliases' => ['View', …]`
+entry in `app/config/app.php`. If you'd rather keep aliases off,
+prepend the view with `<?php use Cloude\View; ?>` and the same call
+works.
 
 ```php
 <?php // views/home.html.php ?>
