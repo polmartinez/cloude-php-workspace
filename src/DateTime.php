@@ -25,6 +25,7 @@ namespace Cloude;
  *   $d->toTimeString();        // '14:30:00'
  *   $d->toDateTimeString();    // '2026-05-18 14:30:00'
  *   $d->toIsoString();         // '2026-05-18T14:30:00+02:00'
+ *   (string) $d;               // '2026-05-18 14:30:00' (Y-m-d H:i:s — MySQL-shaped)
  *
  * Arithmetic returning a new instance:
  *
@@ -134,6 +135,30 @@ final class DateTime extends \DateTimeImmutable
     }
 
     // ── format shortcuts ──────────────────────────────────────────────────
+
+    /**
+     * String cast — defaults to `'Y-m-d H:i:s'` (MySQL DATETIME-shaped).
+     *
+     * Convenient for the common case of dropping a DateTime straight
+     * into a SQL bind parameter, a log line, or a Markdown table.
+     * Match the format your storage layer uses — Cloude\Model's
+     * `datetime` cast round-trips the same `'Y-m-d H:i:s'` string,
+     * so casting to `(string)` and writing to a DATETIME column is
+     * lossless.
+     *
+     *   $d = DateTime::parse('2026-05-18 14:30:00');
+     *   echo (string) $d;                // '2026-05-18 14:30:00'
+     *   echo "Created at $d";            // same — interpolation works
+     *   $stmt->bindValue(':at', $d);     // PDO sees the string form
+     *
+     * For ISO-8601 / timezone-bearing output use `toIsoString()`
+     * explicitly; this default sacrifices the offset for SQL
+     * friendliness.
+     */
+    public function __toString(): string
+    {
+        return $this->format('Y-m-d H:i:s');
+    }
 
     /** `'Y-m-d'` — e.g. `'2026-05-18'`. */
     public function toDateString(): string

@@ -1315,6 +1315,9 @@ $d->toDateString();        // 'Y-m-d'         → '2026-05-18'
 $d->toTimeString();        // 'H:i:s'         → '14:30:00'
 $d->toDateTimeString();    // 'Y-m-d H:i:s'   → '2026-05-18 14:30:00'
 $d->toIsoString();         // 'c' / RFC 3339  → '2026-05-18T14:30:00+02:00'
+(string) $d;               // 'Y-m-d H:i:s' — MySQL-shaped, drops the offset
+                           //   Use toIsoString() when you need timezone in the output.
+                           //   Interpolation works: "saved at $d" → "saved at 2026-05-18 …"
 
 // Arithmetic (immutable — always returns a new instance)
 $d->addDays(7)->subHours(2)->addMinutes(30);

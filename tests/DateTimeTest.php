@@ -44,6 +44,35 @@ final class DateTimeTest extends TestCase
         self::assertSame('2026-05-18T14:30:00+00:00', $d->toIsoString());
     }
 
+    public function testStringCastEmitsYmdHisFormat(): void
+    {
+        $d = DateTime::parse('2026-05-18 14:30:45');
+
+        // Explicit cast
+        self::assertSame('2026-05-18 14:30:45', (string) $d);
+        // String interpolation
+        self::assertSame('at 2026-05-18 14:30:45', "at $d");
+        // Concatenation
+        self::assertSame('row-2026-05-18 14:30:45', 'row-' . $d);
+        // Mirrors toDateTimeString() — same MySQL-shaped output
+        self::assertSame($d->toDateTimeString(), (string) $d);
+    }
+
+    public function testStringCastDropsTimezoneForMysqlCompat(): void
+    {
+        // String cast intentionally strips the offset; for ISO output
+        // (with offset) callers go through toIsoString() explicitly.
+        $d = DateTime::parse('2026-05-18 14:30:00', new \DateTimeZone('+05:30'));
+        self::assertSame('2026-05-18 14:30:00', (string) $d);
+        self::assertStringContainsString('+05:30', $d->toIsoString());
+    }
+
+    public function testStringCastIsImplementsStringable(): void
+    {
+        $d = DateTime::now();
+        self::assertInstanceOf(\Stringable::class, $d);
+    }
+
     public function testAdditionAndSubtractionReturnNewInstance(): void
     {
         $d = DateTime::parse('2026-05-18 12:00:00');
