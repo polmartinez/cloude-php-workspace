@@ -172,6 +172,7 @@ cloude-php-workspace/
 | `Cloude\Storage\Connection` | Named PDO pool keyed off `Config::get('storage.{name}')` |
 | `Cloude\Storage\Factory` | Builds a Storage adapter from a config row (dispatches on `driver`) |
 | `Cloude\Storage\StorageException` | Framework-level wrapper around `\PDOException`. Public readonly `$sqlState`, `$sql`, `$bindings`. Specialised subclasses: `TableNotFoundException` (42S02/42P01), `ColumnNotFoundException` (42S22/42703), `DuplicateKeyException` (23000+1062, 23505), `IntegrityConstraintException` (23xxx), `ConnectionException` (08xxx), `SyntaxErrorException` (42000/42601) |
+| `Cloude\Storage\Transaction` | `begin` / `commit` / `rollback` / `inTransaction` / `depth` + closure-based `run(fn, $connection)`. Real nested transactions via SAVEPOINTs. Wraps PDO errors as `StorageException` |
 | `Cloude\Storage\Schema` | DDL emitter — produces `CREATE TABLE` / `DROP TABLE` SQL from structured arrays. Indexes (`UNIQUE`/`INDEX`), foreign keys (`ON DELETE`/`ON UPDATE`), `DEFAULT NULL`, composite primary keys, MySQL + Postgres dialects. **Not a migration framework** — feed the SQL to your existing tooling |
 
 ### `Cloude\Markdown\…`
@@ -967,6 +968,94 @@ Public readonly fields on every instance:
 | `$sql`       | `string`            | The SQL that failed (with `?` placeholders)                 |
 | `$bindings`  | `list<mixed>`       | Bind values in order — may carry secrets; never echo        |
 | `getPrevious()` | `\PDOException`  | Original driver exception (`errorInfo` preserved)           |
+
+### `Cloude\Storage\Transaction` — begin / commit / rollback
+
+Thin layer over `Connection::pdo($name)` with two real benefits over
+`$pdo->beginTransaction()` directly:
+
+1. **Real nested transactions** via SAVEPOINTs (most PDO drivers reject
+   a second native `BEGIN`).
+2. **Closure form** that auto-commits on return and auto-rolls-back on
+   any `\Throwable`.
+
+Failures surface as `Cloude\Storage\StorageException` (or one of its
+specialised subclasses), not raw `\PDOException` — same wrapping the
+Query builder already does.
+
+#### Closure form (recommended)
+
+```php
+use Cloude\Storage\Transaction;
+
+$orderId = Transaction::run(function () use ($payload) {
+    $order = Order::create($payload);
+    Inventory::reserve($order->id, $payload['items']);
+    return $order->id;
+});
+// Throws → ROLLBACK (and rethrows). Returns → COMMIT.
+```
+
+#### Manual form
+
+```php
+Transaction::begin();
+try {
+    Order::create([...]);
+    AuditLog::create([...]);
+    Transaction::commit();
+} catch (\Throwable $e) {
+    Transaction::rollback();
+    throw $e;
+}
+```
+
+#### Inspection
+
+```php
+Transaction::inTransaction();    // bool — any depth > 0
+Transaction::depth();            // 0 outside, 1 = BEGIN, 2+ = SAVEPOINT levels
+```
+
+#### Nested calls
+
+A second `Transaction::begin()` (or a nested `Transaction::run(...)`)
+issues `SAVEPOINT cloude_sp_1`. Inner `commit` releases the savepoint,
+inner `rollback` rolls back to it without dropping outer work:
+
+```php
+Transaction::run(function () {
+    Order::create(...);                        // outer work
+
+    try {
+        Transaction::run(fn () => Risky::do());  // SAVEPOINT
+    } catch (\Throwable) {
+        // inner rollback already happened; outer keeps going
+    }
+
+    AuditLog::create(...);                     // also kept
+});
+```
+
+#### Non-default connection
+
+Every method takes an optional `$connection` arg (defaults to
+`'default'`):
+
+```php
+Transaction::run($fn, 'analytics');
+Transaction::begin('replica_writes');
+```
+
+Each connection has its own depth counter; transactions on different
+connections don't interfere.
+
+#### Out of scope
+
+- Distributed / two-phase commit
+- Automatic retry on serialization-failure / deadlock (caller wraps
+  with their own retry loop)
+- Saga / outbox pattern coordination
 
 ### `Cloude\Storage\Schema` — DDL emitter
 
