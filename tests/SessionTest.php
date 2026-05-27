@@ -179,10 +179,43 @@ final class SessionTest extends TestCase
         self::assertSame([], $_SESSION);
     }
 
-    public function testAccessWithoutStartedSessionThrows(): void
+    public function testFirstAccessAutoStartsSession(): void
     {
-        // No start() called.
-        $this->expectException(\RuntimeException::class);
-        Session::get('anything');
+        // No explicit Session::start() — the first set() / get() / etc.
+        // should start the session transparently with hardened defaults.
+        ini_set('session.save_path', $this->tmpSavePath);
+        session_name('CLOUDE_TEST');
+
+        self::assertSame(PHP_SESSION_NONE, session_status());
+
+        Session::set('user_id', 99);
+        self::assertSame(PHP_SESSION_ACTIVE, session_status());
+        self::assertSame(99, Session::get('user_id'));
+    }
+
+    public function testGetAutoStartsTooEvenWithoutPriorSet(): void
+    {
+        ini_set('session.save_path', $this->tmpSavePath);
+        session_name('CLOUDE_TEST');
+
+        self::assertSame(PHP_SESSION_NONE, session_status());
+        self::assertNull(Session::get('not-there'));
+        self::assertSame(PHP_SESSION_ACTIVE, session_status());
+    }
+
+    public function testExplicitStartWinsOverLaterAutoStart(): void
+    {
+        // Custom cookie params declared up front via start() must survive
+        // — start() is idempotent, so auto-start in ensureStarted() won't
+        // override them.
+        Session::start(
+            ['save_path' => $this->tmpSavePath, 'name' => 'CLOUDE_TEST'],
+            cookieParams: ['samesite' => 'Strict'],
+        );
+        $configured = session_get_cookie_params();
+        self::assertSame('Strict', $configured['samesite']);
+
+        Session::set('whatever', 1);   // would auto-start if not already active
+        self::assertSame('Strict', session_get_cookie_params()['samesite']);
     }
 }

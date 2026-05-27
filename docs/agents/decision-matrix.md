@@ -85,7 +85,7 @@
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Sessions | `Session::start()` then `set/get/has/forget/all`. Flash via `flash/pullFlash/reflash`. CSRF via `csrfToken/checkCsrf`. Auth flow: `regenerate()` after login | `Cloude\Session` — hardened defaults (`httponly`, `samesite=Lax`, `secure` on HTTPS). Opt-in: doesn't auto-start in `Bootstrap::run()` |
+| Sessions | Just call `Session::set/get/has/forget/all`. Flash via `flash/pullFlash/reflash`. CSRF via `csrfToken/checkCsrf`. Auth flow: `regenerate()` after login | `Cloude\Session` — **lazy auto-start** with hardened defaults (`httponly`, `samesite=Lax`, `secure` on HTTPS) on first access. Routes that never touch session never issue a cookie. Call `Session::start([], $cookieParams)` first only when you need cookie-param overrides |
 | Send email (SMTP / sendmail) | `Mailer::forge()->send([...])` | Reads `app/config/email.php`. Framework ships defaults at `config/email.php`; app overrides key-by-key. AUTH LOGIN + STARTTLS for SMTP |
 | Sign outbound mail with DKIM | Add a `'dkim'` block in `app/config/email.php`: `'dkim' => ['domain' => '...', 'selector' => '...', 'private_key' => '/path/to/key.pem']` | `Cloude\Mail\DkimSigner` — relaxed/relaxed canon + RSA-SHA256 |
 | MCP (Model Context Protocol) server | `new Mcp\Server(...)`, `tool()`, `resourceProvider()`, `resourceReader()` | HTTP / JSON-RPC 2.0; auto-validates `inputSchema` |

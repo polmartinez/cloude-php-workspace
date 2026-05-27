@@ -1181,10 +1181,7 @@ primary target is MySQL/Postgres.
 ```php
 use Cloude\Session;
 
-// Start once per handler that needs a session.
-Session::start();
-
-// Typed access
+// Typed access — the first call auto-starts the session with hardened defaults.
 Session::set('user_id', 42);
 $id = Session::get('user_id', $default = null);
 Session::has('user_id');
@@ -1210,20 +1207,25 @@ Session::regenerate();
 Session::destroy();
 ```
 
-**Hardened defaults applied by `start()`**: `httponly = true`,
-`samesite = 'Lax'`, `secure = true` when HTTPS is on. Override via
-the second arg:
+**Lazy auto-start.** The first `Session::*` call starts the session
+transparently with the hardened defaults below. Routes that **never**
+touch session state never start one — no cookie is issued, no header
+is set, no save-handler runs. Pure-JSON / MCP endpoints can ignore
+the class entirely without any opt-out flag.
+
+**Hardened defaults applied on auto-start**: `httponly = true`,
+`samesite = 'Lax'`, `secure = true` when HTTPS is on. Override by
+calling `start()` explicitly BEFORE the first `set` / `get` — it's
+idempotent so the first call wins:
 
 ```php
 Session::start([], cookieParams: [
     'samesite' => 'Strict',
     'domain'   => '.example.com',
 ]);
+// any subsequent Session::* calls in this request reuse the
+// configured params; auto-start no longer fires.
 ```
-
-**Not auto-started** by `Bootstrap::run()`. Call `Session::start()`
-explicitly in routes that need it; API endpoints / MCP / stateless
-JSON usually don't.
 
 **Out of scope** (deliberately): user / role / permission models,
 "remember me" cookies, login throttling, OAuth / OIDC clients,

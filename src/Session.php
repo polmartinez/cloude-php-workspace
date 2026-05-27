@@ -26,12 +26,25 @@ namespace Cloude;
  *      paired form/handler pattern calls `checkCsrf($posted)` (uses
  *      `hash_equals` for constant-time comparison).
  *
- * Not auto-started — call `Session::start()` explicitly in handlers
- * that need a session. API endpoints / stateless JSON / MCP don't.
+ * Lazy by default: the FIRST `get` / `set` / `has` / `forget` / `flash`
+ * / `csrfToken` / `regenerate` call auto-starts the session with the
+ * hardened defaults below. Routes that never touch session state
+ * never pay any cost — no cookie, no header — so pure-JSON / MCP
+ * handlers can ignore the class entirely.
+ *
+ * Call `Session::start([], $cookieParams)` explicitly BEFORE the first
+ * `get`/`set` only when you need to override the cookie params
+ * (different `samesite`, custom `domain`, longer `lifetime`, etc.).
+ * `start()` is idempotent — first call wins, later calls are no-ops.
  *
  * ## Usage
  *
- *   Session::start();
+ *   // Most common: just use it. The session starts on first access.
+ *   Session::set('user_id', 42);
+ *
+ *   // Or start explicitly to override cookie params:
+ *   Session::start([], ['samesite' => 'Strict']);
+ *   Session::set('user_id', 42);
  *
  *   if (Session::has('user_id')) {
  *       $userId = Session::get('user_id');
@@ -274,12 +287,22 @@ final class Session
         $_SESSION[self::FLASH_NEXT_KEY] = [];
     }
 
+    /**
+     * Auto-starts the session on first use with the hardened cookie
+     * defaults declared in `start()` (`httponly`, `samesite=Lax`,
+     * `secure` on HTTPS). Idempotent — no-op once a session is active,
+     * so explicit `Session::start([], $cookieParams)` BEFORE the first
+     * `get`/`set` still wins for cookie-param overrides.
+     *
+     * Routes that genuinely don't want a session simply don't call
+     * `Session::*` — the session is never started, no cookie is
+     * issued. The lazy path keeps the cost out of pure-JSON / MCP
+     * handlers that never touch session state.
+     */
     private static function ensureStarted(): void
     {
         if (session_status() !== PHP_SESSION_ACTIVE) {
-            throw new \RuntimeException(
-                'No active session — call Cloude\\Session::start() first',
-            );
+            self::start();
         }
     }
 }
