@@ -17,14 +17,27 @@ class Str
     }
 
     /**
-     * Truncates the text to $length characters, appending $ellipsis when cut.
+     * Truncates the text to at most `$length` characters, appending
+     * `$ellipsis` when cut. **The final length never exceeds `$length`
+     * (ellipsis included)** — same contract as `truncateMiddle()`.
+     *
+     *   Str::truncate('hello world', 8);     // → 'hello...'   (8 chars)
+     *   Str::truncate('hello world', 4);     // → 'h...'       (4 chars)
+     *   Str::truncate('hello', 10);          // → 'hello'      (unchanged, fits)
+     *
+     * Edge case: when the ellipsis itself is `>= $length`, returns a
+     * clipped ellipsis (consistent with `truncateMiddle`). Multibyte-safe.
      */
     public static function truncate(string $text, int $length, string $ellipsis = '...'): string
     {
         if (mb_strlen($text) <= $length) {
             return $text;
         }
-        return mb_substr($text, 0, $length) . $ellipsis;
+        $ellipsisLen = mb_strlen($ellipsis);
+        if ($ellipsisLen >= $length) {
+            return mb_substr($ellipsis, 0, $length);
+        }
+        return mb_substr($text, 0, $length - $ellipsisLen) . $ellipsis;
     }
 
     /**

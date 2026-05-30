@@ -19,14 +19,53 @@ final class StrTest extends TestCase
         self::assertSame('hello', Str::upTo('hello', '.'));
     }
 
-    public function testTruncateRespectsLength(): void
+    public function testTruncateRespectsLengthIncludingEllipsis(): void
     {
-        self::assertSame('hell...', Str::truncate('hello world', 4));
+        // Final length must never exceed $length — ellipsis budget comes
+        // OUT of $length, not on top of it.
+        $out = Str::truncate('hello world', 8);
+        self::assertSame('hello...', $out);
+        self::assertSame(8, mb_strlen($out));
+    }
+
+    public function testTruncateWithTightBudget(): void
+    {
+        // 4-char budget, 3-char ellipsis → 1 char of source + '...'.
+        $out = Str::truncate('hello world', 4);
+        self::assertSame('h...', $out);
+        self::assertSame(4, mb_strlen($out));
     }
 
     public function testTruncateDoesNotTrimShortText(): void
     {
         self::assertSame('hello', Str::truncate('hello', 10));
+    }
+
+    public function testTruncateAtExactLengthIsUnchanged(): void
+    {
+        self::assertSame('hello', Str::truncate('hello', 5));
+    }
+
+    public function testTruncateCustomEllipsis(): void
+    {
+        $out = Str::truncate('hello world', 8, '…');   // single-char (multibyte) ellipsis
+        self::assertSame('hello w…', $out);
+        self::assertSame(8, mb_strlen($out));
+    }
+
+    public function testTruncateWhenEllipsisLongerThanLimitClipsEllipsis(): void
+    {
+        // Ellipsis itself doesn't fit → degrade gracefully.
+        self::assertSame('..', Str::truncate('hello world', 2));
+        self::assertSame('',   Str::truncate('hello world', 0));
+    }
+
+    public function testTruncateIsMultibyteSafe(): void
+    {
+        // 'áéíóú ñ' is 7 codepoints. Budget 5 → 2 source + '...' (3) = 5.
+        $out = Str::truncate('áéíóú ñ', 5);
+        self::assertSame('áé...', $out);
+        self::assertSame(5, mb_strlen($out));
     }
 
     public function testSlugFallbackProducesUrlSafeOutput(): void
