@@ -81,6 +81,20 @@
 | Markdown frontmatter + body | `Markdown::parse($content)` | Returns `meta`, `html`, `paragraphs`, `description`, `noindex` |
 | Serve a `.md` over HTTP | `Markdown\Server::serve($path, $canonical)` | 404 / 304 / canonical / gzip passthrough |
 
+## Cache
+
+| You want to… | Use | Notes |
+|---|---|---|
+| Enable caching | Set `'default' => 'redis'` (or `'file'` / `'memcached'` / `'array'`) in `app/config/cache.php` | FW ships `default => false`, so every `Cache::*` call is a no-op `NullStore` until the app opts in. Named stores still work via `Cache::store('name')` even with `default => false` |
+| Read / write the default cache store | `Cache::get($key)` / `Cache::put($key, $val, $ttl)` / `Cache::forget($key)` / `Cache::flush()` | `Cloude\Cache\Cache` — static façade. Default store is named by `cache.default` in `config/cache.php`. `ttl=0` (default) means no expiration |
+| Get-or-compute pattern | `Cache::remember('key', 300, fn () => $heavy())` | Producer runs only on miss. `null` IS cacheable (uses internal sentinel) |
+| Cache a SELECT query | `User::query()->where('active', 1)->cache(300)->get()` | Affects every SELECT terminal: `get`, `first`, `count`, `value`, `pluck`. Cache key defaults to `sha1(sql + bindings)`; changing WHERE / ORDER BY / columns auto-invalidates |
+| Cached query w/ manual invalidation | `User::query()->where(...)->cache(300, key: 'users:active')->get()` then `Cache::forget('users:active')` in `afterSave()` | Pass `key:` for stable, app-managed keys |
+| Route a query to a non-default store | `User::query()->cache(60, store: 'fast')->get()` | Resolves via `Cache::store('fast')`; configure both in `cache.stores` |
+| Reach a non-default store directly | `Cache::store('memcached')->set('foo', 1, 60)` | Same API as the façade — Store interface is 5 methods |
+| Inject a store (tests) | `Cache::set('default', new ArrayStore())` | The literal `'default'` resolves to whatever store the config names as default — swap once, works for every `Cache::*` call and every cached query |
+| Drivers | `array` (in-process, tests), `file` (one file per key under a dir), `redis` (ext-redis), `memcached` (ext-memcached) | Declare driver + driver-specific options per store in `config/cache.php` |
+
 ## Sessions / mail / MCP
 
 | You want to… | Use | Notes |

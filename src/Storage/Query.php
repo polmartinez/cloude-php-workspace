@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cloude\Storage;
 
+use Cloude\Cache\Cache;
+
 /**
  * Minimal SQL query builder. SELECT / INSERT / UPDATE / DELETE plus
  * WHERE, JOIN, ORDER BY, LIMIT, OFFSET. Defaults to backtick identifier
@@ -117,6 +119,11 @@ final class Query
 
     private ?int $limit = null;
     private ?int $offset = null;
+
+    /** Set by cache(); null means "do not cache this query". */
+    private ?int $cacheTtl = null;
+    private ?string $cacheKey = null;
+    private ?string $cacheStore = null;
 
     public function __construct(
         private \PDO $pdo,
@@ -309,6 +316,37 @@ final class Query
         return $this;
     }
 
+    // ── caching ───────────────────────────────────────────────────────────
+
+    /**
+     * Cache every subsequent SELECT terminal (`get`, `first`, `count`,
+     * `value`, `pluck`) on this query for `$ttl` seconds. The cache key
+     * defaults to a `sha1(sql + bindings)` digest, so any change to the
+     * builder state (WHEREs, ORDER BY, columns, ...) automatically gets
+     * a fresh entry — no manual invalidation needed for simple TTL use.
+     *
+     *   User::query()->where('active', 1)->cache(300)->get();
+     *
+     * Pass `$key` for stable, app-managed keys (so you can `Cache::forget()`
+     * them after a write):
+     *
+     *   User::query()->where('active', 1)->cache(300, 'active-users')->get();
+     *
+     * Pass `$store` to route to a non-default store. The store is resolved
+     * lazily via `Cloude\Cache\Cache::store($store)`, so it only needs to
+     * be configured when a cached query actually executes.
+     *
+     * Mutations (`insert`/`update`/`delete`) ignore this flag — the
+     * cache layer only wraps SELECTs.
+     */
+    public function cache(int $ttl = 60, ?string $key = null, ?string $store = null): static
+    {
+        $this->cacheTtl   = max(0, $ttl);
+        $this->cacheKey   = $key;
+        $this->cacheStore = $store;
+        return $this;
+    }
+
     // ── execution: SELECT ─────────────────────────────────────────────────
 
     /**
@@ -317,9 +355,11 @@ final class Query
     public function get(): array
     {
         [$sql, $params] = $this->buildSelect();
-        $stmt = StorageException::execute($this->pdo, $sql, $params);
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-        return $rows === false ? [] : $rows;
+        return $this->remember($sql, $params, function () use ($sql, $params): array {
+            $stmt = StorageException::execute($this->pdo, $sql, $params);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            return $rows === false ? [] : $rows;
+        });
     }
 
     /**
@@ -350,8 +390,10 @@ final class Query
         } finally {
             $this->select = $oldSelect;
         }
-        $stmt = StorageException::execute($this->pdo, $sql, $params);
-        return (int) $stmt->fetchColumn();
+        return $this->remember($sql, $params, function () use ($sql, $params): int {
+            $stmt = StorageException::execute($this->pdo, $sql, $params);
+            return (int) $stmt->fetchColumn();
+        });
     }
 
     /**
@@ -453,6 +495,34 @@ final class Query
     }
 
     // ── internals ─────────────────────────────────────────────────────────
+
+    /**
+     * Wrap a SELECT terminal in the configured cache, when one was
+     * requested via cache(). Otherwise the producer runs straight
+     * through with no Cache lookup at all — zero overhead off the
+     * happy path.
+     *
+     * @template T
+     * @param list<mixed>  $params
+     * @param callable():T $producer
+     * @return T
+     */
+    private function remember(string $sql, array $params, callable $producer): mixed
+    {
+        if ($this->cacheTtl === null) {
+            return $producer();
+        }
+        $store    = Cache::store($this->cacheStore);
+        $key      = $this->cacheKey ?? 'cloude.q.' . sha1($sql . '|' . serialize($params));
+        $sentinel = self::class . '@miss';
+        $hit = $store->get($key, $sentinel);
+        if ($hit !== $sentinel) {
+            return $hit;
+        }
+        $value = $producer();
+        $store->set($key, $value, $this->cacheTtl);
+        return $value;
+    }
 
     private function addWhere(string $conn, string $column, mixed $opOrValue, mixed $value, int $argCount): static
     {

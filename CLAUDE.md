@@ -336,7 +336,8 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | JSON-LD on a page | array → `Format::json($graph, pretty: true)` | [`examples/recipes/jsonld.php`](examples/recipes/jsonld.php) |
 | DDD layering | Domain interfaces + Cloude-backed adapters | [`examples/library/`](examples/library/) |
 | Asset cache-busting | `Http\AssetUrl::configure()` once + `AssetUrl::get($rel)` in views | `README.md → AssetUrl` |
-| Conditional GET (304) | `Cache::conditionalGet(filemtime($path))` | [`Markdown\Server::serve`](src/Markdown/Server.php) |
+| Conditional GET (304) | `Http\Cache::conditionalGet(filemtime($path))` | [`Markdown\Server::serve`](src/Markdown/Server.php) |
+| Cache a value or SELECT query | `Cache::remember('key', 300, fn() => $heavy())` — or `User::query()->where(...)->cache(300)->get()` for queries | [`examples/recipes/cache.php`](examples/recipes/cache.php). `Cloude\Cache\Cache` façade + drivers (`array`, `file`, `redis`, `memcached`). Configure in `config/cache.php`. Query cache covers `get/first/count/value/pluck`; cache key = `sha1(sql + bindings)` by default |
 | Throw a 404 from a controller / repo | `throw new \Cloude\Http\NotFoundException("book $isbn")` | [`src/Http/NotFoundException.php`](src/Http/NotFoundException.php) — caught by `ErrorHandler`, renders bundled `404.html.php` (override under `viewBase`) |
 | Throw any HTTP status | `throw new \Cloude\Http\HttpException(403, 'forbidden')` | [`src/Http/HttpException.php`](src/Http/HttpException.php) |
 | File log w/ daily rotation | `new Logger($path, minLevel: 'info')` | `README.md → Logger` |
