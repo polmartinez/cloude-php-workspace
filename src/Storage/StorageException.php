@@ -67,11 +67,37 @@ class StorageException extends \RuntimeException
     {
         try {
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
+            // Bind each param with a PDO type hint inferred from the PHP
+            // value. Without this, `$stmt->execute([$int])` binds every
+            // positional param as PARAM_STR, which breaks numeric
+            // comparisons against expressions that don't have column
+            // affinity (HAVING COUNT(*) >= ?, function results, ...) on
+            // SQLite + Postgres. We honor the caller's PHP type so
+            // string-typed digits like '0123' stay strings.
+            $i = 1;
+            foreach ($params as $value) {
+                $stmt->bindValue($i++, $value, self::paramType($value));
+            }
+            $stmt->execute();
             return $stmt;
         } catch (\PDOException $e) {
             throw self::wrap($e, $sql, $params);
         }
+    }
+
+    /**
+     * Map a PHP value to a PDO PARAM_* constant. Strings stay strings
+     * even when numeric — only the caller's actual int/float/bool/null
+     * types get a non-STR hint.
+     */
+    private static function paramType(mixed $value): int
+    {
+        return match (true) {
+            $value === null => \PDO::PARAM_NULL,
+            is_bool($value) => \PDO::PARAM_BOOL,
+            is_int($value)  => \PDO::PARAM_INT,
+            default         => \PDO::PARAM_STR,   // strings, floats (PDO has no PARAM_FLOAT)
+        };
     }
 
     /**

@@ -57,7 +57,10 @@
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Build a SQL query | `User::query()->where('age', '>', 18)->orderBy('name')->get()` | `Cloude\Storage\Query` — SELECT/INSERT/UPDATE/DELETE + WHERE/JOIN/ORDER BY |
+| Build a SQL query | `User::query()->where('age', '>', 18)->orderBy('name')->get()` | `Cloude\Storage\Query` — SELECT/INSERT/UPDATE/DELETE + WHERE/JOIN/GROUP BY/HAVING/ORDER BY |
+| GROUP BY + aggregates | `$q->select('country')->selectRaw('COUNT(*)', 'n')->groupBy('country')->orderBy('n', 'DESC')->get()` | `selectRaw($expr, $alias?)` appends a raw expression (no quoting); first call clears the default `*`. Use for any function call: `COUNT/SUM/AVG/MIN/MAX/...` |
+| HAVING (filter on aggregates) | `$q->groupBy('country')->havingRaw('COUNT(*) > ?', [10])->get()` | Multiple `havingRaw()` calls AND-join. `$expression` is emitted verbatim — pass values through `$bindings`, never interpolate |
+| Count distinct groups | `$q->groupBy('country')->count()` | Auto-wraps as `SELECT COUNT(*) FROM (<grouped query>)` so `count()` stays a scalar even with GROUP BY |
 | Nested AND/OR predicates | `$q->where('active', 1)->whereGroup(fn ($g) => $g->where('role', 'admin')->orWhere('role', 'editor'))` | Use `orWhereGroup` for the OR-joined variant |
 | INNER / LEFT / RIGHT / CROSS JOIN | `$q->leftJoin('orders', 'orders.user_id', '=', 'users.id')` | Columns may be `'table.col'` strings; quoted automatically |
 | Static table / column references | `User::table()`, `User::field('email')`, `User::as('u')` | Avoid hand-writing `'users.email'` literals; pair `as()` with `Query::from()`/`join()` for typed joins |
