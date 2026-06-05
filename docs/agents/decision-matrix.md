@@ -16,6 +16,7 @@
 | Read the configured timezone | `Config::get('app.timezone', 'UTC')` | FW ships `config/app.php` with `'timezone' => 'UTC'` default; `Bootstrap::run()` calls `date_default_timezone_set()` with the resolved value at boot |
 | Use short names in views (`View::e(...)`, `Str::slug(...)`) without `use` statements | Declare `'aliases' => ['View', 'Input', 'Str']` in `app/config/app.php` | `Bootstrap::run()` calls `class_alias('Cloude\<short>', '<short>')` for each entry. Skipped silently when the short name is already taken — your own classes are never stomped. Alternative: standard PHP `use Cloude\{View, Input, Str};` at the top of each view file |
 | Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](../../README.md#cloudeconfig) |
+| Set the app environment (`production` / `development` / `staging` / ...) | `Bootstrap::setEnv('production')` BEFORE `Config::configure(...)` — or assign `Bootstrap::$env = 'production'` and `Bootstrap::run()` will sync it | Drives the per-env overlay: any file under `app/config/production/` (or whatever name you pick) deep-merges over the base configs. Resolution order: `Bootstrap::setEnv()` → `APP_ENV` / `ENVIRONMENT` env var → Config default (`'dev'`). Read back via `Bootstrap::env()` |
 | Ship default configs from a library / module | `Cloude\Config::addPath('/path/to/your/config')` | Resolution order is `[core, app, ...extra]` — last entry wins on every key (deep-merge via `Arr::merge`) |
 
 ## HTTP responses

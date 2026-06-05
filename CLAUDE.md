@@ -120,6 +120,7 @@ require __DIR__ . '/../vendor/autoload.php';
     docroot: __DIR__,
     apppath: dirname(__DIR__) . '/app',
 );
+\Cloude\Bootstrap::setEnv(\Cloude\Config::env('APP_ENV', 'production'));
 \Cloude\Config::configure(APPPATH . '/config');
 
 if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
