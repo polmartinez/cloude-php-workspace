@@ -304,6 +304,9 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 |---|---|---|
 | JSON list endpoint | `Response::json(['items' => $rows])` | [`examples/contacts/.../ContactsController::apiSearch`](examples/contacts/app/Controller/ContactsController.php) |
 | HTML form + server validation | `Input::post` + `JsonSchema::validate` + re-render with errors | [`ContactsController::create`](examples/contacts/app/Controller/ContactsController.php) |
+| Read request input | `Input::method()`, `Input::uri()`, `Input::get($k)`, `Input::post($k)`, `Input::json()`, `Input::body()`, `Input::header('X-…')`, `Input::ip()`, `Input::server('REMOTE_ADDR')` | `Cloude\Input` — thin wrapper over superglobals. `server($k?, $default?)` is the escape hatch for `$_SERVER` keys not covered by the typed helpers (`PATH_INFO`, `SCRIPT_NAME`, `SSL_*`, custom `HTTP_X_*` from proxies) |
+| Pick the env (production / staging / dev / ...) | `Bootstrap::setEnv('production')` BEFORE `Config::configure(...)`, then `config/production/*.php` deep-merges over base | Env name is free-form. Resolution: `Bootstrap::setEnv()` → `APP_ENV` / `ENVIRONMENT` env var → `'dev'`. Read back with `Bootstrap::env()` |
+| Multibyte-safe string ops | `Str::sub($s, $start, $len?)`, `Str::len($s)`, `Str::truncate($s, $max)`, `Str::truncateMiddle($s, $max)` | All count codepoints not bytes. `truncate()`/`truncateMiddle()` cap the final length INCLUDING the ellipsis |
 | File-per-entity storage (slug-keyed, schemaless) | extend `Data\JsonRepository`, override `transform()` | [`examples/recipes/data.php`](examples/recipes/data.php), [`ContactsRepo`](examples/contacts/app/Repository/ContactsRepo.php) |
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |

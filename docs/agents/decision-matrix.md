@@ -19,6 +19,20 @@
 | Set the app environment (`production` / `development` / `staging` / ...) | `Bootstrap::setEnv('production')` BEFORE `Config::configure(...)` — or assign `Bootstrap::$env = 'production'` and `Bootstrap::run()` will sync it | Drives the per-env overlay: any file under `app/config/production/` (or whatever name you pick) deep-merges over the base configs. Resolution order: `Bootstrap::setEnv()` → `APP_ENV` / `ENVIRONMENT` env var → Config default (`'dev'`). Read back via `Bootstrap::env()` |
 | Ship default configs from a library / module | `Cloude\Config::addPath('/path/to/your/config')` | Resolution order is `[core, app, ...extra]` — last entry wins on every key (deep-merge via `Arr::merge`) |
 
+## HTTP request input
+
+| You want to… | Use | Notes |
+|---|---|---|
+| Request method | `Input::method()` | Uppercase, defaults to `'GET'` |
+| URI path (no query string) | `Input::uri()` | Normalized; double slashes collapsed |
+| Query-string param | `Input::get('q')` / `Input::get('q', 'default')` / `Input::get()` (full `$_GET`) | |
+| POST field | `Input::post('email')` / `Input::post('email', '')` / `Input::post()` (full `$_POST`) | |
+| Raw `$_SERVER` key | `Input::server('REMOTE_ADDR')` / `Input::server('HTTP_X_TENANT', 'public')` / `Input::server()` (full `$_SERVER`) | Case-sensitive — use canonical upper-snake (`HTTP_*`, `REMOTE_ADDR`, `PATH_INFO`, ...). Prefer the typed helpers when one exists |
+| Request header | `Input::header('User-Agent')` / `Input::header('X-Request-Id', 'n/a')` | Translates `User-Agent` → `HTTP_USER_AGENT` under the hood |
+| Client IP | `Input::ip()` (or `Input::ip(trustProxy: true)` behind a CDN you control) | Reads `REMOTE_ADDR`; with `trustProxy`, the first entry of `X-Forwarded-For` |
+| JSON body | `Input::json()` | Returns `?array` (null on empty/invalid) |
+| Raw body | `Input::body()` | String, never null |
+
 ## HTTP responses
 
 | You want to… | Use | Notes |
@@ -48,7 +62,10 @@
 | Random tokens, UUIDs, hashes | `Str::random()`, `Str::uuid()`, `Str::hash()` | |
 | Case conversion | `Str::camel/pascal/snake/kebab` | Handles camel-case + non-alnum boundaries |
 | Mask for privacy | `Str::mask('+34600123456', '*', 4, -3)` | Negative length keeps a tail visible |
+| Truncate by the end | `Str::truncate($text, 80)` (default `…` is `'...'`) | Final length **never exceeds** `$length` — ellipsis budget comes OUT of `$length`, not on top. Multibyte-safe |
 | Truncate by the middle | `Str::truncateMiddle($path, 25)` | Keeps both ends, drops the middle |
+| Multibyte substring | `Str::sub($text, 0, 4)` / `Str::sub($text, -3)` | Wrapper over `mb_substr` — codepoints not bytes. Use instead of byte-level `substr()` for any text that may be non-ASCII |
+| Multibyte length | `Str::len($text)` | Wrapper over `mb_strlen` — codepoints not bytes. Use instead of `strlen()` |
 | Dot-path access | `Arr::get($a, 'foo.bar.baz', $default)` | Also `set/has/forget/pluck/dot/undot/merge` |
 | Pipeline data | `Collection::make($rows)->filter(...)->sortBy(...)->take(...)->pluck(...)->all()` | Implements `ArrayAccess`, `Countable`, iterable |
 | Work with dates | `DateTime::now()`, `DateTime::parse('2026-05-18')`, `$d->addDays(7)->toDateString()`, `$d->isPast()`, `$d->diffForHumans()` | `Cloude\DateTime` extends `\DateTimeImmutable` |
