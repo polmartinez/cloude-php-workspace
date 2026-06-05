@@ -7,6 +7,36 @@ namespace Cloude;
 class Str
 {
     /**
+     * Multibyte-safe substring — thin wrapper over `mb_substr()`.
+     *
+     *   Str::sub('Cataluña', 0, 4);    // → 'Cata'
+     *   Str::sub('Cataluña', -3);       // → 'uña'  (last 3 chars)
+     *   Str::sub('Cataluña', 4, 3);    // → 'luñ'
+     *
+     * Always counts codepoints, not bytes — `mb_strlen('ñ') === 1`
+     * whereas `strlen('ñ') === 2`. Prefer this over the byte-level
+     * `substr()` in any code that may see non-ASCII text.
+     */
+    public static function sub(string $text, int $start, ?int $length = null): string
+    {
+        return mb_substr($text, $start, $length);
+    }
+
+    /**
+     * Multibyte-safe string length — thin wrapper over `mb_strlen()`.
+     *
+     *   Str::len('Cataluña');          // → 8
+     *   Str::len('hello');              // → 5
+     *
+     * Same rationale as `sub()`: counts codepoints, not bytes. Pair
+     * with `sub()` and `truncate()` for predictable multibyte handling.
+     */
+    public static function len(string $text): int
+    {
+        return mb_strlen($text);
+    }
+
+    /**
      * Returns the text up to (but not including) the first occurrence of $char.
      * If $char is not found, returns the full string.
      */
