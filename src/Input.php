@@ -44,6 +44,26 @@ class Input
     }
 
     /**
+     * Reads from `$_SERVER`. Pass no `$key` to get the full array,
+     * or a key (case-sensitive — `$_SERVER` keys are upper-snake by
+     * PHP convention: `REMOTE_ADDR`, `HTTP_HOST`, `REQUEST_METHOD`).
+     *
+     *   Input::server('REMOTE_ADDR');                 // → '10.0.0.5'
+     *   Input::server('HTTP_HOST', 'localhost');      // with default
+     *   Input::server();                              // full array
+     *
+     * For typed convenience use the dedicated helpers:
+     * `method()`, `uri()`, `header('User-Agent')`, `ip()`.
+     */
+    public static function server(?string $key = null, mixed $default = null): mixed
+    {
+        if (empty($key)) {
+            return $_SERVER;
+        }
+        return $_SERVER[$key] ?? $default;
+    }
+
+    /**
      * Decodes the raw request body as JSON.
      * Returns null if the body is empty or not valid JSON.
      */
