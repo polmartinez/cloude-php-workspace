@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude;
 
 /**
- * Static façade over PHP's native session machinery. Three jobs:
+ * Static façade over PHP's native session machinery. Four jobs:
  *
  *   1. **Hardened defaults** — `start()` applies the security flags
  *      every project re-discovers (httponly, samesite=Lax, secure when
@@ -74,16 +74,22 @@ final class Session
      * Start (or resume) the session with hardened defaults. Safe to
      * call multiple times — no-op once a session is already active.
      *
-     * Default cookie params:
-     *   - httponly = true        (no JS access)
-     *   - samesite = 'Lax'       (modern XSS / CSRF default)
-     *   - secure   = true        when HTTPS is on
+     * Resolution order (last wins) for every knob:
      *
-     * Override any of them via `$cookieParams`. Pass `$options` for
-     * other `session_start()` options (name, save_path, ...).
+     *   1. Hardened defaults baked in below (httponly, samesite=Lax,
+     *      secure on HTTPS, cookie_lifetime=0).
+     *   2. `config/session.php` keys when present (FW ships a default;
+     *      app overrides deep-merge over it). See the bundled
+     *      `config/session.php` for the full list — `cookie_lifetime`,
+     *      `cookie_samesite`, `gc_maxlifetime`, `name`, `save_path`, ...
+     *   3. Explicit `$options` / `$cookieParams` passed to this call.
+     *
+     * Pass `$options` for `session_start()` options (`name`,
+     * `save_path`, ...) — they override the config's values.
+     * Pass `$cookieParams` to override cookie params per call.
      *
      * @param array<string, mixed> $options       Forwarded to session_start()
-     * @param array<string, mixed> $cookieParams  Merged with defaults
+     * @param array<string, mixed> $cookieParams  Merged over config / defaults
      */
     public static function start(array $options = [], array $cookieParams = []): void
     {
@@ -97,6 +103,21 @@ final class Session
             throw new \RuntimeException("Cannot start session — headers already sent at $file:$line");
         }
 
+        $config = self::loadConfig();
+
+        // Server-side knobs first — must be applied via ini_set() BEFORE
+        // session_start() reads them. Explicit $options override config.
+        if (isset($config['gc_maxlifetime']) && !isset($options['gc_maxlifetime'])) {
+            ini_set('session.gc_maxlifetime', (string) $config['gc_maxlifetime']);
+        }
+        if (isset($config['save_path']) && !isset($options['save_path'])) {
+            $options['save_path'] = $config['save_path'];
+        }
+        if (isset($config['name']) && !isset($options['name'])) {
+            $options['name'] = $config['name'];
+        }
+
+        // Cookie params: hardened defaults < config < explicit args.
         $defaults = [
             'lifetime' => 0,
             'path'     => '/',
@@ -105,11 +126,64 @@ final class Session
             'httponly' => true,
             'samesite' => 'Lax',
         ];
-        session_set_cookie_params(array_replace($defaults, $cookieParams));
+        $merged = array_replace(
+            $defaults,
+            self::cookieParamsFromConfig($config, $defaults['secure']),
+            $cookieParams,
+        );
+        session_set_cookie_params($merged);
 
         session_start($options);
 
         self::promoteFlashBucket();
+    }
+
+    /**
+     * Read `config/session.php` once per call. Returns an empty array
+     * when Config isn't configured, so Session keeps working without
+     * any config files (the hardened defaults remain in place).
+     *
+     * @return array<string, mixed>
+     */
+    private static function loadConfig(): array
+    {
+        if (!class_exists(Config::class, false)) {
+            return [];
+        }
+        $config = Config::get('session');
+        return is_array($config) ? $config : [];
+    }
+
+    /**
+     * Translate the config's `cookie_*` keys into the shape
+     * `session_set_cookie_params()` expects. `cookie_secure = null`
+     * means "auto-detect" — fall through to the hardened default.
+     *
+     * @param  array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private static function cookieParamsFromConfig(array $config, bool $autoSecure): array
+    {
+        $out = [];
+        if (array_key_exists('cookie_lifetime', $config) && $config['cookie_lifetime'] !== null) {
+            $out['lifetime'] = (int) $config['cookie_lifetime'];
+        }
+        if (array_key_exists('cookie_path', $config) && $config['cookie_path'] !== null) {
+            $out['path'] = (string) $config['cookie_path'];
+        }
+        if (array_key_exists('cookie_domain', $config) && $config['cookie_domain'] !== null) {
+            $out['domain'] = (string) $config['cookie_domain'];
+        }
+        if (array_key_exists('cookie_secure', $config) && $config['cookie_secure'] !== null) {
+            $out['secure'] = (bool) $config['cookie_secure'];
+        }
+        if (array_key_exists('cookie_httponly', $config) && $config['cookie_httponly'] !== null) {
+            $out['httponly'] = (bool) $config['cookie_httponly'];
+        }
+        if (array_key_exists('cookie_samesite', $config) && $config['cookie_samesite'] !== null) {
+            $out['samesite'] = (string) $config['cookie_samesite'];
+        }
+        return $out;
     }
 
     /** Returns the current session ID. */
