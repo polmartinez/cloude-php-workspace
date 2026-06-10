@@ -50,7 +50,38 @@ return [
     // default (`PHPSESSID`).
     'name'            => null,
 
-    // Where on disk PHP writes session files. null → keep php.ini's.
-    // Useful in containerized setups where /tmp is ephemeral.
+    // ── Storage backend ─────────────────────────────────────────────────
+    // `null` keeps php.ini's `session.save_handler` (typically 'files').
+    // Set to one of:
+    //   - 'files'      → on-disk; uses 'save_path' below.
+    //   - 'redis'      → ext-redis; reads the 'redis' block below.
+    //   - 'memcached'  → ext-memcached; reads the 'memcached' block below.
+    'handler'         => null,
+
+    // Where on disk PHP writes session files (when handler = 'files').
+    // null → keep php.ini's. Useful in containerized setups where /tmp
+    // is ephemeral or shared between containers.
     'save_path'       => null,
+
+    // ── Redis backend (when handler = 'redis') ───────────────────────────
+    // Maps to ext-redis's session.save_path URI:
+    //   tcp://host:port?database=N&prefix=...&auth=...&timeout=...
+    'redis' => [
+        'host'     => '127.0.0.1',
+        'port'     => 6379,
+        'database' => 0,
+        'password' => null,            // null → no AUTH
+        'prefix'   => 'PHPSESSID:',
+        'timeout'  => 2.0,             // connect timeout (seconds)
+        // 'persistent_id' => 'session-pool',   // optional
+    ],
+
+    // ── Memcached backend (when handler = 'memcached') ──────────────────
+    // List of [host, port] tuples; PHP joins them as
+    // `host1:port1,host2:port2`.
+    'memcached' => [
+        'servers' => [
+            ['127.0.0.1', 11211],
+        ],
+    ],
 ];

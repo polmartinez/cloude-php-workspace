@@ -127,6 +127,100 @@ final class SessionConfigTest extends TestCase
         self::assertSame('Lax', $params['samesite']);
     }
 
+    public function testRedisHandlerBuildsCorrectSavePathUri(): void
+    {
+        if (!extension_loaded('redis')) {
+            // No ext-redis on this box → exercise the unit-level URI
+            // builder via reflection so the test still adds value.
+            $rc = new \ReflectionClass(Session::class);
+            $m  = $rc->getMethod('redisSavePath');
+            $m->setAccessible(true);
+            $uri = $m->invoke(null, [
+                'host'     => 'redis.example.com',
+                'port'     => 6380,
+                'database' => 2,
+                'prefix'   => 'app:sess:',
+                'password' => 'sup3r',
+                'timeout'  => 1.5,
+            ]);
+            self::assertStringStartsWith('tcp://redis.example.com:6380?', $uri);
+            self::assertStringContainsString('database=2', $uri);
+            self::assertStringContainsString('prefix=app%3Asess%3A', $uri);
+            self::assertStringContainsString('auth=sup3r', $uri);
+            self::assertStringContainsString('timeout=1.5', $uri);
+            return;
+        }
+
+        // ext-redis present → check the handler ends up wired in.
+        $this->writeConfig([
+            'handler' => 'redis',
+            'redis'   => [
+                'host'     => '127.0.0.1',
+                'port'     => 6379,
+                'database' => 0,
+                'prefix'   => 'cloude_test:',
+            ],
+        ]);
+
+        // We *don't* call Session::start() here because we don't want to
+        // require a live Redis. Validate via reflection that applyHandler
+        // produced the right ini value + save_path.
+        $rc = new \ReflectionClass(Session::class);
+        $m  = $rc->getMethod('applyHandler');
+        $m->setAccessible(true);
+        $opts = [];
+        $m->invokeArgs(null, ['redis', Config::get('session'), &$opts]);
+
+        self::assertSame('redis', ini_get('session.save_handler'));
+        self::assertStringStartsWith('tcp://127.0.0.1:6379?', $opts['save_path']);
+        self::assertStringContainsString('prefix=cloude_test', $opts['save_path']);
+
+        // Reset save_handler so we don't poison sibling tests.
+        ini_restore('session.save_handler');
+    }
+
+    public function testMemcachedHandlerBuildsCommaSeparatedServerList(): void
+    {
+        // URI builder is unit-testable without the extension.
+        $rc = new \ReflectionClass(Session::class);
+        $m  = $rc->getMethod('memcachedSavePath');
+        $m->setAccessible(true);
+
+        $path = $m->invoke(null, ['servers' => [['10.0.0.1', 11211], ['10.0.0.2', 11212]]]);
+        self::assertSame('10.0.0.1:11211,10.0.0.2:11212', $path);
+
+        // Defaults when servers omitted.
+        $path = $m->invoke(null, []);
+        self::assertSame('127.0.0.1:11211', $path);
+    }
+
+    public function testUnsupportedHandlerThrows(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        $rc = new \ReflectionClass(Session::class);
+        $m  = $rc->getMethod('applyHandler');
+        $m->setAccessible(true);
+        $opts = [];
+        $m->invokeArgs(null, ['rabbitmq', [], &$opts]);
+    }
+
+    public function testRedisHandlerWithoutExtensionThrowsClearly(): void
+    {
+        if (extension_loaded('redis')) {
+            self::assertTrue(true, 'skipped: ext-redis is loaded — cannot test the missing-extension branch');
+            return;
+        }
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('ext-redis');
+
+        $rc = new \ReflectionClass(Session::class);
+        $m  = $rc->getMethod('applyHandler');
+        $m->setAccessible(true);
+        $opts = [];
+        $m->invokeArgs(null, ['redis', ['redis' => []], &$opts]);
+    }
+
     public function testWorksWithoutAnyConfigFile(): void
     {
         // No config dir configured at all — Session must still start

@@ -110,11 +110,18 @@ final class Session
         if (isset($config['gc_maxlifetime']) && !isset($options['gc_maxlifetime'])) {
             ini_set('session.gc_maxlifetime', (string) $config['gc_maxlifetime']);
         }
-        if (isset($config['save_path']) && !isset($options['save_path'])) {
-            $options['save_path'] = $config['save_path'];
-        }
         if (isset($config['name']) && !isset($options['name'])) {
             $options['name'] = $config['name'];
+        }
+
+        // Storage backend — 'files' (default), 'redis', or 'memcached'.
+        // Each handler reads a different save_path URI shape, so we
+        // assemble the right one from the config block. Explicit
+        // $options['save_path'] always wins (for tests + edge cases).
+        if (isset($config['handler']) && $config['handler'] !== null) {
+            self::applyHandler((string) $config['handler'], $config, $options);
+        } elseif (isset($config['save_path']) && !isset($options['save_path'])) {
+            $options['save_path'] = $config['save_path'];
         }
 
         // Cookie params: hardened defaults < config < explicit args.
@@ -152,6 +159,112 @@ final class Session
         }
         $config = Config::get('session');
         return is_array($config) ? $config : [];
+    }
+
+    /**
+     * Wire up a non-default session backend (Redis / Memcached / files).
+     * Sets `session.save_handler` and synthesizes the `save_path` URI
+     * each handler expects. Validates that the matching PHP extension
+     * is loaded before letting `session_start()` blow up with a less
+     * helpful message.
+     *
+     * @param array<string,mixed> $config
+     * @param array<string,mixed> $options Mutated in place
+     */
+    private static function applyHandler(string $handler, array $config, array &$options): void
+    {
+        switch ($handler) {
+            case 'files':
+                ini_set('session.save_handler', 'files');
+                if (isset($config['save_path']) && !isset($options['save_path'])) {
+                    $options['save_path'] = (string) $config['save_path'];
+                }
+                return;
+
+            case 'redis':
+                if (!extension_loaded('redis')) {
+                    throw new \RuntimeException(
+                        "session handler 'redis' needs ext-redis (`pecl install redis`)",
+                    );
+                }
+                ini_set('session.save_handler', 'redis');
+                if (!isset($options['save_path'])) {
+                    $options['save_path'] = self::redisSavePath($config['redis'] ?? []);
+                }
+                return;
+
+            case 'memcached':
+                if (!extension_loaded('memcached')) {
+                    throw new \RuntimeException(
+                        "session handler 'memcached' needs ext-memcached (`pecl install memcached`)",
+                    );
+                }
+                ini_set('session.save_handler', 'memcached');
+                if (!isset($options['save_path'])) {
+                    $options['save_path'] = self::memcachedSavePath($config['memcached'] ?? []);
+                }
+                return;
+
+            default:
+                throw new \RuntimeException(
+                    "Unsupported session handler '$handler' "
+                    . "(supported: files, redis, memcached)",
+                );
+        }
+    }
+
+    /**
+     * Build the ext-redis session save_path URI:
+     *   tcp://host:port?database=N&prefix=...&auth=...&timeout=...
+     *
+     * @param array<string,mixed> $config
+     */
+    private static function redisSavePath(array $config): string
+    {
+        $host = (string) ($config['host'] ?? '127.0.0.1');
+        $port = (int)    ($config['port'] ?? 6379);
+
+        $query = [];
+        foreach ([
+            'database'      => 'database',
+            'prefix'        => 'prefix',
+            'timeout'       => 'timeout',
+            'persistent_id' => 'persistent_id',
+        ] as $cfgKey => $uriKey) {
+            if (isset($config[$cfgKey]) && $config[$cfgKey] !== null && $config[$cfgKey] !== '') {
+                $query[$uriKey] = (string) $config[$cfgKey];
+            }
+        }
+        if (!empty($config['password'])) {
+            $query['auth'] = (string) $config['password'];
+        }
+
+        $uri = "tcp://{$host}:{$port}";
+        if ($query !== []) {
+            $uri .= '?' . http_build_query($query);
+        }
+        return $uri;
+    }
+
+    /**
+     * Build the ext-memcached session save_path:
+     *   `host1:port1,host2:port2,...`
+     *
+     * @param array<string,mixed> $config
+     */
+    private static function memcachedSavePath(array $config): string
+    {
+        $servers = $config['servers'] ?? [['127.0.0.1', 11211]];
+        if (!is_array($servers) || $servers === []) {
+            $servers = [['127.0.0.1', 11211]];
+        }
+        $parts = [];
+        foreach ($servers as $s) {
+            $host = (string) ($s[0] ?? '127.0.0.1');
+            $port = (int)    ($s[1] ?? 11211);
+            $parts[] = "{$host}:{$port}";
+        }
+        return implode(',', $parts);
     }
 
     /**
