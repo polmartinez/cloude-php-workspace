@@ -186,6 +186,11 @@ final class SessionConfigTest extends TestCase
         $m  = $rc->getMethod('memcachedSavePath');
         $m->setAccessible(true);
 
+        // Single-tuple shape (the common case).
+        $path = $m->invoke(null, ['servers' => ['10.0.0.1', 11211]]);
+        self::assertSame('10.0.0.1:11211', $path);
+
+        // List-of-tuples shape (multi-node).
         $path = $m->invoke(null, ['servers' => [['10.0.0.1', 11211], ['10.0.0.2', 11212]]]);
         self::assertSame('10.0.0.1:11211,10.0.0.2:11212', $path);
 

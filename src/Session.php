@@ -250,13 +250,25 @@ final class Session
      * Build the ext-memcached session save_path:
      *   `host1:port1,host2:port2,...`
      *
+     * Accepts both shapes for `servers`:
+     *   - Single tuple:    `['host', 11211]`
+     *   - List of tuples:  `[['host1', 11211], ['host2', 11211]]`
+     *
+     * Detection: when `$servers[0]` is a string we treat the whole
+     * thing as one tuple (no array-of-arrays needed for the common
+     * single-server case).
+     *
      * @param array<string,mixed> $config
      */
     private static function memcachedSavePath(array $config): string
     {
-        $servers = $config['servers'] ?? [['127.0.0.1', 11211]];
+        $servers = $config['servers'] ?? ['127.0.0.1', 11211];
         if (!is_array($servers) || $servers === []) {
-            $servers = [['127.0.0.1', 11211]];
+            $servers = ['127.0.0.1', 11211];
+        }
+        // Single tuple → wrap so the foreach below works uniformly.
+        if (is_string($servers[0] ?? null)) {
+            $servers = [$servers];
         }
         $parts = [];
         foreach ($servers as $s) {

@@ -77,11 +77,12 @@ return [
     ],
 
     // ── Memcached backend (when handler = 'memcached') ──────────────────
-    // List of [host, port] tuples; PHP joins them as
-    // `host1:port1,host2:port2`.
+    // 'servers' accepts EITHER a single [host, port] tuple (the common
+    // case) or a list of tuples for a multi-node pool. PHP joins multi-
+    // node configs as `host1:port1,host2:port2`.
     'memcached' => [
-        'servers' => [
-            ['127.0.0.1', 11211],
-        ],
+        'servers' => ['127.0.0.1', 11211],
+        // Multi-node form:
+        // 'servers' => [['10.0.0.1', 11211], ['10.0.0.2', 11211]],
     ],
 ];
