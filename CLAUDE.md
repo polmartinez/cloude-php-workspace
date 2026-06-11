@@ -120,6 +120,7 @@ require __DIR__ . '/../vendor/autoload.php';
     docroot: __DIR__,
     apppath: dirname(__DIR__) . '/app',
 );
+\Cloude\Bootstrap::setEnv(\Cloude\Config::env('APP_ENV', 'production'));
 \Cloude\Config::configure(APPPATH . '/config');
 
 if (\Cloude\Bootstrap::serveStaticIfExists(DOCROOT)) {
@@ -303,6 +304,9 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 |---|---|---|
 | JSON list endpoint | `Response::json(['items' => $rows])` | [`examples/contacts/.../ContactsController::apiSearch`](examples/contacts/app/Controller/ContactsController.php) |
 | HTML form + server validation | `Input::post` + `JsonSchema::validate` + re-render with errors | [`ContactsController::create`](examples/contacts/app/Controller/ContactsController.php) |
+| Read request input | `Input::method()`, `Input::uri()`, `Input::get($k)`, `Input::post($k)`, `Input::json()`, `Input::body()`, `Input::header('X-…')`, `Input::ip()`, `Input::server('REMOTE_ADDR')` | `Cloude\Input` — thin wrapper over superglobals. `server($k?, $default?)` is the escape hatch for `$_SERVER` keys not covered by the typed helpers (`PATH_INFO`, `SCRIPT_NAME`, `SSL_*`, custom `HTTP_X_*` from proxies) |
+| Pick the env (production / staging / dev / ...) | `Bootstrap::setEnv('production')` BEFORE `Config::configure(...)`, then `config/production/*.php` deep-merges over base | Env name is free-form. Resolution: `Bootstrap::setEnv()` → `APP_ENV` / `ENVIRONMENT` env var → `'dev'`. Read back with `Bootstrap::env()` |
+| Multibyte-safe string ops | `Str::sub($s, $start, $len?)`, `Str::len($s)`, `Str::truncate($s, $max)`, `Str::truncateMiddle($s, $max)` | All count codepoints not bytes. `truncate()`/`truncateMiddle()` cap the final length INCLUDING the ellipsis |
 | File-per-entity storage (slug-keyed, schemaless) | extend `Data\JsonRepository`, override `transform()` | [`examples/recipes/data.php`](examples/recipes/data.php), [`ContactsRepo`](examples/contacts/app/Repository/ContactsRepo.php) |
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
@@ -310,6 +314,9 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
 | Nested WHERE groups (mix AND/OR with parens) | `$q->where(...)->whereGroup(fn ($g) => $g->where(...)->orWhere(...))->orWhereGroup(...)` | [`src/Storage/Query.php`](src/Storage/Query.php) |
 | JOIN two tables | `$q->join('orders', 'orders.user_id', '=', 'users.id')` (also `leftJoin`/`rightJoin`/`crossJoin`) | Columns may be qualified (`'users.email'`) — they're quoted automatically |
+| GROUP BY + aggregates | `$q->select('country')->selectRaw('COUNT(*)', 'n')->groupBy('country')->orderBy('n', 'DESC')->get()` | `selectRaw($expr, $alias?)` appends a raw expression (no quoting). Use for any aggregate (`COUNT/SUM/AVG/MIN/MAX`) or function. First call clears the default `*` |
+| HAVING (filter on aggregates) | `$q->groupBy('country')->havingRaw('COUNT(*) > ?', [10])->get()` | Multiple `havingRaw()` calls AND-join. Always parameterize — never interpolate into `$expression` |
+| Count groups (not rows) | `$q->groupBy('country')->count()` | Auto-wraps as `SELECT COUNT(*) FROM (<grouped query>)` so the result is still a scalar |
 | Reference table / column statically | `User::table()` / `User::field('email')` / `User::as('u')->field('email')` | Returns plain dotted strings; pair `User::as('u')` with `$q->from()` / `$q->join()` for typed joins |
 | Alias a column in `select()` (preferred) | `$q->select('id', ['name', 'type_name'])`, `User::alias('name', 'user_name')`, `$u->alias('name', 'who')` | Tuple `[col, alias]` is the recommended form. Legacy `'name AS alias'` string still accepted for back-compat |
 | Catch a SQL failure portably | `catch (\Cloude\Storage\StorageException $e)` (or its subclasses) | Every Query / PdoStorage execution wraps `PDOException`. Subclasses: `TableNotFoundException`, `ColumnNotFoundException`, `DuplicateKeyException`, `IntegrityConstraintException`, `ConnectionException`, `SyntaxErrorException`. `$e->sql / $e->bindings / $e->sqlState` are public readonly |

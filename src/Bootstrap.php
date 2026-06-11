@@ -48,6 +48,61 @@ namespace Cloude;
 class Bootstrap
 {
     /**
+     * The application environment name — drives the per-environment
+     * config overlay. When set to `'production'`, any file under
+     * `app/config/production/` deep-merges over the base configs;
+     * same for `'staging'`, `'development'`, or whatever else you
+     * coin (`'local'`, `'ci'`, `'test'`, ...).
+     *
+     * Three ways to set it, in precedence order (highest first):
+     *
+     *   1. `Bootstrap::setEnv('production')` — explicit code-level set.
+     *   2. `APP_ENV` / `ENVIRONMENT` env var — auto-detected by
+     *      `Config::configure()` when no arg is passed.
+     *   3. Default `'dev'` baked into `Config`.
+     *
+     * Reading it back: `Bootstrap::env()` — returns the resolved value.
+     *
+     * Recommended ordering in `www/index.php`:
+     *
+     *   \Cloude\Bootstrap::initPaths(docroot: __DIR__, apppath: ...);
+     *   \Cloude\Bootstrap::setEnv(\Cloude\Config::env('APP_ENV', 'production'));
+     *   \Cloude\Config::configure(APPPATH . '/config');
+     *   \Cloude\Bootstrap::run();
+     */
+    public static ?string $env = null;
+
+    /**
+     * Set the application environment and propagate it to `Config` so
+     * any subsequent `Config::get()` reads the per-env overlay. Safe to
+     * call before OR after `Config::configure()` — the loader is
+     * idempotent and flushes its cache on every env change.
+     */
+    public static function setEnv(string $env): void
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $env)) {
+            throw new \InvalidArgumentException(
+                "Invalid environment name '$env' (allowed: A-Za-z0-9_-)",
+            );
+        }
+        self::$env = $env;
+        Config::setEnvironment($env);
+    }
+
+    /**
+     * Resolved environment name. Falls back to `APP_ENV` /
+     * `ENVIRONMENT` env vars, then to `Config`'s default (`'dev'`).
+     */
+    public static function env(): string
+    {
+        if (self::$env !== null) {
+            return self::$env;
+        }
+        $detected = Config::env('APP_ENV') ?? Config::env('ENVIRONMENT');
+        return $detected ?? Config::environment();
+    }
+
+    /**
      * Defines the three directory constants the framework expects.
      *
      * - `DOCROOT`   public web root              (typically `www/`)
@@ -113,6 +168,14 @@ class Bootstrap
      */
     public static function run(?bool $debug = null, ?string $viewBase = null): void
     {
+        // Sync env: if the property was assigned directly (without
+        // setEnv()) after Config::configure() already ran, propagate
+        // it now so the per-env overlay is in effect before any
+        // Config::get() below.
+        if (self::$env !== null && Config::environment() !== self::$env) {
+            Config::setEnvironment(self::$env);
+        }
+
         // Apply the configured timezone before anything date-related runs.
         // `Cloude\DateTime`, the mail `Date:` header, and every native PHP
         // date function use the default timezone — setting it once at boot

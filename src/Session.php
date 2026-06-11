@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cloude;
 
 /**
- * Static façade over PHP's native session machinery. Three jobs:
+ * Static façade over PHP's native session machinery. Four jobs:
  *
  *   1. **Hardened defaults** — `start()` applies the security flags
  *      every project re-discovers (httponly, samesite=Lax, secure when
@@ -74,16 +74,22 @@ final class Session
      * Start (or resume) the session with hardened defaults. Safe to
      * call multiple times — no-op once a session is already active.
      *
-     * Default cookie params:
-     *   - httponly = true        (no JS access)
-     *   - samesite = 'Lax'       (modern XSS / CSRF default)
-     *   - secure   = true        when HTTPS is on
+     * Resolution order (last wins) for every knob:
      *
-     * Override any of them via `$cookieParams`. Pass `$options` for
-     * other `session_start()` options (name, save_path, ...).
+     *   1. Hardened defaults baked in below (httponly, samesite=Lax,
+     *      secure on HTTPS, cookie_lifetime=0).
+     *   2. `config/session.php` keys when present (FW ships a default;
+     *      app overrides deep-merge over it). See the bundled
+     *      `config/session.php` for the full list — `cookie_lifetime`,
+     *      `cookie_samesite`, `gc_maxlifetime`, `name`, `save_path`, ...
+     *   3. Explicit `$options` / `$cookieParams` passed to this call.
+     *
+     * Pass `$options` for `session_start()` options (`name`,
+     * `save_path`, ...) — they override the config's values.
+     * Pass `$cookieParams` to override cookie params per call.
      *
      * @param array<string, mixed> $options       Forwarded to session_start()
-     * @param array<string, mixed> $cookieParams  Merged with defaults
+     * @param array<string, mixed> $cookieParams  Merged over config / defaults
      */
     public static function start(array $options = [], array $cookieParams = []): void
     {
@@ -97,6 +103,28 @@ final class Session
             throw new \RuntimeException("Cannot start session — headers already sent at $file:$line");
         }
 
+        $config = self::loadConfig();
+
+        // Server-side knobs first — must be applied via ini_set() BEFORE
+        // session_start() reads them. Explicit $options override config.
+        if (isset($config['gc_maxlifetime']) && !isset($options['gc_maxlifetime'])) {
+            ini_set('session.gc_maxlifetime', (string) $config['gc_maxlifetime']);
+        }
+        if (isset($config['name']) && !isset($options['name'])) {
+            $options['name'] = $config['name'];
+        }
+
+        // Storage backend — 'files' (default), 'redis', or 'memcached'.
+        // Each handler reads a different save_path URI shape, so we
+        // assemble the right one from the config block. Explicit
+        // $options['save_path'] always wins (for tests + edge cases).
+        if (isset($config['handler']) && $config['handler'] !== null) {
+            self::applyHandler((string) $config['handler'], $config, $options);
+        } elseif (isset($config['save_path']) && !isset($options['save_path'])) {
+            $options['save_path'] = $config['save_path'];
+        }
+
+        // Cookie params: hardened defaults < config < explicit args.
         $defaults = [
             'lifetime' => 0,
             'path'     => '/',
@@ -105,11 +133,182 @@ final class Session
             'httponly' => true,
             'samesite' => 'Lax',
         ];
-        session_set_cookie_params(array_replace($defaults, $cookieParams));
+        $merged = array_replace(
+            $defaults,
+            self::cookieParamsFromConfig($config, $defaults['secure']),
+            $cookieParams,
+        );
+        session_set_cookie_params($merged);
 
         session_start($options);
 
         self::promoteFlashBucket();
+    }
+
+    /**
+     * Read `config/session.php` once per call. Returns an empty array
+     * when Config isn't configured, so Session keeps working without
+     * any config files (the hardened defaults remain in place).
+     *
+     * @return array<string, mixed>
+     */
+    private static function loadConfig(): array
+    {
+        if (!class_exists(Config::class, false)) {
+            return [];
+        }
+        $config = Config::get('session');
+        return is_array($config) ? $config : [];
+    }
+
+    /**
+     * Wire up a non-default session backend (Redis / Memcached / files).
+     * Sets `session.save_handler` and synthesizes the `save_path` URI
+     * each handler expects. Validates that the matching PHP extension
+     * is loaded before letting `session_start()` blow up with a less
+     * helpful message.
+     *
+     * @param array<string,mixed> $config
+     * @param array<string,mixed> $options Mutated in place
+     */
+    private static function applyHandler(string $handler, array $config, array &$options): void
+    {
+        switch ($handler) {
+            case 'files':
+                ini_set('session.save_handler', 'files');
+                if (isset($config['save_path']) && !isset($options['save_path'])) {
+                    $options['save_path'] = (string) $config['save_path'];
+                }
+                return;
+
+            case 'redis':
+                if (!extension_loaded('redis')) {
+                    throw new \RuntimeException(
+                        "session handler 'redis' needs ext-redis (`pecl install redis`)",
+                    );
+                }
+                ini_set('session.save_handler', 'redis');
+                if (!isset($options['save_path'])) {
+                    $options['save_path'] = self::redisSavePath($config['redis'] ?? []);
+                }
+                return;
+
+            case 'memcached':
+                if (!extension_loaded('memcached')) {
+                    throw new \RuntimeException(
+                        "session handler 'memcached' needs ext-memcached (`pecl install memcached`)",
+                    );
+                }
+                ini_set('session.save_handler', 'memcached');
+                if (!isset($options['save_path'])) {
+                    $options['save_path'] = self::memcachedSavePath($config['memcached'] ?? []);
+                }
+                return;
+
+            default:
+                throw new \RuntimeException(
+                    "Unsupported session handler '$handler' "
+                    . "(supported: files, redis, memcached)",
+                );
+        }
+    }
+
+    /**
+     * Build the ext-redis session save_path URI:
+     *   tcp://host:port?database=N&prefix=...&auth=...&timeout=...
+     *
+     * @param array<string,mixed> $config
+     */
+    private static function redisSavePath(array $config): string
+    {
+        $host = (string) ($config['host'] ?? '127.0.0.1');
+        $port = (int)    ($config['port'] ?? 6379);
+
+        $query = [];
+        foreach ([
+            'database'      => 'database',
+            'prefix'        => 'prefix',
+            'timeout'       => 'timeout',
+            'persistent_id' => 'persistent_id',
+        ] as $cfgKey => $uriKey) {
+            if (isset($config[$cfgKey]) && $config[$cfgKey] !== null && $config[$cfgKey] !== '') {
+                $query[$uriKey] = (string) $config[$cfgKey];
+            }
+        }
+        if (!empty($config['password'])) {
+            $query['auth'] = (string) $config['password'];
+        }
+
+        $uri = "tcp://{$host}:{$port}";
+        if ($query !== []) {
+            $uri .= '?' . http_build_query($query);
+        }
+        return $uri;
+    }
+
+    /**
+     * Build the ext-memcached session save_path:
+     *   `host1:port1,host2:port2,...`
+     *
+     * Accepts both shapes for `servers`:
+     *   - Single tuple:    `['host', 11211]`
+     *   - List of tuples:  `[['host1', 11211], ['host2', 11211]]`
+     *
+     * Detection: when `$servers[0]` is a string we treat the whole
+     * thing as one tuple (no array-of-arrays needed for the common
+     * single-server case).
+     *
+     * @param array<string,mixed> $config
+     */
+    private static function memcachedSavePath(array $config): string
+    {
+        $servers = $config['servers'] ?? ['127.0.0.1', 11211];
+        if (!is_array($servers) || $servers === []) {
+            $servers = ['127.0.0.1', 11211];
+        }
+        // Single tuple → wrap so the foreach below works uniformly.
+        if (is_string($servers[0] ?? null)) {
+            $servers = [$servers];
+        }
+        $parts = [];
+        foreach ($servers as $s) {
+            $host = (string) ($s[0] ?? '127.0.0.1');
+            $port = (int)    ($s[1] ?? 11211);
+            $parts[] = "{$host}:{$port}";
+        }
+        return implode(',', $parts);
+    }
+
+    /**
+     * Translate the config's `cookie_*` keys into the shape
+     * `session_set_cookie_params()` expects. `cookie_secure = null`
+     * means "auto-detect" — fall through to the hardened default.
+     *
+     * @param  array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private static function cookieParamsFromConfig(array $config, bool $autoSecure): array
+    {
+        $out = [];
+        if (array_key_exists('cookie_lifetime', $config) && $config['cookie_lifetime'] !== null) {
+            $out['lifetime'] = (int) $config['cookie_lifetime'];
+        }
+        if (array_key_exists('cookie_path', $config) && $config['cookie_path'] !== null) {
+            $out['path'] = (string) $config['cookie_path'];
+        }
+        if (array_key_exists('cookie_domain', $config) && $config['cookie_domain'] !== null) {
+            $out['domain'] = (string) $config['cookie_domain'];
+        }
+        if (array_key_exists('cookie_secure', $config) && $config['cookie_secure'] !== null) {
+            $out['secure'] = (bool) $config['cookie_secure'];
+        }
+        if (array_key_exists('cookie_httponly', $config) && $config['cookie_httponly'] !== null) {
+            $out['httponly'] = (bool) $config['cookie_httponly'];
+        }
+        if (array_key_exists('cookie_samesite', $config) && $config['cookie_samesite'] !== null) {
+            $out['samesite'] = (string) $config['cookie_samesite'];
+        }
+        return $out;
     }
 
     /** Returns the current session ID. */

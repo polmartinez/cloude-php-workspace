@@ -19,6 +19,7 @@ file is self-contained, runnable, and copy-pasteable.
 | [`markdown.php`](../../examples/recipes/markdown.php) | Markdown rendering, parser swap, GFM tables |
 | [`config.php`](../../examples/recipes/config.php) | Multi-env `Cloude\Config` setup (storage, dev/prod overrides) |
 | [`config/email.php`](../../examples/recipes/config/email.php) | Drop-in `app/config/email.php` with SMTP / sendmail / DKIM hooks |
+| [`cache.php`](../../examples/recipes/cache.php) | `Cache::remember()`, `Query::cache()`, multi-store routing, drivers (array / file / redis / memcached), test injection |
 
 ## Example apps (full mini-projects)
 

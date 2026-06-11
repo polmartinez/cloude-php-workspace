@@ -16,7 +16,22 @@
 | Read the configured timezone | `Config::get('app.timezone', 'UTC')` | FW ships `config/app.php` with `'timezone' => 'UTC'` default; `Bootstrap::run()` calls `date_default_timezone_set()` with the resolved value at boot |
 | Use short names in views (`View::e(...)`, `Str::slug(...)`) without `use` statements | Declare `'aliases' => ['View', 'Input', 'Str']` in `app/config/app.php` | `Bootstrap::run()` calls `class_alias('Cloude\<short>', '<short>')` for each entry. Skipped silently when the short name is already taken — your own classes are never stomped. Alternative: standard PHP `use Cloude\{View, Input, Str};` at the top of each view file |
 | Any other config value | `Config::get('db.default.dsn')` | Multi-env file loader, see [`Cloude\Config`](../../README.md#cloudeconfig) |
+| Set the app environment (`production` / `development` / `staging` / ...) | `Bootstrap::setEnv('production')` BEFORE `Config::configure(...)` — or assign `Bootstrap::$env = 'production'` and `Bootstrap::run()` will sync it | Drives the per-env overlay: any file under `app/config/production/` (or whatever name you pick) deep-merges over the base configs. Resolution order: `Bootstrap::setEnv()` → `APP_ENV` / `ENVIRONMENT` env var → Config default (`'dev'`). Read back via `Bootstrap::env()` |
 | Ship default configs from a library / module | `Cloude\Config::addPath('/path/to/your/config')` | Resolution order is `[core, app, ...extra]` — last entry wins on every key (deep-merge via `Arr::merge`) |
+
+## HTTP request input
+
+| You want to… | Use | Notes |
+|---|---|---|
+| Request method | `Input::method()` | Uppercase, defaults to `'GET'` |
+| URI path (no query string) | `Input::uri()` | Normalized; double slashes collapsed |
+| Query-string param | `Input::get('q')` / `Input::get('q', 'default')` / `Input::get()` (full `$_GET`) | |
+| POST field | `Input::post('email')` / `Input::post('email', '')` / `Input::post()` (full `$_POST`) | |
+| Raw `$_SERVER` key | `Input::server('REMOTE_ADDR')` / `Input::server('HTTP_X_TENANT', 'public')` / `Input::server()` (full `$_SERVER`) | Case-sensitive — use canonical upper-snake (`HTTP_*`, `REMOTE_ADDR`, `PATH_INFO`, ...). Prefer the typed helpers when one exists |
+| Request header | `Input::header('User-Agent')` / `Input::header('X-Request-Id', 'n/a')` | Translates `User-Agent` → `HTTP_USER_AGENT` under the hood |
+| Client IP | `Input::ip()` (or `Input::ip(trustProxy: true)` behind a CDN you control) | Reads `REMOTE_ADDR`; with `trustProxy`, the first entry of `X-Forwarded-For` |
+| JSON body | `Input::json()` | Returns `?array` (null on empty/invalid) |
+| Raw body | `Input::body()` | String, never null |
 
 ## HTTP responses
 
@@ -47,7 +62,10 @@
 | Random tokens, UUIDs, hashes | `Str::random()`, `Str::uuid()`, `Str::hash()` | |
 | Case conversion | `Str::camel/pascal/snake/kebab` | Handles camel-case + non-alnum boundaries |
 | Mask for privacy | `Str::mask('+34600123456', '*', 4, -3)` | Negative length keeps a tail visible |
+| Truncate by the end | `Str::truncate($text, 80)` (default `…` is `'...'`) | Final length **never exceeds** `$length` — ellipsis budget comes OUT of `$length`, not on top. Multibyte-safe |
 | Truncate by the middle | `Str::truncateMiddle($path, 25)` | Keeps both ends, drops the middle |
+| Multibyte substring | `Str::sub($text, 0, 4)` / `Str::sub($text, -3)` | Wrapper over `mb_substr` — codepoints not bytes. Use instead of byte-level `substr()` for any text that may be non-ASCII |
+| Multibyte length | `Str::len($text)` | Wrapper over `mb_strlen` — codepoints not bytes. Use instead of `strlen()` |
 | Dot-path access | `Arr::get($a, 'foo.bar.baz', $default)` | Also `set/has/forget/pluck/dot/undot/merge` |
 | Pipeline data | `Collection::make($rows)->filter(...)->sortBy(...)->take(...)->pluck(...)->all()` | Implements `ArrayAccess`, `Countable`, iterable |
 | Work with dates | `DateTime::now()`, `DateTime::parse('2026-05-18')`, `$d->addDays(7)->toDateString()`, `$d->isPast()`, `$d->diffForHumans()` | `Cloude\DateTime` extends `\DateTimeImmutable` |
@@ -57,7 +75,10 @@
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Build a SQL query | `User::query()->where('age', '>', 18)->orderBy('name')->get()` | `Cloude\Storage\Query` — SELECT/INSERT/UPDATE/DELETE + WHERE/JOIN/ORDER BY |
+| Build a SQL query | `User::query()->where('age', '>', 18)->orderBy('name')->get()` | `Cloude\Storage\Query` — SELECT/INSERT/UPDATE/DELETE + WHERE/JOIN/GROUP BY/HAVING/ORDER BY |
+| GROUP BY + aggregates | `$q->select('country')->selectRaw('COUNT(*)', 'n')->groupBy('country')->orderBy('n', 'DESC')->get()` | `selectRaw($expr, $alias?)` appends a raw expression (no quoting); first call clears the default `*`. Use for any function call: `COUNT/SUM/AVG/MIN/MAX/...` |
+| HAVING (filter on aggregates) | `$q->groupBy('country')->havingRaw('COUNT(*) > ?', [10])->get()` | Multiple `havingRaw()` calls AND-join. `$expression` is emitted verbatim — pass values through `$bindings`, never interpolate |
+| Count distinct groups | `$q->groupBy('country')->count()` | Auto-wraps as `SELECT COUNT(*) FROM (<grouped query>)` so `count()` stays a scalar even with GROUP BY |
 | Nested AND/OR predicates | `$q->where('active', 1)->whereGroup(fn ($g) => $g->where('role', 'admin')->orWhere('role', 'editor'))` | Use `orWhereGroup` for the OR-joined variant |
 | INNER / LEFT / RIGHT / CROSS JOIN | `$q->leftJoin('orders', 'orders.user_id', '=', 'users.id')` | Columns may be `'table.col'` strings; quoted automatically |
 | Static table / column references | `User::table()`, `User::field('email')`, `User::as('u')` | Avoid hand-writing `'users.email'` literals; pair `as()` with `Query::from()`/`join()` for typed joins |
@@ -100,6 +121,8 @@
 | You want to… | Use | Notes |
 |---|---|---|
 | Sessions | Just call `Session::set/get/has/forget/all`. Flash via `flash/pullFlash/reflash`. CSRF via `csrfToken/checkCsrf`. Auth flow: `regenerate()` after login | `Cloude\Session` — **lazy auto-start** with hardened defaults (`httponly`, `samesite=Lax`, `secure` on HTTPS) on first access. Routes that never touch session never issue a cookie. Call `Session::start([], $cookieParams)` first only when you need cookie-param overrides |
+| Customize cookie lifetime / GC / save path / name | Declare `config/session.php` with `cookie_lifetime` / `cookie_samesite` / `cookie_secure` / `cookie_httponly` / `cookie_path` / `cookie_domain` / `gc_maxlifetime` / `name` / `save_path` | Auto-applied by `Session::start()` (and the lazy auto-start). Order: hardened defaults < FW `config/session.php` < `app/config/session.php` < explicit `Session::start($opts, $cookieParams)` args. **Pair `cookie_lifetime` with `gc_maxlifetime`** — a long cookie is useless if PHP GC's the server-side data after 24min |
+| Store sessions in Redis / Memcached | In `config/session.php` set `'handler' => 'redis'` + a `'redis'` block (host/port/database/password/prefix), or `'handler' => 'memcached'` + a `'memcached'` block (`'servers' => [['host', port], ...]`) | Validates the extension is loaded and throws a clear message otherwise. The framework builds the `session.save_path` URI for you — for Redis: `tcp://host:port?database=N&prefix=...&auth=...`; for Memcached: `host1:port1,host2:port2`. Default handler is `'files'` (php.ini) |
 | Send email (SMTP / sendmail) | `Mailer::forge()->send([...])` | Reads `app/config/email.php`. Framework ships defaults at `config/email.php`; app overrides key-by-key. AUTH LOGIN + STARTTLS for SMTP |
 | Sign outbound mail with DKIM | Add a `'dkim'` block in `app/config/email.php`: `'dkim' => ['domain' => '...', 'selector' => '...', 'private_key' => '/path/to/key.pem']` | `Cloude\Mail\DkimSigner` — relaxed/relaxed canon + RSA-SHA256 |
 | MCP (Model Context Protocol) server | `new Mcp\Server(...)`, `tool()`, `resourceProvider()`, `resourceReader()` | HTTP / JSON-RPC 2.0; auto-validates `inputSchema` |

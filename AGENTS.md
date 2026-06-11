@@ -62,3 +62,37 @@ one of these axioms.
 4. If you can't find a class for the task, the framework probably
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
+
+## Recent additions (post-v2.11)
+
+A reminder for AIs working off slightly stale knowledge that these
+public surfaces exist. Full details in the
+[decision matrix](docs/agents/decision-matrix.md).
+
+- **`Cloude\Cache\Cache`** (v2.12.0) — static cache façade with four
+  drivers: `array` (in-process), `file` (one file per key), `redis`
+  (`ext-redis`), `memcached` (`ext-memcached`). Configure in
+  `config/cache.php`. Disabled by default (`'default' => false`)
+  until the app opts in. API: `get / put / has / forget / flush /
+  remember`. `Cache::remember('k', $ttl, fn () => $heavy())` is the
+  pattern to reach for.
+- **`Query::cache($ttl, $key?, $store?)`** (v2.12.0) — opt-in caching
+  on every SELECT terminal of `Cloude\Storage\Query`
+  (`get / first / count / value / pluck`). Auto-key from
+  `sha1(sql + bindings)`. See [`examples/recipes/cache.php`](examples/recipes/cache.php).
+- **`Query::groupBy / havingRaw / selectRaw`** (v2.13.0) — GROUP BY,
+  HAVING (raw expression with parameterized bindings), and aggregate
+  SELECT columns. `count()` auto-wraps in a subquery when GROUP BY
+  is set so it stays a scalar (returns number of groups).
+- **`Cloude\Bootstrap::setEnv($env)` / `Bootstrap::env()` /
+  `Bootstrap::$env`** (v2.14.0) — explicit application-environment
+  selection. Drives the per-env config overlay (`config/production/`,
+  `config/staging/`, ...) which deep-merges over the base configs.
+  Call BEFORE `Config::configure()` for ordered loading.
+- **`Cloude\Input::server($key?, $default?)`** (v2.14.1) — escape
+  hatch for raw `$_SERVER` keys not covered by the typed helpers
+  (`method`, `uri`, `header`, `ip`).
+- **`Cloude\Str::sub($text, $start, $len?)` / `Str::len($text)`**
+  (v2.14.2) — multibyte-safe wrappers over `mb_substr` / `mb_strlen`.
+  `Str::truncate()` was also fixed in v2.12.1 to **never exceed the
+  max length** (ellipsis budget comes OUT of `$length`, not on top).

@@ -21,11 +21,13 @@ use Cloude\Cache\Cache;
  *     `orWhereGroup(...)` — for `(a = 1 OR b = 2) AND (c = 3)` style
  *   - JOIN / leftJoin / rightJoin / crossJoin, with TableRef-aware
  *     aliases (`User::as('u')`)
- *   - ORDER BY, LIMIT, OFFSET, `count()`
+ *   - GROUP BY + HAVING (`groupBy(...)`, `havingRaw($expr, $bindings)`)
+ *   - Raw aggregate SELECT expressions via `selectRaw('COUNT(*)', 'n')`
+ *   - ORDER BY, LIMIT, OFFSET, `count()` (auto-wraps when GROUP BY is set)
  *
  * **Does not** ship: UNIONs, subqueries, window functions, CTEs,
- * SAVEPOINTs, aggregations beyond `count()`, GROUP BY / HAVING. For
- * any of that, drop down to the PDO connection and write the SQL.
+ * SAVEPOINTs. For any of that, drop down to the PDO connection and
+ * write the SQL.
  *
  * Construction:
  *
@@ -106,6 +108,9 @@ final class Query
     /** @var list<string> */
     private array $select = ['*'];
 
+    /** Raw SELECT expressions (aggregates, functions); appended after $select. @var list<string> */
+    private array $selectRaw = [];
+
     private string|TableRef $table;
 
     /** @var list<array{type:string, table:string|TableRef, left:?string, op:?string, right:?string}> */
@@ -113,6 +118,12 @@ final class Query
 
     /** @var list<WhereClause> */
     private array $wheres = [];
+
+    /** @var list<string> */
+    private array $groups = [];
+
+    /** @var list<array{expr: string, bindings: list<mixed>}> */
+    private array $havings = [];
 
     /** @var list<array{col:string, dir:string}> */
     private array $orders = [];
@@ -178,6 +189,76 @@ final class Query
             }
         }
         $this->select = $normalised;
+        return $this;
+    }
+
+    /**
+     * Append a **raw** SQL expression to the SELECT list — emitted
+     * as-is, no identifier quoting. Use for aggregates and functions:
+     *
+     *   $q->selectRaw('COUNT(*)', 'total')
+     *     ->selectRaw('SUM(price)', 'revenue')
+     *     ->groupBy('country');
+     *   // SELECT COUNT(*) AS `total`, SUM(price) AS `revenue` FROM ... GROUP BY `country`
+     *
+     * The first `selectRaw()` clears the default `*` wildcard, so a
+     * pure-aggregate SELECT just works. To mix raw aggregates with
+     * regular columns, call `select(...)` for the columns first and
+     * then `selectRaw(...)` for each aggregate:
+     *
+     *   $q->select('country')->selectRaw('COUNT(*)', 'total')->groupBy('country');
+     *
+     * `$expression` is **trusted** — never feed unvalidated user input
+     * into it (bind values through `havingRaw($expr, [...])` or use
+     * the regular `where()` API for that).
+     */
+    public function selectRaw(string $expression, ?string $alias = null): static
+    {
+        if ($this->select === ['*']) {
+            $this->select = [];
+        }
+        $this->selectRaw[] = $alias !== null
+            ? $expression . ' AS ' . $this->q($alias)
+            : $expression;
+        return $this;
+    }
+
+    /**
+     * GROUP BY one or more columns. Identifiers are quoted (`u.role`
+     * → `` `u`.`role` ``). Reorder to match SQL: WHERE → GROUP BY →
+     * HAVING → ORDER BY → LIMIT.
+     *
+     *   $q->select('country')->selectRaw('COUNT(*)', 'n')
+     *     ->groupBy('country')
+     *     ->havingRaw('COUNT(*) > ?', [10])
+     *     ->orderBy('n', 'DESC')
+     *     ->get();
+     */
+    public function groupBy(string ...$columns): static
+    {
+        foreach ($columns as $c) {
+            $this->groups[] = $c;
+        }
+        return $this;
+    }
+
+    /**
+     * HAVING with a raw expression and bound parameters. Necessary
+     * because HAVING typically references aggregates (`COUNT(*)`,
+     * `SUM(amount)`) or SELECT aliases that the builder can't model
+     * as plain identifiers.
+     *
+     *   $q->havingRaw('COUNT(*) > ?', [10])
+     *     ->havingRaw('SUM(price) BETWEEN ? AND ?', [100, 500]);
+     *   // HAVING COUNT(*) > 10 AND SUM(price) BETWEEN 100 AND 500
+     *
+     * Multiple calls AND-join. `$expression` is emitted verbatim — DO
+     * NOT interpolate user input into it; pass values through
+     * `$bindings` so they're parameterized.
+     */
+    public function havingRaw(string $expression, array $bindings = []): static
+    {
+        $this->havings[] = ['expr' => $expression, 'bindings' => array_values($bindings)];
         return $this;
     }
 
@@ -381,14 +462,28 @@ final class Query
 
     public function count(): int
     {
-        $oldSelect = $this->select;
-        $this->select = ['COUNT_STAR_RAW'];   // sentinel, swapped below
+        // GROUP BY case: a plain SELECT COUNT(*) ... GROUP BY x would
+        // return one row per group, not a scalar. Wrap the original
+        // SELECT in a derived table and count the groups instead — the
+        // useful semantics (how many distinct groups matched).
+        if ($this->groups !== []) {
+            [$inner, $params] = $this->buildSelect();
+            $sql = 'SELECT COUNT(*) FROM (' . $inner . ') AS cloude_grp_count';
+            return $this->remember($sql, $params, function () use ($sql, $params): int {
+                $stmt = StorageException::execute($this->pdo, $sql, $params);
+                return (int) $stmt->fetchColumn();
+            });
+        }
+
+        $oldSelect    = $this->select;
+        $oldSelectRaw = $this->selectRaw;
+        $this->select    = [];
+        $this->selectRaw = ['COUNT(*)'];
         try {
             [$sql, $params] = $this->buildSelect();
-            // Replace the placeholder with literal COUNT(*).
-            $sql = preg_replace('/`COUNT_STAR_RAW`|COUNT_STAR_RAW/', 'COUNT(*)', $sql, 1) ?? $sql;
         } finally {
-            $this->select = $oldSelect;
+            $this->select    = $oldSelect;
+            $this->selectRaw = $oldSelectRaw;
         }
         return $this->remember($sql, $params, function () use ($sql, $params): int {
             $stmt = StorageException::execute($this->pdo, $sql, $params);
@@ -656,19 +751,58 @@ final class Query
      */
     private function buildSelect(): array
     {
-        $cols = $this->select === ['*']
-            ? '*'
-            : implode(', ', array_map(fn (string $c) => $this->q($c), $this->select));
+        $quoted = $this->select === ['*']
+            ? ['*']
+            : array_map(fn (string $c) => $this->q($c), $this->select);
+        $cols = implode(', ', [...$quoted, ...$this->selectRaw]);
+        if ($cols === '') {
+            $cols = '*';
+        }
 
         $sql = 'SELECT ' . $cols . ' FROM ' . $this->qualifyTable($this->table);
         $sql .= $this->buildJoins();
 
         [$where, $params] = $this->buildWhere($this->wheres);
         $sql .= $where;
+        $sql .= $this->buildGroupBy();
+        $havingSql = $this->buildHaving($params);
+        $sql .= $havingSql;
         $sql .= $this->buildOrderBy();
         $sql .= $this->buildLimit();
 
         return [$sql, $params];
+    }
+
+    private function buildGroupBy(): string
+    {
+        if ($this->groups === []) {
+            return '';
+        }
+        $parts = array_map(fn (string $c) => $this->q($c), $this->groups);
+        return ' GROUP BY ' . implode(', ', $parts);
+    }
+
+    /**
+     * Appends HAVING clauses to the running params list. Multiple
+     * havingRaw() calls are AND-joined; each expression is wrapped in
+     * parens so user-supplied OR / AND inside doesn't bleed into
+     * sibling clauses.
+     *
+     * @param list<mixed> $params  Bound params accumulator (mutated)
+     */
+    private function buildHaving(array &$params): string
+    {
+        if ($this->havings === []) {
+            return '';
+        }
+        $parts = [];
+        foreach ($this->havings as $h) {
+            $parts[] = '(' . $h['expr'] . ')';
+            foreach ($h['bindings'] as $b) {
+                $params[] = $b;
+            }
+        }
+        return ' HAVING ' . implode(' AND ', $parts);
     }
 
     private function buildJoins(): string

@@ -19,6 +19,35 @@ final class StrTest extends TestCase
         self::assertSame('hello', Str::upTo('hello', '.'));
     }
 
+    public function testSubFromStart(): void
+    {
+        self::assertSame('Cata', Str::sub('Cataluña', 0, 4));
+    }
+
+    public function testSubFromNegativeOffset(): void
+    {
+        self::assertSame('uña', Str::sub('Cataluña', -3));
+    }
+
+    public function testSubMiddleSlice(): void
+    {
+        self::assertSame('luñ', Str::sub('Cataluña', 4, 3));
+    }
+
+    public function testSubIsMultibyteSafe(): void
+    {
+        // 'ñ' is one codepoint, two bytes. byte-level substr() would
+        // return mojibake; Str::sub respects codepoint boundaries.
+        self::assertSame('ñ', Str::sub('Cataluña', 6, 1));
+    }
+
+    public function testLenCountsCodepoints(): void
+    {
+        self::assertSame(5, Str::len('hello'));
+        self::assertSame(8, Str::len('Cataluña'));
+        self::assertSame(0, Str::len(''));
+    }
+
     public function testTruncateRespectsLengthIncludingEllipsis(): void
     {
         // Final length must never exceed $length — ellipsis budget comes
