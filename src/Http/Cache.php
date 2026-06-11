@@ -17,19 +17,21 @@ class Cache
     /**
      * CDN cache headers for a successful (200) response.
      */
-    public static function ok(int $timeout = 86400): void
+    public static function ok(int $stimeout = 86400, int $timeout = 0): void
     {
         header(sprintf(
-            'Cache-Control: max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            'Cache-Control: s-maxage=%d, max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            $stimeout,
             $timeout,
-            $timeout,
-            $timeout,
+            $stimeout,
+            $stimeout,
         ));
         header(sprintf(
-            'CDN-Cache-Control: max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            'CDN-Cache-Control: s-maxage:%d, max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            $stimeout,
             $timeout,
-            $timeout,
-            $timeout,
+            $stimeout,
+            $stimeout,
         ));
     }
 
