@@ -41,7 +41,7 @@
 | 404 / redirect / 204 | `Response::notFound`, `redirect`, `noContent` | |
 | Throw a 404 from anywhere | `throw new Http\NotFoundException("book $isbn")` | Caught by `ErrorHandler`; renders bundled `404.html.php` (HTML), JSON, or plain text |
 | Throw any HTTP status | `throw new Http\HttpException(403, 'forbidden')` | Same as above; uses `500.html.php` template by default for non-404 |
-| Cache a 200 at the CDN | `Http\Cache::ok($seconds)` | Sets both `Cache-Control` and `CDN-Cache-Control` |
+| Cache a 200 at the CDN | `Http\Cache::ok($stimeout = 86400, $timeout = 0)` | Sets `Cache-Control` + `CDN-Cache-Control`. `$stimeout` → `s-maxage` (shared / CDN); `$timeout` → `max-age` (browser). Default: CDN holds 1 day, browser revalidates every request (`max-age=0` → 304s when unchanged). Pass both args to cache in the browser too: `Cache::ok(86400, 300)` |
 | Conditional GET (304) | `Cache::conditionalGet(filemtime($path))` | Returns true when client is fresh |
 | Versioned asset URLs (`/{mtime}/assets/…`) | `Http\AssetUrl::configure(...)` then `AssetUrl::get($rel)` | Apache rewrite required |
 

@@ -1519,7 +1519,9 @@ CLI prints `"Not found."` for 404, `"Error: service temporarily unavailable."` o
 ### `Cloude\Http\Cache`
 
 ```php
-Cache::ok();                          // long CDN TTL on 200
+Cache::ok();                          // 1d at the CDN, browser revalidates every request
+Cache::ok(3600);                      // 1h at the CDN, browser revalidates every request
+Cache::ok(86400, 300);                // 1d at the CDN, 5min in the browser
 Cache::notFound();                    // short CDN TTL on 404
 Cache::unavailable();                 // no-store + Retry-After on 5xx
 
@@ -1527,6 +1529,11 @@ if (Cache::conditionalGet(filemtime($path))) {
     return; // 304 sent
 }
 ```
+
+`ok($stimeout, $timeout)` splits the TTL between the **shared cache**
+(`s-maxage` — CDN / reverse proxy) and the **browser** (`max-age`).
+Default `$timeout = 0` lets the browser hit the CDN on every request
+and get an instant 304 via `conditionalGet()` when nothing's changed.
 
 ### `Cloude\Http\AssetUrl`
 

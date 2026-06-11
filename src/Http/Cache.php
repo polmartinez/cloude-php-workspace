@@ -7,15 +7,38 @@ namespace Cloude\Http;
 /**
  * HTTP cache helpers: response cache headers and conditional GET.
  *
- * - ok()/notFound()/unavailable() emit CDN-Cache-Control headers tuned for
- *   typical content-driven sites (long TTL on 200, short on 404, no-store on 5xx).
- * - conditionalGet() implements If-Modified-Since / If-None-Match. Returns true
- *   when the client already has a fresh copy (and a 304 has been sent).
+ * - ok()/notFound()/unavailable() emit Cache-Control + CDN-Cache-Control
+ *   headers tuned for typical content-driven sites (long TTL on 200,
+ *   short on 404, no-store on 5xx).
+ * - conditionalGet() implements If-Modified-Since / If-None-Match.
+ *   Returns true when the client already has a fresh copy (and a 304
+ *   has been sent).
  */
 class Cache
 {
     /**
-     * CDN cache headers for a successful (200) response.
+     * Cache-Control + CDN-Cache-Control headers for a successful (200)
+     * response. Distinguishes the **shared / CDN** TTL from the
+     * **browser** TTL so you can cache aggressively at the edge while
+     * keeping the user's browser short-fuse:
+     *
+     *   - `$stimeout` → `s-maxage` (shared caches: CDN / reverse proxy)
+     *   - `$timeout`  → `max-age`  (the end-user's browser)
+     *
+     * `stale-if-error` and `stale-while-revalidate` are wired to
+     * `$stimeout` — those directives describe how a CDN behaves when
+     * the origin is unreachable / when a refresh is in flight, so they
+     * track the shared-cache TTL, not the browser's. With the defaults
+     * the CDN holds the page for a day; the browser revalidates every
+     * request (`max-age=0`), getting an instant 304 when nothing
+     * changed.
+     *
+     *   Cache::ok();                          // CDN 1d, browser 0
+     *   Cache::ok(3600);                       // CDN 1h, browser 0
+     *   Cache::ok(86400, 300);                 // CDN 1d, browser 5min
+     *
+     * Don't call this on dynamic / per-user responses — `s-maxage` makes
+     * the CDN serve the SAME body to every visitor.
      */
     public static function ok(int $stimeout = 86400, int $timeout = 0): void
     {
@@ -27,7 +50,7 @@ class Cache
             $stimeout,
         ));
         header(sprintf(
-            'CDN-Cache-Control: s-maxage:%d, max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
+            'CDN-Cache-Control: s-maxage=%d, max-age=%d, stale-if-error=%d, stale-while-revalidate=%d',
             $stimeout,
             $timeout,
             $stimeout,
