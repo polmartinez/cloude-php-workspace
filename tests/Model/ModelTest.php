@@ -104,6 +104,62 @@ final class ModelTest extends TestCase
         self::assertSame(4, TestUser::count());
     }
 
+    public function testUpdateOrCreateUpdatesWhenMatchExists(): void
+    {
+        // Ada has id=1, name='Ada' — match on email, update name + active.
+        $u = TestUser::updateOrCreate(
+            ['email' => 'ada@example.com'],
+            ['name' => 'Ada Lovelace', 'active' => 0],
+        );
+
+        self::assertSame(1, $u->id);
+        self::assertSame('Ada Lovelace', $u->name);
+        self::assertSame(0, $u->active);
+        self::assertSame(3, TestUser::count(), 'no new row should be inserted on update path');
+
+        // Persisted in storage too:
+        $reloaded = TestUser::find(1);
+        self::assertSame('Ada Lovelace', $reloaded->name);
+    }
+
+    public function testUpdateOrCreateInsertsWhenNoMatch(): void
+    {
+        $u = TestUser::updateOrCreate(
+            ['email' => 'grace@example.com'],
+            ['name' => 'Grace Hopper', 'active' => 1],
+        );
+
+        self::assertNotNull($u->id);
+        self::assertTrue($u->isPersisted());
+        self::assertSame('grace@example.com', $u->email);
+        self::assertSame('Grace Hopper', $u->name);
+        self::assertSame(4, TestUser::count());
+    }
+
+    public function testUpdateOrCreateWithEmptyValuesIsReadOrCreate(): void
+    {
+        // Existing → returned untouched.
+        $existing = TestUser::updateOrCreate(['email' => 'ada@example.com']);
+        self::assertSame(1, $existing->id);
+        self::assertSame('Ada', $existing->name, 'no $values → existing row left untouched');
+
+        // Missing → created from $match alone.
+        $created = TestUser::updateOrCreate(['email' => 'new@example.com', 'name' => 'New', 'active' => 1]);
+        self::assertNotNull($created->id);
+        self::assertSame('new@example.com', $created->email);
+        self::assertSame(4, TestUser::count());
+    }
+
+    public function testUpdateOrCreateValuesWinOnKeyOverlap(): void
+    {
+        // Same key in both arrays — $values should win on the create path.
+        $u = TestUser::updateOrCreate(
+            ['email' => 'fresh@example.com', 'name' => 'FROM_MATCH'],
+            ['name' => 'FROM_VALUES', 'active' => 1],
+        );
+        self::assertSame('FROM_VALUES', $u->name);
+    }
+
     public function testSaveOnLoadedInstanceUpdates(): void
     {
         $u = TestUser::find(1);

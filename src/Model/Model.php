@@ -568,6 +568,51 @@ abstract class Model
         return (new static($data))->save();
     }
 
+    /**
+     * "Upsert by lookup keys." Find a row whose columns match every
+     * key/value pair in `$match`. If found, fill it with `$values` and
+     * `save()`; if not found, create a new row from `$match + $values`.
+     * Returns the persisted instance either way.
+     *
+     *   ProgramMetricTarget::updateOrCreate(
+     *       ['plan_id' => $p, 'week_no' => $w, 'day_group_id' => $g, 'metric_id' => $m],
+     *       ['target_value' => $v, 'target_unit_id' => $u],
+     *   );
+     *
+     * The `$match` array is the "natural key" — typically the columns
+     * that uniquely identify the row (and ideally back a UNIQUE index
+     * in the DB). `$values` is what may change per call. When the two
+     * arrays share a key, `$values` wins on the create path.
+     *
+     * `$values` may be `[]` — that's the read-or-create pattern
+     * (effectively `firstOrCreate`): existing row returned untouched,
+     * missing row created from `$match` alone.
+     *
+     * **Race caveat.** find + update is NOT atomic on its own. Two
+     * requests racing on the same `$match` can each see "no row" and
+     * both `create()`. To make this safe in production:
+     *
+     *   - put a UNIQUE index on the `$match` columns, AND
+     *   - wrap the call in `Transaction::run(...)` (REPEATABLE READ or
+     *     SERIALIZABLE) so the loser hits `DuplicateKeyException` and
+     *     can retry or fall back to an UPDATE.
+     *
+     * @param array<string,mixed> $match
+     * @param array<string,mixed> $values
+     */
+    public static function updateOrCreate(array $match, array $values = []): static
+    {
+        $rows = static::storage()->findBy($match, limit: 1);
+        if ($rows !== []) {
+            $instance = static::hydrate($rows[0]);
+            if ($values !== []) {
+                $instance->fill($values)->save();
+            }
+            return $instance;
+        }
+        return static::create(array_merge($match, $values));
+    }
+
     // ── instance API ───────────────────────────────────────────────────────
 
     /**
