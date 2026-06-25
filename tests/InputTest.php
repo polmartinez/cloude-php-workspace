@@ -71,6 +71,49 @@ final class InputTest extends TestCase
         self::assertSame('GET', Input::method());
     }
 
+    public function testUriNormalizesValidPath(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/foo/bar?x=1';
+        self::assertSame('/foo/bar', Input::uri());
+
+        $_SERVER['REQUEST_URI'] = '/';
+        self::assertSame('/', Input::uri());
+
+        // Internal `//` between segments → collapsed.
+        $_SERVER['REQUEST_URI'] = '/foo//bar/';
+        self::assertSame('/foo/bar/', Input::uri());
+    }
+
+    public function testUriHandlesMissingRequestUri(): void
+    {
+        unset($_SERVER['REQUEST_URI']);
+        self::assertSame('/', Input::uri());
+    }
+
+    /**
+     * Regression: parse_url() returns `false` (not null) for malformed
+     * URIs that bot scanners send. The old `?? '/'` only caught null,
+     * so ltrim(false, ...) blew up under strict_types and turned every
+     * garbage request into a 500.
+     */
+    public function testUriSurvivesMalformedRequestUri(): void
+    {
+        $garbage = [
+            'http://:80',
+            '//foo:bar:baz',
+            '://',
+            'http:///',
+            ':',
+            '',
+        ];
+        foreach ($garbage as $bad) {
+            $_SERVER['REQUEST_URI'] = $bad;
+            // Must return SOMETHING starting with '/' and not throw.
+            $path = Input::uri();
+            self::assertStringStartsWith('/', $path, "broke on REQUEST_URI=" . var_export($bad, true));
+        }
+    }
+
     public function testGetAndPostShortcuts(): void
     {
         $_GET  = ['q' => 'hello'];

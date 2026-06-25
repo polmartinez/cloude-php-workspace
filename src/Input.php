@@ -16,13 +16,23 @@ class Input
     }
 
     /**
-     * Returns the URI path, stripped of query string and with no double slashes.
-     * Never exposes the raw $_SERVER['REQUEST_URI'] value.
+     * Returns the URI path, stripped of query string and with no double
+     * slashes. Never exposes the raw $_SERVER['REQUEST_URI'] value.
+     *
+     * Defends against malformed REQUEST_URI values (bot scanners send
+     * things like `http://:80`, `//a:b:c`, etc.) — `parse_url()` returns
+     * `false` for those, not null, and `??` wouldn't catch it. Falling
+     * back to `'/'` on any non-string keeps strict_types happy and
+     * avoids the request-blocking TypeError that previously turned every
+     * garbage URI into a 500.
      */
     public static function uri(): string
     {
-        $raw = $_SERVER['REQUEST_URI'] ?? '/';
-        $path = parse_url($raw, PHP_URL_PATH) ?? '/';
+        $raw  = $_SERVER['REQUEST_URI'] ?? '/';
+        $path = parse_url((string) $raw, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            $path = '/';
+        }
         $path = '/' . ltrim($path, '/');
         return preg_replace('#/{2,}#', '/', $path);
     }
