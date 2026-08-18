@@ -368,9 +368,13 @@ class Parser
             $text,
         );
 
-        // Bold (must come before italic so ** isn't eaten as two *)
-        $text = (string) preg_replace('/\*\*([^*\n]+)\*\*/', '<strong>$1</strong>', $text);
-        $text = (string) preg_replace('/__([^_\n]+)__/', '<strong>$1</strong>', $text);
+        // Bold (must come before italic so ** isn't eaten as two *).
+        // Interior allows a single '*' as long as it's not followed by
+        // another one — otherwise nested italics like
+        //   **Jabalí (*Sus scrofa*)**
+        // would fail to match the bold and leave literal '**' behind.
+        $text = (string) preg_replace('/\*\*((?:[^*\n]|\*(?!\*))+)\*\*/', '<strong>$1</strong>', $text);
+        $text = (string) preg_replace('/__((?:[^_\n]|_(?!_))+)__/', '<strong>$1</strong>', $text);
 
         // Italic — avoid matching * inside words ("foo*bar*baz") to reduce false positives.
         $text = (string) preg_replace('/(?<![\w*])\*([^*\n]+)\*(?![\w*])/', '<em>$1</em>', $text);
