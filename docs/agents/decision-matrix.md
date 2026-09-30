@@ -99,7 +99,8 @@
 |---|---|---|
 | Directory of `.json` per entity | extend `Data\JsonRepository` | Override `transform($data, $slug)` |
 | Directory of `.md` per entity | extend `Data\MarkdownRepository` | Reads `.md.gz` transparently |
-| Markdown → HTML | `Markdown::toHtml($md)` | In-house parser; no Parsedown |
+| Markdown → HTML (content you wrote) | `Markdown::toHtml($md)` | In-house parser; no Parsedown. Inline HTML passes through: not for text from outside |
+| Markdown → HTML (a comment, a note, a model's answer) | `Markdown::toSafeHtml($md)` | Escaped first; links only relative / http(s) / mailto / tel; no tag or attribute from the text |
 | Markdown frontmatter + body | `Markdown::parse($content)` | Returns `meta`, `html`, `paragraphs`, `description`, `noindex` |
 | Serve a `.md` over HTTP | `Markdown\Server::serve($path, $canonical)` | 404 / 304 / canonical / gzip passthrough |
 

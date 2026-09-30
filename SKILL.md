@@ -111,7 +111,8 @@ if (!defined('DATA_DIR')) {
 | Data pipeline | `Collection::make($rows)->filter()->sortBy()->take()->pluck()->all()` | `ArrayAccess`, `Countable`, iterable |
 | Directory of `.json` per entity | extend `Data\JsonRepository` | Override `transform($data, $slug)` |
 | Directory of `.md` per entity | extend `Data\MarkdownRepository` | Reads `.md.gz` transparently |
-| Markdown → HTML | `Markdown::toHtml($md)` | In-house parser. Only swap with `useParser()` if you need tables/footnotes |
+| Markdown → HTML | `Markdown::toHtml($md)` | In-house parser, for content you wrote (inline HTML passes through). Only swap with `useParser()` if you need footnotes |
+| Markdown from outside → HTML | `Markdown::toSafeHtml($md)` | A comment, a customer's note, a model's answer: escaped first, safe link schemes only |
 | Frontmatter + body | `Markdown::parse($content)` | Returns `meta`, `html`, `paragraphs`, `description` |
 | Serve a `.md` over HTTP | `Markdown\Server::serve($path, $canonicalUrl)` | 404 / 304 / canonical / gzip passthrough |
 | MCP server (HTTP/JSON-RPC) | `new Mcp\Server(...)` + `tool()` + `resourceProvider()` + `resourceReader()` | Auto-validates `inputSchema` |

@@ -15,8 +15,23 @@ namespace Cloude\Markdown;
  * NOT supported (by design): footnotes, definition lists,
  * reference-style links, setext headings (=== ---), nested lists.
  *
- * Inline HTML is passed through unescaped (Parsedown-compatible). Content
- * inside `code` and ```fenced``` blocks is HTML-escaped.
+ * Two modes:
+ *
+ *   - `toHtml($md)` — for content YOU wrote (pages, docs). Inline HTML is
+ *     passed through unescaped (Parsedown-compatible) and links take any
+ *     address. Never feed it text a visitor, a customer or a model wrote:
+ *     that text could carry `<script>` or a `javascript:` link.
+ *   - `toHtml($md, safe: true)` — for text from outside. The text is escaped
+ *     before anything else (so no tag or attribute can come from it), links
+ *     keep their address only when it is relative or `http`, `https`,
+ *     `mailto` or `tel`, and images only when relative or `http` / `https`.
+ *     `Cloude\Markdown::toSafeHtml()` is the front door.
+ *
+ * In both modes every tag the inline step writes (code, images, links) is
+ * held as an opaque token until the end, so a later pattern never reads
+ * inside one: an image inside a link's text, or a code span inside an
+ * address, cannot end up writing attributes. Content inside `code` and
+ * ```fenced``` blocks is HTML-escaped.
  *
  * Table format expected:
  *
@@ -31,11 +46,21 @@ namespace Cloude\Markdown;
  */
 class Parser
 {
-    public static function toHtml(string $md): string
+    /** Marks a held tag in the text; stripped from the input, so a text cannot forge one. */
+    private const MARK = "\x00";
+
+    private const SAFE_LINK_SCHEMES  = ['http', 'https', 'mailto', 'tel'];
+    private const SAFE_IMAGE_SCHEMES = ['http', 'https'];
+
+    /**
+     * @param bool $safe true for text from outside: nothing in it becomes a
+     *                   tag, an attribute or a script address (see the class docblock)
+     */
+    public static function toHtml(string $md, bool $safe = false): string
     {
-        $md = str_replace(["\r\n", "\r"], "\n", $md);
+        $md = str_replace(["\r\n", "\r", self::MARK], ["\n", "\n", ''], $md);
         $blocks = self::parseBlocks(explode("\n", $md));
-        return self::renderBlocks($blocks);
+        return self::renderBlocks($blocks, $safe);
     }
 
     /**
@@ -172,7 +197,7 @@ class Parser
     /**
      * @param array<int,array<int,mixed>> $blocks
      */
-    private static function renderBlocks(array $blocks): string
+    private static function renderBlocks(array $blocks, bool $safe = false): string
     {
         $out = '';
         foreach ($blocks as $b) {
@@ -182,13 +207,13 @@ class Parser
                     $level = $b[1];
                     /** @var string $text */
                     $text = $b[2];
-                    $out .= '<h' . $level . '>' . self::inline($text) . '</h' . $level . '>' . "\n";
+                    $out .= '<h' . $level . '>' . self::inline($text, $safe) . '</h' . $level . '>' . "\n";
                     break;
 
                 case 'paragraph':
                     /** @var string $text */
                     $text = $b[1];
-                    $out .= '<p>' . self::inline($text) . '</p>' . "\n";
+                    $out .= '<p>' . self::inline($text, $safe) . '</p>' . "\n";
                     break;
 
                 case 'ul':
@@ -196,7 +221,7 @@ class Parser
                     /** @var array<int,string> $items */
                     $items = $b[1];
                     foreach ($items as $item) {
-                        $out .= '<li>' . self::inline($item) . '</li>' . "\n";
+                        $out .= '<li>' . self::inline($item, $safe) . '</li>' . "\n";
                     }
                     $out .= "</ul>\n";
                     break;
@@ -206,7 +231,7 @@ class Parser
                     /** @var array<int,string> $items */
                     $items = $b[1];
                     foreach ($items as $item) {
-                        $out .= '<li>' . self::inline($item) . '</li>' . "\n";
+                        $out .= '<li>' . self::inline($item, $safe) . '</li>' . "\n";
                     }
                     $out .= "</ol>\n";
                     break;
@@ -225,7 +250,7 @@ class Parser
                 case 'quote':
                     /** @var string $body */
                     $body = $b[1];
-                    $out .= "<blockquote>\n" . self::toHtml($body) . "</blockquote>\n";
+                    $out .= "<blockquote>\n" . self::toHtml($body, $safe) . "</blockquote>\n";
                     break;
 
                 case 'hr':
@@ -243,14 +268,14 @@ class Parser
                     $out .= "<table>\n<thead>\n<tr>";
                     foreach ($header as $idx => $cell) {
                         $out .= '<th' . self::tableAlignAttr($align[$idx] ?? 'left') . '>'
-                            . self::inline($cell) . '</th>';
+                            . self::inline($cell, $safe) . '</th>';
                     }
                     $out .= "</tr>\n</thead>\n<tbody>\n";
                     foreach ($rows as $row) {
                         $out .= '<tr>';
                         foreach ($row as $idx => $cell) {
                             $out .= '<td' . self::tableAlignAttr($align[$idx] ?? 'left') . '>'
-                                . self::inline($cell) . '</td>';
+                                . self::inline($cell, $safe) . '</td>';
                         }
                         $out .= "</tr>\n";
                     }
@@ -330,40 +355,56 @@ class Parser
     }
 
     /**
-     * Inline transformations. Inline code is extracted first so its contents
-     * aren't touched by other patterns; placeholders are restored at the end.
+     * Inline transformations. Every tag written here — code, images, links —
+     * is swapped for a token and put back at the end, so no later pattern
+     * reads inside one. In safe mode the text is escaped first: what follows
+     * works on entities, and the only tags are the ones written here.
      */
-    private static function inline(string $text): string
+    private static function inline(string $text, bool $safe = false): string
     {
-        $codes = [];
+        if ($safe) {
+            $text = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        }
+        $tokens = [];
+        $hold = static function (string $html) use (&$tokens): string {
+            $tokens[] = $html;
+            return self::MARK . (count($tokens) - 1) . self::MARK;
+        };
+        // An attribute's value: already escaped in safe mode, escaped here otherwise.
+        $attr = static fn (string $value): string => $safe ? $value : htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        // A title's quotes are entities once the text is escaped.
+        $quote = $safe ? '&quot;' : '"';
+        $title = '(?:\s+' . $quote . '((?:(?!' . $quote . ')[^' . self::MARK . '])*)' . $quote . ')?';
+
         $text = (string) preg_replace_callback(
             '/`([^`]+)`/',
-            static function (array $m) use (&$codes): string {
-                $codes[] = '<code>' . htmlspecialchars($m[1], ENT_NOQUOTES, 'UTF-8') . '</code>';
-                return "\x00" . (count($codes) - 1) . "\x00";
+            static fn (array $m): string => $hold('<code>' . ($safe ? $m[1] : htmlspecialchars($m[1], ENT_NOQUOTES, 'UTF-8')) . '</code>'),
+            $text,
+        );
+
+        // Images: ![alt](src "title"?). Neither the alt text nor the address holds a token.
+        $text = (string) preg_replace_callback(
+            '/!\[([^\]' . self::MARK . ']*)\]\(([^)\s' . self::MARK . ']+)' . $title . '\)/',
+            static function (array $m) use ($hold, $attr, $safe): string {
+                if ($safe && !self::allowed($m[2], self::SAFE_IMAGE_SCHEMES)) {
+                    return $m[1];
+                }
+                $titleAttr = isset($m[3]) ? ' title="' . $attr($m[3]) . '"' : '';
+                return $hold('<img src="' . $attr($m[2]) . '" alt="' . $attr($m[1]) . '"' . $titleAttr . '>');
             },
             $text,
         );
 
-        // Images: ![alt](src "title"?)
+        // Links: [text](url "title"?). The text stays in place, between the two
+        // tokens of its tag, so bold, italic and code still apply to it.
         $text = (string) preg_replace_callback(
-            '/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/',
-            static function (array $m): string {
-                $alt = htmlspecialchars($m[1], ENT_QUOTES, 'UTF-8');
-                $src = htmlspecialchars($m[2], ENT_QUOTES, 'UTF-8');
-                $title = isset($m[3]) ? ' title="' . htmlspecialchars($m[3], ENT_QUOTES, 'UTF-8') . '"' : '';
-                return '<img src="' . $src . '" alt="' . $alt . '"' . $title . '>';
-            },
-            $text,
-        );
-
-        // Links: [text](url "title"?)
-        $text = (string) preg_replace_callback(
-            '/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/',
-            static function (array $m): string {
-                $href = htmlspecialchars($m[2], ENT_QUOTES, 'UTF-8');
-                $title = isset($m[3]) ? ' title="' . htmlspecialchars($m[3], ENT_QUOTES, 'UTF-8') . '"' : '';
-                return '<a href="' . $href . '"' . $title . '>' . $m[1] . '</a>';
+            '/\[([^\]]+)\]\(([^)\s' . self::MARK . ']+)' . $title . '\)/',
+            static function (array $m) use ($hold, $attr, $safe): string {
+                if ($safe && !self::allowed($m[2], self::SAFE_LINK_SCHEMES)) {
+                    return $m[1];
+                }
+                $titleAttr = isset($m[3]) ? ' title="' . $attr($m[3]) . '"' : '';
+                return $hold('<a href="' . $attr($m[2]) . '"' . $titleAttr . '>') . $m[1] . $hold('</a>');
             },
             $text,
         );
@@ -384,12 +425,28 @@ class Parser
         $text = str_replace("  \n", "<br>\n", $text);
         $text = (string) preg_replace("/\\\\\n/", "<br>\n", $text);
 
-        $text = (string) preg_replace_callback(
-            "/\x00(\d+)\x00/",
-            static fn (array $m): string => $codes[(int) $m[1]],
+        return (string) preg_replace_callback(
+            '/' . self::MARK . '(\d+)' . self::MARK . '/',
+            static fn (array $m): string => $tokens[(int) $m[1]] ?? '',
             $text,
         );
+    }
 
-        return $text;
+    /**
+     * Safe mode: whether an address, escaped as it goes in the attribute, is
+     * relative or has one of the schemes. It is read as a browser reads it —
+     * entities decoded, leading control characters and spaces dropped, tabs
+     * and line breaks ignored — so `java&#9;script:` does not pass as relative.
+     *
+     * @param list<string> $schemes
+     */
+    private static function allowed(string $escaped, array $schemes): bool
+    {
+        $url = html_entity_decode($escaped, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = ltrim(str_replace(["\t", "\n", "\r"], '', $url), "\x00..\x20");
+        if (preg_match('/^([a-zA-Z][a-zA-Z0-9+.\-]*):/', $url, $m) !== 1) {
+            return true;
+        }
+        return in_array(strtolower($m[1]), $schemes, true);
     }
 }

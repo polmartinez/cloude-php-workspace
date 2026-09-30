@@ -400,8 +400,17 @@ import. Real apps with many views often prefer Option B to drop the
 $result = Markdown::parse($markdownContent);
 // => ['meta' => [...], 'html' => '...', 'description' => '...', ...]
 
-$html = Markdown::toHtml($md);
+$html = Markdown::toHtml($md);          // content you wrote: inline HTML passes through
+$html = Markdown::toSafeHtml($comment); // text from outside: a comment, a note, a model's answer
 ```
+
+`toHtml()` is for the project's own content — it passes inline HTML through and
+links take any address, so **never feed it text a visitor, a customer or a
+model wrote**. `toSafeHtml()` is for that text: it is escaped before anything
+else (no tag or attribute can come from it), links keep their address only when
+it is relative or `http` / `https` / `mailto` / `tel`, and images only when
+relative or `http` / `https`. It always uses the in-house parser, whatever
+`useParser()` registered.
 
 Supports minimal YAML frontmatter (single-line `key: value` pairs):
 
@@ -450,6 +459,11 @@ Alignment colons in the separator row: `|:---|` left, `|:---:|` center,
 Not supported (by design): footnotes, definition lists, reference-style
 links, setext headings, nested lists. If you need any of these, plug
 Parsedown in via `Markdown::useParser()`.
+
+`Parser::toHtml($md, safe: true)` is the safe mode behind
+`Markdown::toSafeHtml()`. In both modes the tags the inline step writes (code,
+images, links) are held as tokens until the end, so an image inside a link's
+text or a code span inside an address cannot end up writing attributes.
 
 ```php
 $html = \Cloude\Markdown\Parser::toHtml("# Hello\n\nFirst **paragraph**.");

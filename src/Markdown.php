@@ -83,6 +83,9 @@ class Markdown
     /**
      * Markdown → HTML. Uses the parser registered via `useParser()`, falling
      * back to `Cloude\Markdown\Parser` (in-house, no dependencies).
+     *
+     * For content you wrote: inline HTML passes through. Text from outside
+     * goes through {@see toSafeHtml()}.
      */
     public static function toHtml(string $md): string
     {
@@ -90,6 +93,19 @@ class Markdown
             return (self::$parser)($md);
         }
         return Markdown\Parser::toHtml($md);
+    }
+
+    /**
+     * Markdown → HTML for text from outside: a comment, a customer's note, a
+     * model's answer. Nothing in it becomes a tag, an attribute or a script
+     * address (`Markdown\Parser::toHtml($md, safe: true)`).
+     *
+     * Always the in-house parser: one registered with `useParser()` makes no
+     * such promise. `toHtml()` stays for content you wrote yourself.
+     */
+    public static function toSafeHtml(string $md): string
+    {
+        return Markdown\Parser::toHtml($md, safe: true);
     }
 
 }
