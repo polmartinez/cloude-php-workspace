@@ -79,7 +79,7 @@ public surfaces exist. Full details in the
 - **`Query::cache($ttl, $key?, $store?)`** (v2.12.0) — opt-in caching
   on every SELECT terminal of `Cloude\Storage\Query`
   (`get / first / count / value / pluck`). Auto-key from
-  `sha1(sql + bindings)`. See [`examples/recipes/cache.php`](examples/recipes/cache.php).
+  `sha1(connection + sql + bindings)`. See [`examples/recipes/cache.php`](examples/recipes/cache.php).
 - **`Query::groupBy / havingRaw / selectRaw`** (v2.13.0) — GROUP BY,
   HAVING (raw expression with parameterized bindings), and aggregate
   SELECT columns. `count()` auto-wraps in a subquery when GROUP BY

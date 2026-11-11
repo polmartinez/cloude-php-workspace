@@ -402,9 +402,13 @@ final class Query
     /**
      * Cache every subsequent SELECT terminal (`get`, `first`, `count`,
      * `value`, `pluck`) on this query for `$ttl` seconds. The cache key
-     * defaults to a `sha1(sql + bindings)` digest, so any change to the
+     * defaults to a `sha1(connection + sql + bindings)` digest, so any change to the
      * builder state (WHEREs, ORDER BY, columns, ...) automatically gets
      * a fresh entry — no manual invalidation needed for simple TTL use.
+     * The digest also covers the connection (its name in
+     * `Cloude\Storage\Connection`), so two databases running the same
+     * SQL keep separate entries. A PDO that is not in the pool is told
+     * apart only by driver: give such queries an explicit `$key`.
      *
      *   User::query()->where('active', 1)->cache(300)->get();
      *
@@ -608,7 +612,8 @@ final class Query
             return $producer();
         }
         $store    = Cache::store($this->cacheStore);
-        $key      = $this->cacheKey ?? 'cloude.q.' . sha1($sql . '|' . serialize($params));
+        $key      = $this->cacheKey
+            ?? 'cloude.q.' . sha1($this->connectionId() . '|' . $sql . '|' . serialize($params));
         $sentinel = self::class . '@miss';
         $hit = $store->get($key, $sentinel);
         if ($hit !== $sentinel) {
@@ -617,6 +622,20 @@ final class Query
         $value = $producer();
         $store->set($key, $value, $this->cacheTtl);
         return $value;
+    }
+
+    /**
+     * Identifies the connection inside an automatic cache key, so the
+     * same SQL against two databases never shares an entry. A pooled
+     * connection is known by its name in `Cloude\Storage\Connection`
+     * (stable across requests); a PDO built by hand only by its driver.
+     */
+    private function connectionId(): string
+    {
+        $name = Connection::nameOf($this->pdo);
+        return $name !== null
+            ? 'conn:' . $name
+            : 'driver:' . (string) $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
     }
 
     private function addWhere(string $conn, string $column, mixed $opOrValue, mixed $value, int $argCount): static

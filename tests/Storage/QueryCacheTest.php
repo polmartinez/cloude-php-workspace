@@ -151,4 +151,28 @@ final class QueryCacheTest extends TestCase
         self::assertCount(0, $this->q()->cache(60)->get());
         self::assertCount(3, $this->q()->cache(60, store: 'other')->get());
     }
+
+    public function testSameSqlOnTwoConnectionsDoesNotShareAnEntry(): void
+    {
+        $other = new \PDO('sqlite::memory:');
+        $other->exec('CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT)');
+        $other->exec("INSERT INTO items (id, label) VALUES (1, 'other-db')");
+
+        \Cloude\Storage\Connection::set('qc_main', $this->pdo);
+        \Cloude\Storage\Connection::set('qc_other', $other);
+        try {
+            $a = (new Query($this->pdo, 'items'))->cache(60)->pluck('label');
+            $b = (new Query($other, 'items'))->cache(60)->pluck('label');
+
+            self::assertSame(['a', 'b', 'c'], $a);
+            self::assertSame(['other-db'], $b, 'second connection must not read the first one\'s entry');
+
+            // Still cached per connection.
+            $other->exec('DELETE FROM items');
+            self::assertSame(['other-db'], (new Query($other, 'items'))->cache(60)->pluck('label'));
+        } finally {
+            \Cloude\Storage\Connection::reset('qc_main');
+            \Cloude\Storage\Connection::reset('qc_other');
+        }
+    }
 }

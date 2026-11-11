@@ -139,6 +139,16 @@ final class Connection
     }
 
     /**
+     * The name a PDO instance is pooled under, or null when it was not
+     * obtained through (or injected into) this pool.
+     */
+    public static function nameOf(\PDO $pdo): ?string
+    {
+        $name = array_search($pdo, self::$pool, true);
+        return $name === false ? null : (string) $name;
+    }
+
+    /**
      * @param array<string,mixed> $config
      */
     private static function makePdo(array $config, string $name): \PDO

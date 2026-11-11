@@ -69,7 +69,7 @@ $articles = Cache::remember('top-articles', ttl: 300, producer: function () {
 // Add `->cache($ttl)` anywhere in the builder chain and EVERY SELECT
 // terminal (get / first / count / value / pluck) is cached.
 //
-// The cache key defaults to sha1(sql + bindings), so changing the WHERE,
+// The cache key defaults to sha1(connection + sql + bindings), so changing the WHERE,
 // columns or ORDER BY auto-invalidates by producing a different key.
 
 $activeUsers = User::query()
