@@ -44,6 +44,9 @@ final class Runner
     private int $failed = 0;
     private int $skipped = 0;
 
+    /** Set by `--fail-on-deprecation`: a deprecation notice makes the run exit 1. */
+    private bool $failOnDeprecation = false;
+
     /** @var array<string, true> Deprecation notices raised during the run, de-duplicated. */
     private array $deprecations = [];
     private int $errors = 0;
@@ -57,7 +60,7 @@ final class Runner
      * Parse argv and run. Returns the exit code (0 success, 1 any
      * failure or error).
      *
-     *   vendor/bin/cloude-test [--filter=Pattern] [--] path1 path2 ...
+     *   vendor/bin/cloude-test [--filter=Pattern] [--fail-on-deprecation] [--] path1 path2 ...
      *
      * @param list<string> $argv
      */
@@ -73,6 +76,8 @@ final class Runner
             } elseif ($arg === '--filter') {
                 $i++;
                 $runner->filter = $argv[$i] ?? null;
+            } elseif ($arg === '--fail-on-deprecation') {
+                $runner->failOnDeprecation = true;
             } elseif ($arg === '--help' || $arg === '-h') {
                 fwrite(STDOUT, self::usage());
                 return 0;
@@ -96,10 +101,11 @@ final class Runner
         cloude-test — Cloude framework test runner
 
         Usage:
-          cloude-test [--filter=Pattern] [path ...]
+          cloude-test [--filter=Pattern] [--fail-on-deprecation] [path ...]
 
         Options:
-          --filter=PATTERN    Run only tests whose 'ClassName::method' matches the regex
+          --filter=PATTERN         Run only tests whose 'ClassName::method' matches the regex
+          --fail-on-deprecation    Exit 1 when PHP raised a deprecation notice during the run
           -h, --help          Show this help
 
         Examples:
@@ -155,6 +161,9 @@ final class Runner
 
         $this->writeSummary(microtime(true) - $start);
 
+        if ($this->failOnDeprecation && $this->deprecations !== []) {
+            return 1;
+        }
         return ($this->failed + $this->errors) === 0 ? 0 : 1;
     }
 
@@ -490,6 +499,9 @@ final class Runner
             }
         }
 
+        if ($this->failOnDeprecation && $this->deprecations !== []) {
+            $ok = false;
+        }
         $verdict = $ok ? "\nOK\n" : "\nFAILED\n";
         if ($tty) {
             $verdict = $ok ? "\n\033[32mOK\033[0m\n" : "\n\033[31mFAILED\033[0m\n";

@@ -414,6 +414,10 @@ summary. That block never fails the run but should be empty. Full
 guide, helper and assertion lists:
 [`docs/agents/testing.md`](docs/agents/testing.md).
 
+CI (`.github/workflows/tests.yml`) runs the suite on PHP 8.3, 8.4 and
+8.5 with `--fail-on-deprecation` and real PostgreSQL / MySQL services,
+plus `composer cs-check`.
+
 Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 `App\Tests\` in consumer projects — just map it in `composer.json`).
 Each test class extends `Cloude\Testing\TestCase`; method names start

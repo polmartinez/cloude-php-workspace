@@ -2,6 +2,8 @@
 
 A minimalist PHP micro-framework. No magic, no service container. Persistence is opt-in: file-based (JSON / Markdown) by default, with a thin Active Record over PDO via `Cloude\Model` when you need a relational database.
 
+[![tests](https://github.com/polmartinez/cloude-php-workspace/actions/workflows/tests.yml/badge.svg)](https://github.com/polmartinez/cloude-php-workspace/actions/workflows/tests.yml)
+
 - **PHP 8.3+** — minimum 8.3; the suite runs clean, with no deprecation notices, on 8.3, 8.4 and 8.5
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style
@@ -2148,6 +2150,10 @@ final class StrTest extends TestCase
 not printed mid-run: the runner collects them and lists each one once
 (`Deprecations (n):`, with file and line) after the summary. They don't
 fail the run — check that list when moving to a newer PHP.
+
+`--fail-on-deprecation` turns that list into a failure (exit 1). The
+`tests` workflow uses it on PHP 8.3, 8.4 and 8.5, with PostgreSQL and
+MySQL service containers so the integration tests run too.
 
 **Skipping.** A test that needs something the machine may not have (a
 database server, a PHP extension) calls `$this->markTestSkipped('why')`

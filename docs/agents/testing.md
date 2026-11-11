@@ -38,6 +38,7 @@ vendor/bin/cloude-test                         # everything under tests/  (same 
 vendor/bin/cloude-test tests/Storage           # one directory or file
 vendor/bin/cloude-test --filter=Upsert         # regex against 'ClassName::method'
 vendor/bin/cloude-test --filter=Cast tests/Model
+vendor/bin/cloude-test --fail-on-deprecation   # exit 1 when PHP raised a deprecation (what CI runs)
 ```
 
 Another PHP version: call that binary on the same script.
@@ -48,7 +49,9 @@ docker run --rm -v "$PWD":/app -w /app php:8.3-cli php vendor/bin/cloude-test
 ```
 
 Exit code: `0` when nothing failed or errored (skips and deprecations
-don't count), `1` otherwise or when no test was found.
+don't count), `1` otherwise or when no test was found. With
+`--fail-on-deprecation` a deprecation notice also gives `1` and the
+verdict line reads `FAILED`.
 
 ## Reading the output
 
@@ -192,6 +195,25 @@ The framework's own integration tests follow that pattern:
 They create and drop only tables prefixed `cloude_it_`. What each
 database does differently is in [`databases.md`](databases.md).
 
+## Continuous integration
+
+`.github/workflows/tests.yml` runs on every push to `main` and on every
+pull request:
+
+| Job | What it does |
+|---|---|
+| `PHP 8.3`, `PHP 8.4`, `PHP 8.5` | `composer install`, `php -l` on every file, then `php bin/cloude-test --fail-on-deprecation` with `error_reporting=-1`. PostgreSQL 16 and MySQL 8.4 run as service containers and the `CLOUDE_TEST_PGSQL_*` / `CLOUDE_TEST_MYSQL_*` variables are set, so the integration tests run — nothing is skipped |
+| `Code style` | `composer cs-check` on PHP 8.3 |
+
+What that means for a change: a deprecation notice on any of the three
+versions, a failing integration test on either database, or a style
+diff turns the run red even when `composer test` is green locally
+(where the databases are usually absent and deprecations don't fail).
+`composer.lock` is not committed, so CI resolves the newest allowed
+dev dependencies — a style rule can differ from an older local
+php-cs-fixer; run `composer update` and `composer cs-fix` if only the
+style job fails.
+
 ## Before calling a change done
 
 1. `vendor/bin/cloude-test` — `OK`, and no `Deprecations` block.
@@ -199,3 +221,5 @@ database does differently is in [`databases.md`](databases.md).
 3. If the change touches SQL: run with the PostgreSQL / MySQL DSNs set
    when a server is available; say so when it was not.
 4. If the change uses anything version-sensitive: run on 8.3 and 8.5.
+5. After pushing: the `tests` workflow must be green on all three PHP
+   versions.

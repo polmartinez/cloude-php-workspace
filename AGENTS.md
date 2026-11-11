@@ -163,3 +163,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   notices after the summary instead of printing them mid-run. Version
   rules for new code and how to read the runner's output:
   [testing](docs/agents/testing.md).
+- **CI** (v2.24.0) — `.github/workflows/tests.yml`: PHP 8.3 / 8.4 / 8.5
+  matrix with PostgreSQL 16 and MySQL 8.4 services, plus a code-style
+  job. The runner gained `--fail-on-deprecation`. See
+  [testing](docs/agents/testing.md#continuous-integration).
