@@ -96,3 +96,9 @@ public surfaces exist. Full details in the
   (v2.14.2) — multibyte-safe wrappers over `mb_substr` / `mb_strlen`.
   `Str::truncate()` was also fixed in v2.12.1 to **never exceed the
   max length** (ellipsis budget comes OUT of `$length`, not on top).
+- **`Model::save()` writes only changed columns** (v2.20.0) — plus
+  `$model->isDirty(?string $attribute)` and `$model->dirty()`. A save
+  with nothing changed makes no storage call. Values are compared in
+  storage form, after the write-side casts.
+- **Router** (v2.18.0 / v2.19.0) — a `HEAD` request falls back to the
+  matching `GET` route; route parameters arrive percent-decoded.

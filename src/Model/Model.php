@@ -144,6 +144,19 @@ abstract class Model
 
     protected bool $isPersisted = false;
 
+    /**
+     * What storage holds for this row, as far as the model knows: the
+     * row as it was read, or the payload of the last save. `save()`
+     * compares against it and writes only what differs. Null for a
+     * model that was never read or saved.
+     *
+     * @var array<string,mixed>|null
+     */
+    private ?array $original = null;
+
+    /** True while `$original` is a raw storage row, not yet in write form. */
+    private bool $originalIsRaw = false;
+
     /** Subclass: SQL table name (or any identifier the configured Storage uses). */
     protected static string $table = '';
 
@@ -684,18 +697,24 @@ abstract class Model
     /**
      * INSERT (when not yet persisted) or UPDATE (when loaded from storage).
      * Returns `$this` for chaining.
+     *
+     * An UPDATE writes only the columns whose value differs from what
+     * was read (or last saved); when nothing differs, storage is not
+     * called at all. `beforeSave()` runs first, so a hook that stamps
+     * `updated_at` still gets its column written. `afterSave()` runs
+     * either way.
      */
     public function save(): static
     {
         $this->beforeSave();
 
-        $payload = static::$types === []
-            ? $this->attributes
-            : self::applyTypes($this->attributes, /* write: */ true);
+        $payload = $this->payload();
 
         if ($this->isPersisted && $this->id() !== null) {
-            unset($payload[static::$primaryKey]);                // never re-write PK
-            static::storage()->update($this->id(), $payload);
+            $changed = $this->diff($payload);
+            if ($changed !== []) {
+                static::storage()->update($this->id(), $changed);
+            }
         } else {
             $newId = static::storage()->insert($payload);
             if ($newId !== null && $newId !== false && $this->id() === null) {
@@ -704,8 +723,40 @@ abstract class Model
             $this->isPersisted = true;
         }
 
+        $this->original      = $payload;
+        $this->originalIsRaw = false;
+
         $this->afterSave();
         return $this;
+    }
+
+    /**
+     * True when `save()` would write something: always for a model not
+     * yet persisted, otherwise when at least one attribute (or the one
+     * named) differs from what storage holds.
+     */
+    public function isDirty(?string $attribute = null): bool
+    {
+        if (!$this->isPersisted) {
+            return $attribute === null || array_key_exists($attribute, $this->attributes);
+        }
+        $changed = $this->diff($this->payload());
+        return $attribute === null ? $changed !== [] : array_key_exists($attribute, $changed);
+    }
+
+    /**
+     * The columns `save()` would write, in storage form (after the
+     * write-side casts). The primary key is never part of it.
+     *
+     * @return array<string,mixed>
+     */
+    public function dirty(): array
+    {
+        $payload = $this->payload();
+        if (!$this->isPersisted) {
+            return $payload;
+        }
+        return $this->diff($payload);
     }
 
     public function delete(): bool
@@ -716,6 +767,7 @@ abstract class Model
         $ok = static::storage()->delete($this->id());
         if ($ok) {
             $this->isPersisted = false;
+            $this->original    = null;
         }
         return $ok;
     }
@@ -734,6 +786,8 @@ abstract class Model
             $this->attributes = static::$types === []
                 ? $row
                 : self::applyTypes($row, /* write: */ false);
+            $this->original      = $row;
+            $this->originalIsRaw = true;
         }
         return $this;
     }
@@ -761,8 +815,60 @@ abstract class Model
     {
         $instance = new static();
         $instance->attributes  = static::$types === [] ? $row : self::applyTypes($row, /* write: */ false);
-        $instance->isPersisted = true;
+        $instance->isPersisted   = true;
+        $instance->original      = $row;
+        $instance->originalIsRaw = true;
         return $instance;
+    }
+
+    /**
+     * The attributes in storage form (write-side casts applied).
+     *
+     * @return array<string,mixed>
+     */
+    private function payload(): array
+    {
+        return static::$types === []
+            ? $this->attributes
+            : self::applyTypes($this->attributes, /* write: */ true);
+    }
+
+    /**
+     * Entries of `$payload` that differ from what storage holds. The
+     * primary key is left out — it is never re-written.
+     *
+     * A raw row is first taken through the read and write casts, so
+     * both sides are in the same form (a driver hands back `'1'` where
+     * the `int` cast writes `1`). That happens here, on the first save
+     * or dirty check, not on every row a query returns. When the model
+     * has no record of the row, everything counts as changed.
+     *
+     * @param  array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private function diff(array $payload): array
+    {
+        unset($payload[static::$primaryKey]);
+        if ($this->original === null) {
+            return $payload;
+        }
+        if ($this->originalIsRaw) {
+            if (static::$types !== []) {
+                $this->original = self::applyTypes(
+                    self::applyTypes($this->original, /* write: */ false),
+                    /* write: */
+                    true,
+                );
+            }
+            $this->originalIsRaw = false;
+        }
+        $changed = [];
+        foreach ($payload as $col => $value) {
+            if (!array_key_exists($col, $this->original) || $this->original[$col] !== $value) {
+                $changed[$col] = $value;
+            }
+        }
+        return $changed;
     }
 
     /**

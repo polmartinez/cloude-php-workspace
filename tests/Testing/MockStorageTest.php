@@ -126,10 +126,11 @@ final class MockStorageTest extends TestCase
         $u->active = 0;
         $u->save();
         $this->assertModelReceived($store, 'update', times: 1);
-        // Update payload no longer carries the PK (Model strips it).
+        // The update carries only what changed — never the PK, and not
+        // the email that still holds the value it was inserted with.
         $args = $store->lastCall('update');
         self::assertSame(7, $args[0]);
-        self::assertSame(['email' => 'ada@x', 'active' => 0], $args[1]);
+        self::assertSame(['active' => 0], $args[1]);
     }
 
     public function testRecordsModelDeleteCallsThroughStorage(): void
