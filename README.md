@@ -955,7 +955,17 @@ the extra predicate as a `where()` instead.
 $id    = $q->insert(['name' => 'Ada', 'email' => 'a@x']);   // last-insert id
 $count = $q->where('age', '<', 18)->update(['active' => 0]); // affected rows
 $count = $q->where('active', 0)->delete();
+
+// Insert, or update the row that collides on a unique key — one atomic statement.
+$q->upsert(['email' => 'a@x', 'name' => 'Ada'], ['email']);            // conflict columns: a UNIQUE index or the PK
+$q->upsert(['email' => 'a@x', 'name' => 'Ada'], ['email'], ['name']);  // columns to overwrite on collision
+$q->upsert(['email' => 'a@x', 'name' => 'Ada'], ['email'], []);        // insert if missing, else leave it
 ```
+
+`upsert()` returns nothing and ignores the `where()` chain. It is
+`ON CONFLICT … DO UPDATE` on PostgreSQL / SQLite and
+`ON DUPLICATE KEY UPDATE` on MySQL, where any unique key of the table
+triggers the update.
 
 Mutations honour the current `where()` chain. `UPDATE` / `DELETE` accept
 `orderBy()` / `limit()` too, but those are MySQL/SQLite extensions —

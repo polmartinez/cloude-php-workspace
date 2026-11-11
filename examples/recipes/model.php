@@ -109,6 +109,47 @@ $same->save();
 // DELETE
 $same->delete();
 
+// ── Dirty tracking ───────────────────────────────────────────────────────────
+//
+// save() on a loaded model sends only the columns that changed, and
+// nothing at all when nothing did.
+
+$u = User::find(1);
+$u->name = 'Ada Lovelace';
+$u->isDirty();                   // true
+$u->dirty();                     // ['name' => 'Ada Lovelace']
+$u->save();                      // UPDATE users SET name = ? WHERE id = ?
+$u->save();                      // no query
+
+// ── Insert-or-update by key ──────────────────────────────────────────────────
+//
+// upsert(): one atomic statement (INSERT ... ON CONFLICT DO UPDATE on
+// PostgreSQL / SQLite, ON DUPLICATE KEY UPDATE on MySQL). The first
+// array must be the columns of a UNIQUE index or the primary key — here
+// `email`. Returns the row.
+
+$u = User::upsert(
+    ['email' => 'ada@example.com'],              // the unique key
+    ['name' => 'Ada', 'active' => 1],            // written on insert and on collision
+);
+
+// Overwrite only some columns when the row already exists (and include a
+// column that beforeSave() fills):
+User::upsert(['email' => 'ada@example.com'], ['name' => 'Ada'], update: ['name', 'updated_at']);
+
+// Insert if missing, otherwise leave the row alone:
+User::upsert(['email' => 'ada@example.com'], ['name' => 'Ada'], update: []);
+
+// updateOrCreate(): same call shape, a SELECT followed by an INSERT or
+// UPDATE. For matches no unique index covers, and for JSON / array
+// storages. Not atomic.
+User::updateOrCreate(['name' => 'Ada', 'active' => 1], ['email' => 'ada@example.com']);
+
+// Builder form, no model, nothing read back — for bulk loads:
+foreach ($rows as $row) {
+    User::query()->upsert($row, ['email']);
+}
+
 // ── Queries (equality + ordering + paging) ───────────────────────────────────
 
 $activeUsers = User::findBy(

@@ -14,7 +14,7 @@ file is self-contained, runnable, and copy-pasteable.
 | [`mcp.php`](../../examples/recipes/mcp.php) | MCP server with two tools and a static resource catalogue |
 | [`tasks.php`](../../examples/recipes/tasks.php) | TaskRunner with one inline task and a task class |
 | [`data.php`](../../examples/recipes/data.php) | Custom `JsonRepository` / `MarkdownRepository` subclasses |
-| [`model.php`](../../examples/recipes/model.php) | `Cloude\Model` Active Record: connection, CRUD, joins, casts |
+| [`model.php`](../../examples/recipes/model.php) | `Cloude\Model` Active Record: connection, CRUD, dirty tracking, `upsert()` / `updateOrCreate()`, joins, casts |
 | [`mail.php`](../../examples/recipes/mail.php) | `Mailer::forge()` with SMTP / sendmail / memory transports |
 | [`markdown.php`](../../examples/recipes/markdown.php) | Markdown rendering, parser swap, GFM tables |
 | [`config.php`](../../examples/recipes/config.php) | Multi-env `Cloude\Config` setup (storage, dev/prod overrides) |

@@ -34,6 +34,22 @@
   `Mcp\Server::respondManifest` for MCP,
   `Format::xml` + `Response::xml` for sitemaps.
 
+## Writing rows
+
+- **Let the model pick the statement.** `save()` already sends only
+  changed columns and nothing when unchanged — don't compare old and
+  new values yourself before calling it.
+- **"Insert or update by key" is one call.** `Model::upsert($match,
+  $values)` when a UNIQUE index (or the PK) covers `$match`;
+  `Model::updateOrCreate($match, $values)` otherwise. Don't hand-write
+  `query()->where(…)->first()` followed by `find()` + `save()` or
+  `create()`.
+- **Declare the unique key on the model** (`$indexes`) when you use
+  `upsert()` on it, so the requirement is visible next to the call.
+- **Timestamps on upsert**: a column filled in `beforeSave()` is only
+  overwritten on a collision when named — `update: ['value',
+  'updated_at']`.
+
 ## Database portability
 
 - Choose the database in `config/storage.php` (the DSN). Never pass a

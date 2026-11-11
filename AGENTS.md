@@ -82,6 +82,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 | v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
 | v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
 | v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.23.0 | `Model::upsert()` / `Query::upsert()` exist; `updateOrCreate()` is no longer the only "insert or update" | Use `upsert()` when a UNIQUE index or the PK covers the match columns (atomic, one statement); keep `updateOrCreate()` for the rest |
 | v2.22.0 | `new Query($pdo, $table)` / `new PdoStorage($pdo, $table)` pick the identifier quote from the PDO driver | Don't pass a quote character; don't write backticks or `"` in SQL fragments you hand to `selectRaw` / `havingRaw` if the code must run on both MySQL and PostgreSQL |
 | v2.21.0 | Automatic `Query::cache()` keys cover the connection too | Nothing — unless the `Query` was built on a PDO outside `Connection`'s pool: then pass `key:` |
 

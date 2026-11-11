@@ -80,6 +80,20 @@ User::upsert(                               // same call shape, one atomic state
 );
 ```
 
+Which write to use:
+
+| Situation | Call | Statements |
+|---|---|---|
+| New row | `User::create($data)` | 1 INSERT |
+| You hold a loaded model | `$u->x = …; $u->save()` | 1 UPDATE of the changed columns, or none |
+| "Set these values for the row with this key", the key has a UNIQUE index or is the PK | `User::upsert($match, $values)` | 1 atomic INSERT … ON CONFLICT / ON DUPLICATE KEY, + 1 SELECT to return the row |
+| Same, but no unique index covers `$match`, or the storage is JSON / array | `User::updateOrCreate($match, $values)` | 1 SELECT + 1 INSERT or UPDATE — not atomic |
+| Many rows, no model needed | `User::query()->upsert($row, $conflictCols)` in a loop inside `Transaction::run()` | 1 per row, nothing read back |
+
+Never write the find → `if` → `save()` / `create()` sequence by hand:
+it is `updateOrCreate()`, and when the unique index exists it should be
+`upsert()`.
+
 Rules an agent can rely on:
 
 - **Update = changed columns only.** A loaded model remembers the row
@@ -106,6 +120,18 @@ Rules an agent can rely on:
   `['type' => 'unique', 'columns' => ['plan_id', 'week_no']]`. On a
   collision only the `$values` columns change; `beforeSave()` columns
   need `update: ['value', 'updated_at']`.
+- **`upsert` argument reference.** `$match`: column => value, the
+  unique key. `$values`: column => value, written on insert and on
+  collision. `update:` (list of column names, default
+  `array_keys($values)`): what a collision overwrites — every name must
+  be a column of the row being sent (`$match`, `$values`, or one set by
+  `beforeSave()`); `update: []` keeps an existing row as it is. Return:
+  the model, persisted and not dirty. Throws
+  `InvalidArgumentException` for an empty `$match`.
+- **Testing `upsert`**: `useSqliteModel()` runs the real statement
+  (SQLite has `ON CONFLICT`) — put the `UNIQUE (…)` in the `CREATE
+  TABLE` you pass. With `useMockModel()` it degrades to
+  `findBy` + `insert` / `update`, which is what the mock records.
 - **Testing**: `MockStorage::lastCall('update')` returns
   `[$id, $changedColumns]` — only what changed.
 
