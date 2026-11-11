@@ -156,3 +156,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   UNIQUE index or the primary key. Prefer it to `updateOrCreate()`
   when that index exists. Rules in
   [databases](docs/agents/databases.md#native-upsert).
+- **PHP 8.3 → 8.5** (v2.23.2) — minimum stays 8.3; framework and tests
+  raise no deprecation on 8.5. The test runner lists deprecation
+  notices after the summary instead of printing them mid-run. Version
+  rules for new code: [conventions](docs/agents/conventions.md#php-version).

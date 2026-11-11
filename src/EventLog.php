@@ -116,7 +116,6 @@ class EventLog
         } while ($running > 0);
         foreach ($handles as $ch) {
             curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
         }
         curl_multi_close($mh);
         self::$pending = [];

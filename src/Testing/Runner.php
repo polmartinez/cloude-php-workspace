@@ -43,6 +43,9 @@ final class Runner
     private int $passed = 0;
     private int $failed = 0;
     private int $skipped = 0;
+
+    /** @var array<string, true> Deprecation notices raised during the run, de-duplicated. */
+    private array $deprecations = [];
     private int $errors = 0;
 
     /** @var list<array{label:string, message:string, trace:string}> */
@@ -122,6 +125,19 @@ final class Runner
         $this->writeBanner(count($tests));
 
         Assert::resetCount();
+
+        // Deprecation notices are collected and listed after the run
+        // instead of being printed mid-test: printed output would end
+        // the "no headers sent yet" state that session and response
+        // tests depend on, and a notice lost among the dots is one
+        // nobody reads. They do not fail the run.
+        set_error_handler(function (int $errno, string $message, string $file = '', int $line = 0): bool {
+            if ((error_reporting() & $errno) === 0) {
+                return false;
+            }
+            $this->deprecations[$message . ' at ' . $file . ':' . $line] = true;
+            return true;
+        }, E_DEPRECATED | E_USER_DEPRECATED);
 
         $perLine = 60;
         $printed = 0;
@@ -464,6 +480,13 @@ final class Runner
                 if ($e['trace'] !== '') {
                     $out .= '     ' . str_replace("\n", "\n     ", $e['trace']) . "\n";
                 }
+            }
+        }
+
+        if ($this->deprecations !== []) {
+            $out .= "\nDeprecations (" . count($this->deprecations) . "):\n";
+            foreach (array_keys($this->deprecations) as $d) {
+                $out .= '  - ' . $d . "\n";
             }
         }
 

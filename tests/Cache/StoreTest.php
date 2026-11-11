@@ -131,7 +131,6 @@ final class StoreTest extends TestCase
 
         $rc = new \ReflectionClass($store);
         $prop = $rc->getProperty('entries');
-        $prop->setAccessible(true);
         $entries = $prop->getValue($store);
         $entries['k']['expires'] = time() - 10;   // already expired
         $prop->setValue($store, $entries);

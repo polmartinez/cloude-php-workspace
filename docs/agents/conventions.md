@@ -59,6 +59,20 @@
 - Keep `selectRaw` / `havingRaw` fragments to standard SQL. Details and
   the list of what differs: [`databases.md`](databases.md).
 
+## PHP version
+
+- Minimum **8.3**, and the same code must run on **8.5** without
+  deprecation notices. Don't use syntax or functions newer than 8.3
+  (no property hooks, no `new` without parentheses chaining, no
+  `array_find`, no pipe operator, no `#[\NoDiscard]`).
+- Don't call what 8.5 deprecates: `ReflectionProperty::setAccessible()`
+  / `ReflectionMethod::setAccessible()` (no effect since 8.1 — just
+  drop the call), `curl_close()`, `imagedestroy()`, `finfo_close()`,
+  `xml_parser_free()`, the `(boolean)` / `(integer)` / `(double)` cast
+  spellings, backtick shell execution, driver constants on `PDO`
+  (`PDO::MYSQL_ATTR_*` → `Pdo\Mysql::ATTR_*` exists only from 8.4, so
+  avoid both and pass such options through the DSN or config).
+
 ## Anti-patterns
 
 Don't:

@@ -159,6 +159,7 @@
 | Run the tests | `vendor/bin/cloude-test` (or `composer test`). Filter: `--filter=Pattern`. Path scope: `cloude-test tests/Storage` |
 | Parameterise a test | `#[\Cloude\Testing\DataProvider('cases')]` on the method + `public static function cases(): array { return ['label' => [arg1, arg2], ...]; }` |
 | Expect an exception | `$this->expectException(SomeException::class)` (optional `expectExceptionMessage('substr')`). The runner verifies it was thrown |
+| See what a newer PHP deprecates | Run the suite on it: `php8.5 vendor/bin/cloude-test` | The runner lists every deprecation notice once after the summary (`Deprecations (n):` + file:line) without failing. The framework itself raises none on 8.3 – 8.5 |
 | Skip a test that needs something missing | `$this->markTestSkipped('needs ext-redis')` (in the test or in `setUp()`) | Shown as `S`, counted under `Skipped:`, exit code stays 0 |
 | Run the PostgreSQL integration tests | `CLOUDE_TEST_PGSQL_DSN='pgsql:host=127.0.0.1;dbname=cloude_test' CLOUDE_TEST_PGSQL_USER=… CLOUDE_TEST_PGSQL_PASS=… composer test` | Without the DSN `tests/Storage/PgsqlIntegrationTest.php` is skipped. It only touches tables prefixed `cloude_it_` |
 | Cloude-specific helpers on TestCase | `useArrayModel()`, `useSqliteModel()`, `useMockModel()`, `captureHttp()`, `assertJsonResponse()`, `assertHttpException()`, `freezeTime()`, `assertModelHas()`, `assertModelReceived()` |

@@ -134,7 +134,6 @@ final class SessionConfigTest extends TestCase
             // builder via reflection so the test still adds value.
             $rc = new \ReflectionClass(Session::class);
             $m  = $rc->getMethod('redisSavePath');
-            $m->setAccessible(true);
             $uri = $m->invoke(null, [
                 'host'     => 'redis.example.com',
                 'port'     => 6380,
@@ -167,7 +166,6 @@ final class SessionConfigTest extends TestCase
         // produced the right ini value + save_path.
         $rc = new \ReflectionClass(Session::class);
         $m  = $rc->getMethod('applyHandler');
-        $m->setAccessible(true);
         $opts = [];
         $m->invokeArgs(null, ['redis', Config::get('session'), &$opts]);
 
@@ -184,7 +182,6 @@ final class SessionConfigTest extends TestCase
         // URI builder is unit-testable without the extension.
         $rc = new \ReflectionClass(Session::class);
         $m  = $rc->getMethod('memcachedSavePath');
-        $m->setAccessible(true);
 
         // Single-tuple shape (the common case).
         $path = $m->invoke(null, ['servers' => ['10.0.0.1', 11211]]);
@@ -205,7 +202,6 @@ final class SessionConfigTest extends TestCase
 
         $rc = new \ReflectionClass(Session::class);
         $m  = $rc->getMethod('applyHandler');
-        $m->setAccessible(true);
         $opts = [];
         $m->invokeArgs(null, ['rabbitmq', [], &$opts]);
     }
@@ -221,7 +217,6 @@ final class SessionConfigTest extends TestCase
 
         $rc = new \ReflectionClass(Session::class);
         $m  = $rc->getMethod('applyHandler');
-        $m->setAccessible(true);
         $opts = [];
         $m->invokeArgs(null, ['redis', ['redis' => []], &$opts]);
     }
