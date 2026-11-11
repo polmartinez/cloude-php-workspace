@@ -153,6 +153,8 @@
 
 ## Testing
 
+Full guide: [`testing.md`](testing.md).
+
 | You want to… | Use | Notes |
 |---|---|---|
 | Write a test | `class FooTest extends \Cloude\Testing\TestCase`. Methods named `test*` are discovered. Lifecycle: `setUp()` / `tearDown()`. Assertions: `assertSame/True/False/Null/Count/InstanceOf/StringContainsString/Json/...` (PHPUnit-compatible names) |

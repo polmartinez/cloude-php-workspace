@@ -402,9 +402,17 @@ CLOUDE_TEST_PGSQL_DSN='pgsql:host=127.0.0.1;dbname=cloude_test' \
   CLOUDE_TEST_PGSQL_USER=postgres CLOUDE_TEST_PGSQL_PASS=secret \
   composer test                            # also run the PostgreSQL integration tests (skipped without the DSN)
                                            # same for MySQL: CLOUDE_TEST_MYSQL_DSN / _USER / _PASS
+/usr/local/opt/php@8.5/bin/php -d error_reporting=-1 vendor/bin/cloude-test
+                                           # any other PHP binary: minimum is 8.3, must stay notice-free on 8.5
 composer cs-check                          # php-cs-fixer dry-run
 composer cs-fix                            # apply fixes
 ```
+
+The runner prints `.` pass, `F` failure, `E` error, `S` skipped, and —
+only when PHP raised any — a `Deprecations (n):` block after the
+summary. That block never fails the run but should be empty. Full
+guide, helper and assertion lists:
+[`docs/agents/testing.md`](docs/agents/testing.md).
 
 Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 `App\Tests\` in consumer projects — just map it in `composer.json`).

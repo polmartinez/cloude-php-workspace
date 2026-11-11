@@ -49,6 +49,7 @@ one of these axioms.
 | [Decision matrix](docs/agents/decision-matrix.md) | "I want to do X → use Y" — the full lookup table grouped by topic (HTTP, Config, Model/Storage, Sessions, Mail, Testing, …) | Whenever you're picking which helper to use. Random-access |
 | [The Model IS the schema](docs/agents/model-schema.md) | `$table` / `$primaryKey` / `$properties` / `$types` / `$indexes` / `$foreignKeys` — what each declaration does, what's runtime vs. metadata-only | Defining or modifying a `Cloude\Model` subclass |
 | [Databases](docs/agents/databases.md) | MySQL / SQLite / PostgreSQL: what the framework adapts per driver, what you must keep portable, pgsql DDL, testing against a real server | Writing queries, raw SQL fragments, DDL or DB tests; switching database |
+| [Testing and PHP versions](docs/agents/testing.md) | Supported PHP (8.3 minimum, clean on 8.5) and what new code must avoid; running the suite, reading `F` / `E` / `S` / `Deprecations`; `TestCase` helpers and the full assertion list; shared-process pitfalls; tests that need a server | Writing or running any test; before declaring a change done; using a PHP feature you are not sure 8.3 has |
 | [Idioms, anti-patterns, scope](docs/agents/conventions.md) | "How Cloude code is shaped" — patterns to reach for, patterns to avoid, what the framework deliberately won't grow | Before reinventing something; when stuck |
 | [Recipes](docs/agents/recipes.md) | Index of copy-paste examples under `examples/recipes/` plus the full mini-app demos under `examples/` | Before writing equivalent code from scratch |
 
@@ -82,6 +83,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 | v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
 | v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
 | v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.23.2 | Tests must not call `Reflection*::setAccessible()` or `curl_close()` (deprecated in PHP 8.5); the runner reports deprecations in a block after the summary | Read private members with `ReflectionProperty::getValue()` / `ReflectionMethod::invoke()` directly. Treat a `Deprecations (n):` block as something to fix |
 | v2.23.0 | `Model::upsert()` / `Query::upsert()` exist; `updateOrCreate()` is no longer the only "insert or update" | Use `upsert()` when a UNIQUE index or the PK covers the match columns (atomic, one statement); keep `updateOrCreate()` for the rest |
 | v2.22.0 | `new Query($pdo, $table)` / `new PdoStorage($pdo, $table)` pick the identifier quote from the PDO driver | Don't pass a quote character; don't write backticks or `"` in SQL fragments you hand to `selectRaw` / `havingRaw` if the code must run on both MySQL and PostgreSQL |
 | v2.21.0 | Automatic `Query::cache()` keys cover the connection too | Nothing — unless the `Query` was built on a PDO outside `Connection`'s pool: then pass `key:` |
@@ -159,4 +161,5 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 - **PHP 8.3 → 8.5** (v2.23.2) — minimum stays 8.3; framework and tests
   raise no deprecation on 8.5. The test runner lists deprecation
   notices after the summary instead of printing them mid-run. Version
-  rules for new code: [conventions](docs/agents/conventions.md#php-version).
+  rules for new code and how to read the runner's output:
+  [testing](docs/agents/testing.md).

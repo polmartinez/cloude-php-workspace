@@ -61,6 +61,9 @@
 
 ## PHP version
 
+Tables of what to avoid, and how to check a change on each version:
+[`testing.md`](testing.md#supported-php).
+
 - Minimum **8.3**, and the same code must run on **8.5** without
   deprecation notices. Don't use syntax or functions newer than 8.3
   (no property hooks, no `new` without parentheses chaining, no
