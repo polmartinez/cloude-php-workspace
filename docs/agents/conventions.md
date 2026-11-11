@@ -34,6 +34,15 @@
   `Mcp\Server::respondManifest` for MCP,
   `Format::xml` + `Response::xml` for sitemaps.
 
+## Database portability
+
+- Choose the database in `config/storage.php` (the DSN). Never pass a
+  quote character, never branch on the driver in application code.
+- Column and table names go in bare (`'users.email'`); the builder
+  quotes them for the connected server.
+- Keep `selectRaw` / `havingRaw` fragments to standard SQL. Details and
+  the list of what differs: [`databases.md`](databases.md).
+
 ## Anti-patterns
 
 Don't:

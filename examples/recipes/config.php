@@ -58,6 +58,7 @@ Config::configure(
 //       'default' => [
 //           'driver' => 'pdo',
 //           'dsn'    => 'mysql:host=localhost;dbname=app;charset=utf8mb4',
+//           // PostgreSQL: 'pgsql:host=localhost;port=5432;dbname=app' — nothing else changes.
 //           'user'   => 'app',
 //           'pass'   => '',
 //       ],

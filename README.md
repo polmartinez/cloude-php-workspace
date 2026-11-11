@@ -2127,6 +2127,16 @@ final class StrTest extends TestCase
 }
 ```
 
+**Skipping.** A test that needs something the machine may not have (a
+database server, a PHP extension) calls `$this->markTestSkipped('why')`
+from the test or from `setUp()`. The runner prints `S`, adds a
+`Skipped: n` count to the summary, and the exit code stays 0.
+
+**PostgreSQL integration tests.** `tests/Storage/PgsqlIntegrationTest.php`
+runs only when `CLOUDE_TEST_PGSQL_DSN` (plus `CLOUDE_TEST_PGSQL_USER` /
+`CLOUDE_TEST_PGSQL_PASS`) is set, and is skipped otherwise.
+
+
 #### Assertions
 
 PHPUnit-compatible names (`assertSame`, `assertTrue`, etc.) are

@@ -161,6 +161,12 @@ foreach (User::indexesSql()     as $sql) $pdo->exec($sql);
 foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 ```
 
+Both emitters take the dialect: `User::indexesSql('pgsql')`,
+`User::foreignKeysSql('pgsql')` (default `'mysql'`). The dialect is an
+argument here, not read from the connection — see
+[`databases.md`](databases.md).
+
+
 Column types in SQL (e.g. `VARCHAR(255)`, `BIGINT UNSIGNED`) live in
 your migrations, not in the model. `$types` describes PHP-side
 coercion, not DDL.

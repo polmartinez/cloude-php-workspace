@@ -314,7 +314,7 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Save a loaded model | `$u = User::find(1); $u->name = 'Ada'; $u->save();` | Sends only the changed columns; no change → no query. `$u->isDirty()`, `$u->isDirty('name')`, `$u->dirty()`. See [`docs/agents/model-schema.md`](docs/agents/model-schema.md) |
 | Upsert by lookup keys | `User::updateOrCreate(['email' => $e], ['name' => $n])` | Update the matching row or create `$match + $values`. Not atomic — UNIQUE index + `Transaction::run()` when calls can race |
-| PostgreSQL instead of MySQL | `'dsn' => 'pgsql:host=…;dbname=…'` in the storage config | No other change: quoting, generated keys (`RETURNING`), `LIMIT` on UPDATE / DELETE and booleans follow the driver. DDL: `Schema::createTableSql(…, 'pgsql')`, `User::indexesSql('pgsql')` |
+| PostgreSQL instead of MySQL | `'dsn' => 'pgsql:host=…;dbname=…'` in the storage config | No other change: quoting, generated keys (`RETURNING`), `LIMIT` on UPDATE / DELETE and booleans follow the driver. DDL: `Schema::createTableSql(…, 'pgsql')`, `User::indexesSql('pgsql')`. See [`docs/agents/databases.md`](docs/agents/databases.md) |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
 | Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
 | Nested WHERE groups (mix AND/OR with parens) | `$q->where(...)->whereGroup(fn ($g) => $g->where(...)->orWhere(...))->orWhereGroup(...)` | [`src/Storage/Query.php`](src/Storage/Query.php) |
@@ -397,6 +397,9 @@ Things to put in the prompt:
 composer test                              # Cloude\Testing runner — equivalent to `vendor/bin/cloude-test`
 composer test -- --filter=Cast             # run only tests matching /Cast/
 composer test -- tests/Storage             # scope to a directory
+CLOUDE_TEST_PGSQL_DSN='pgsql:host=127.0.0.1;dbname=cloude_test' \
+  CLOUDE_TEST_PGSQL_USER=postgres CLOUDE_TEST_PGSQL_PASS=secret \
+  composer test                            # also run the PostgreSQL integration tests (skipped without the DSN)
 composer cs-check                          # php-cs-fixer dry-run
 composer cs-fix                            # apply fixes
 ```
@@ -404,7 +407,9 @@ composer cs-fix                            # apply fixes
 Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 `App\Tests\` in consumer projects — just map it in `composer.json`).
 Each test class extends `Cloude\Testing\TestCase`; method names start
-with `test`. No `phpunit.xml.dist` — the runner discovers `*Test.php`
+with `test`. A test that needs something the machine may lack calls
+`$this->markTestSkipped('reason')` (counted as skipped, never a
+failure). No `phpunit.xml.dist` — the runner discovers `*Test.php`
 files under any path passed on the CLI (default `tests/`).
 
 ## Deployment

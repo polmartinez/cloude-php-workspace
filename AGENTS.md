@@ -48,6 +48,7 @@ one of these axioms.
 | [Bootstrapping](docs/agents/bootstrapping.md) | The three path constants (`DOCROOT` / `APPPATH` / `BASEPATH`), canonical `www/index.php`, canonical `app/config/app.php` | First time setting up a project; updating boot wiring |
 | [Decision matrix](docs/agents/decision-matrix.md) | "I want to do X → use Y" — the full lookup table grouped by topic (HTTP, Config, Model/Storage, Sessions, Mail, Testing, …) | Whenever you're picking which helper to use. Random-access |
 | [The Model IS the schema](docs/agents/model-schema.md) | `$table` / `$primaryKey` / `$properties` / `$types` / `$indexes` / `$foreignKeys` — what each declaration does, what's runtime vs. metadata-only | Defining or modifying a `Cloude\Model` subclass |
+| [Databases](docs/agents/databases.md) | MySQL / SQLite / PostgreSQL: what the framework adapts per driver, what you must keep portable, pgsql DDL, testing against a real server | Writing queries, raw SQL fragments, DDL or DB tests; switching database |
 | [Idioms, anti-patterns, scope](docs/agents/conventions.md) | "How Cloude code is shaped" — patterns to reach for, patterns to avoid, what the framework deliberately won't grow | Before reinventing something; when stuck |
 | [Recipes](docs/agents/recipes.md) | Index of copy-paste examples under `examples/recipes/` plus the full mini-app demos under `examples/` | Before writing equivalent code from scratch |
 
@@ -136,7 +137,8 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   typed binding. `$params` is a list for `?` or `name => value` for
   `:name` (v2.18.0).
 - **`Connection::nameOf($pdo)`** (v2.21.0) — pool name of a PDO, or null.
-- **PostgreSQL** (v2.22.0) — a `pgsql:` DSN is all it takes. `Query`,
+- **PostgreSQL** (v2.22.0) — full detail in
+  [databases](docs/agents/databases.md). A `pgsql:` DSN is all it takes. `Query`,
   `PdoStorage`, `Model`, `Transaction` and `Schema` adapt to the
   driver: `"`-quoted identifiers, generated keys through `RETURNING`
   (`$q->insert($data, returning: 'col')`; default column `id`),
