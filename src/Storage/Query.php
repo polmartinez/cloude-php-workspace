@@ -17,7 +17,7 @@ use Cloude\Cache\Cache;
  * Designed to cover the 80% of queries you write by hand without
  * re-implementing a full SQL grammar. **Does ship:**
  *
- *   - SELECT / INSERT / UPDATE / DELETE
+ *   - SELECT / INSERT / UPDATE / DELETE, native upsert (`upsert()`)
  *   - WHERE / orWhere / whereIn / whereNull / whereBetween / ...
  *   - Nested WHERE groups via `whereGroup(fn ($q) => ...)` and
  *     `orWhereGroup(...)` — for `(a = 1 OR b = 2) AND (c = 3)` style
@@ -595,6 +595,99 @@ final class Query
             return null;
         }
         return ctype_digit($last) ? (int) $last : $last;
+    }
+
+    /**
+     * Native upsert: INSERT the row, or — when it collides with a
+     * unique key — UPDATE the existing one, in a single atomic
+     * statement. No read first, so two concurrent calls cannot both
+     * insert.
+     *
+     *   $q->upsert(
+     *       ['plan_id' => 1, 'week_no' => 2, 'target_value' => 5],   // the row
+     *       ['plan_id', 'week_no'],                                   // the unique key it may collide on
+     *   );
+     *
+     * `$conflict` must name the columns of a UNIQUE index or the
+     * primary key — the database decides what a collision is, not this
+     * method. `$update` lists the columns to overwrite on a collision;
+     * left null it is every column of `$data` outside `$conflict`. An
+     * empty list means "insert if missing, otherwise leave the row".
+     *
+     * Emitted as `ON CONFLICT (...) DO UPDATE SET` on PostgreSQL and
+     * SQLite, `ON DUPLICATE KEY UPDATE` on MySQL / MariaDB. MySQL has
+     * no conflict target: there ANY unique key of the table triggers
+     * the update, so keep `$conflict` equal to the table's only unique
+     * key if the code must behave the same everywhere.
+     *
+     * Returns nothing: what a driver reports for an upsert (affected
+     * rows, generated key) is not comparable across servers. Read the
+     * row back by its key when you need it, or use `Model::upsert()`.
+     * WHERE / JOIN / ORDER BY set on the builder are ignored.
+     *
+     * @param array<string,mixed> $data
+     * @param list<string>        $conflict
+     * @param list<string>|null   $update
+     */
+    public function upsert(array $data, array $conflict, ?array $update = null): void
+    {
+        if ($data === []) {
+            throw new \InvalidArgumentException('upsert() requires at least one column');
+        }
+        $conflict = array_values($conflict);
+        if ($conflict === []) {
+            throw new \InvalidArgumentException('upsert() requires the conflict column(s) of a unique key');
+        }
+        $cols = array_keys($data);
+        foreach ($conflict as $c) {
+            if (!in_array($c, $cols, true)) {
+                throw new \InvalidArgumentException("upsert(): conflict column '$c' is missing from the row");
+            }
+        }
+        $update = $update === null
+            ? array_values(array_diff($cols, $conflict))
+            : array_values($update);
+        foreach ($update as $c) {
+            if (!in_array($c, $cols, true)) {
+                throw new \InvalidArgumentException("upsert(): update column '$c' is missing from the row");
+            }
+        }
+
+        $sql = 'INSERT INTO ' . $this->qualifyTable($this->table)
+            . ' (' . implode(', ', array_map(fn (string $c) => $this->q($c), $cols)) . ')'
+            . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
+
+        if ($this->driver === 'mysql') {
+            // MariaDB only knows VALUES(col); MySQL deprecates it in
+            // favour of a row alias (8.0.19+).
+            $version = (string) $this->pdo->getAttribute(\PDO::ATTR_SERVER_VERSION);
+            $alias   = $update !== []
+                && stripos($version, 'mariadb') === false
+                && version_compare($version, '8.0.19', '>=');
+            if ($alias) {
+                $sql .= ' AS ' . $this->q('cloude_new');
+            }
+            // No "do nothing" form: assigning a key column to itself
+            // changes nothing and raises no duplicate-key error.
+            $sets = $update === []
+                ? [$this->q($conflict[0]) . ' = ' . $this->q($conflict[0])]
+                : array_map(
+                    fn (string $c) => $this->q($c) . ' = '
+                        . ($alias ? $this->q('cloude_new') . '.' . $this->q($c) : 'VALUES(' . $this->q($c) . ')'),
+                    $update,
+                );
+            $sql .= ' ON DUPLICATE KEY UPDATE ' . implode(', ', $sets);
+        } else {
+            $sql .= ' ON CONFLICT (' . implode(', ', array_map(fn (string $c) => $this->q($c), $conflict)) . ')';
+            $sql .= $update === []
+                ? ' DO NOTHING'
+                : ' DO UPDATE SET ' . implode(', ', array_map(
+                    fn (string $c) => $this->q($c) . ' = EXCLUDED.' . $this->q($c),
+                    $update,
+                ));
+        }
+
+        StorageException::execute($this->pdo, $sql, array_values($data));
     }
 
     /**

@@ -270,4 +270,24 @@ final class PgsqlIntegrationTest extends TestCase
         $this->expectException(DuplicateKeyException::class);
         $tags->insert(['slug' => 'one']);
     }
+
+    public function testNativeUpsert(): void
+    {
+        $this->users()->upsert(['email' => 'a@x', 'name' => 'Ada', 'age' => 30], ['email']);
+        $this->users()->upsert(['email' => 'a@x', 'name' => 'Ada L.', 'age' => 31], ['email'], ['name']);
+        $this->users()->upsert(['email' => 'a@x', 'name' => 'nope'], ['email'], []);
+
+        self::assertSame(1, $this->users()->count());
+        self::assertSame(['name' => 'Ada L.', 'age' => 30], $this->users()->select('name', 'age')->first());
+
+        $u = PgUser::upsert(['email' => 'a@x'], ['active' => false, 'meta' => ['k' => 1]]);
+        self::assertSame(1, $u->id);
+        self::assertFalse($u->active);
+        self::assertSame(['k' => 1], $u->meta);
+        self::assertSame('Ada L.', $u->name);
+
+        $new = PgUser::upsert(['email' => 'b@x'], ['name' => 'Bea']);
+        self::assertSame('Bea', $new->name);
+        self::assertSame(2, PgUser::count());
+    }
 }

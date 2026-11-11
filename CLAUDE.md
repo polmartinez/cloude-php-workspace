@@ -313,6 +313,7 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Markdown content | `Data\MarkdownRepository` + `Markdown\Server::serve` | [`examples/recipes/data.php`](examples/recipes/data.php) |
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Save a loaded model | `$u = User::find(1); $u->name = 'Ada'; $u->save();` | Sends only the changed columns; no change → no query. `$u->isDirty()`, `$u->isDirty('name')`, `$u->dirty()`. See [`docs/agents/model-schema.md`](docs/agents/model-schema.md) |
+| Atomic upsert on a unique key | `Target::upsert(['plan_id' => $p, 'week_no' => $w], ['value' => $v])` or `$q->upsert($row, ['plan_id', 'week_no'])` | One native statement on MySQL / PostgreSQL / SQLite. Needs a UNIQUE index (or the PK) on the match columns. `update: [...]` picks what a collision overwrites |
 | Upsert by lookup keys | `User::updateOrCreate(['email' => $e], ['name' => $n])` | Update the matching row or create `$match + $values`. Not atomic — UNIQUE index + `Transaction::run()` when calls can race |
 | PostgreSQL instead of MySQL | `'dsn' => 'pgsql:host=…;dbname=…'` in the storage config | No other change: quoting, generated keys (`RETURNING`), `LIMIT` on UPDATE / DELETE and booleans follow the driver. DDL: `Schema::createTableSql(…, 'pgsql')`, `User::indexesSql('pgsql')`. See [`docs/agents/databases.md`](docs/agents/databases.md) |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
@@ -400,6 +401,7 @@ composer test -- tests/Storage             # scope to a directory
 CLOUDE_TEST_PGSQL_DSN='pgsql:host=127.0.0.1;dbname=cloude_test' \
   CLOUDE_TEST_PGSQL_USER=postgres CLOUDE_TEST_PGSQL_PASS=secret \
   composer test                            # also run the PostgreSQL integration tests (skipped without the DSN)
+                                           # same for MySQL: CLOUDE_TEST_MYSQL_DSN / _USER / _PASS
 composer cs-check                          # php-cs-fixer dry-run
 composer cs-fix                            # apply fixes
 ```

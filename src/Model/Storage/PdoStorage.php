@@ -156,6 +156,19 @@ final class PdoStorage implements Storage
             : (ctype_digit($last) ? (int) $last : $last);
     }
 
+    /**
+     * Native upsert — see {@see Query::upsert()}. Not part of the
+     * `Storage` interface: only SQL backends have one.
+     *
+     * @param array<string,mixed> $data
+     * @param list<string>        $conflict
+     * @param list<string>|null   $update
+     */
+    public function upsert(array $data, array $conflict, ?array $update = null): void
+    {
+        $this->query()->upsert($data, $conflict, $update);
+    }
+
     public function update(mixed $id, array $data): bool
     {
         if ($data === []) {

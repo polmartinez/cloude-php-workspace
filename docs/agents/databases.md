@@ -35,6 +35,7 @@ overrides.
 | Key column other than `id` (builder only) | ignored | `RETURNING "uuid"` | `$q->insert($data, returning: 'uuid')` |
 | `update()` / `delete()` with `orderBy()` + `limit()` | native | rewritten to `WHERE ctid IN (SELECT ctid … LIMIT n)` | `$q->where(…)->orderBy('id')->limit(100)->delete()` |
 | `true` / `false` as a bound value | boolean | sent as `1` / `0` | `->where('active', true)` — works on `BOOLEAN` and integer columns |
+| Insert-or-update in one statement | `ON DUPLICATE KEY UPDATE` (MySQL) / `ON CONFLICT … DO UPDATE` (SQLite) | `ON CONFLICT … DO UPDATE` | `$q->upsert($row, ['plan_id', 'week_no'])` / `Target::upsert($match, $values)` |
 | `count()` after `groupBy()` | number of groups | number of groups | `$q->groupBy('country')->count()` |
 | Nested transactions | SAVEPOINT | SAVEPOINT | `Transaction::run(fn () => …)` |
 | Errors | typed | typed | `catch (DuplicateKeyException $e)` etc. — same classes on every driver |
@@ -61,6 +62,40 @@ The framework passes these through as written:
 - **Column types in migrations.** Yours to write. `Schema` translates a
   few MySQL names for PostgreSQL (see below); it is not a type system.
 - **Hand-written SQL** run through `StorageException::execute()`.
+
+## Native upsert
+
+```php
+// Builder: the row, then the columns of the unique key it may collide on.
+$q->upsert(['plan_id' => 1, 'week_no' => 2, 'value' => 5], ['plan_id', 'week_no']);
+$q->upsert($row, ['plan_id', 'week_no'], ['value']);   // on collision overwrite only `value`
+$q->upsert($row, ['plan_id', 'week_no'], []);          // on collision leave the row alone
+
+// Model: returns the row (read back after the statement).
+$t = Target::upsert(['plan_id' => 1, 'week_no' => 2], ['value' => 5]);
+$t = Target::upsert($match, ['value' => 5], update: ['value', 'updated_at']);
+```
+
+Rules:
+
+- **The conflict columns must be a UNIQUE index or the primary key.**
+  The database detects the collision; with no such index every call
+  inserts a new row (PostgreSQL and SQLite raise an error instead).
+- **One statement, atomic.** Prefer it to `updateOrCreate()` whenever
+  the unique index exists; no `Transaction::run()` needed around it.
+- `Query::upsert()` returns nothing. `Model::upsert()` returns the
+  model, hydrated from a read by the `$match` columns.
+- On a collision `Model::upsert()` overwrites the `$values` columns
+  only. A column filled by `beforeSave()` (`updated_at`) is sent on
+  insert but overwritten on collision only when listed in `update:`.
+- **MySQL has no conflict target**: any unique key of the table
+  triggers the update, whatever `$conflict` says. Tables with a single
+  unique key behave identically on all three servers.
+- A collision still consumes an auto-increment / identity value on
+  every server. Ids will have gaps; never rely on them being dense.
+- `updateOrCreate()` remains for storages with no SQL (JSON, array) and
+  for matching on columns that have no unique index.
+  `Model::upsert()` on such a storage falls back to read-then-write.
 
 ## DDL: `Schema` and the model emitters
 
@@ -108,8 +143,10 @@ vendor/bin/cloude-test
 ```
 
 Without `CLOUDE_TEST_PGSQL_DSN`, `tests/Storage/PgsqlIntegrationTest.php`
-is reported as skipped (`Skipped: 11`) and the run still passes. It
-creates and drops only tables prefixed `cloude_it_`.
+is reported as skipped and the run still passes. The MySQL / MariaDB
+counterpart is `tests/Storage/MysqlIntegrationTest.php`, enabled by
+`CLOUDE_TEST_MYSQL_DSN` / `_USER` / `_PASS`. Both create and drop only
+tables prefixed `cloude_it_`.
 
 To write a test of your own that needs a server or an extension:
 
@@ -133,5 +170,3 @@ may not have created (`if (!isset($this->pdo)) return;`).
 - SQL Server, Oracle: the builder may run, nothing is tested there.
 - Schema introspection, migrations, `ALTER TABLE` diffs — use a
   migration tool; feed it the strings `Schema` emits if you like.
-- `ON CONFLICT` / `ON DUPLICATE KEY` upserts: `Model::updateOrCreate()`
-  is a read followed by a write on every driver.

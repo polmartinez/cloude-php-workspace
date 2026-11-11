@@ -64,7 +64,7 @@ one of these axioms.
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
 
-## Recent additions (v2.12 → v2.22)
+## Recent additions (v2.12 → v2.23)
 
 For an AI working from older knowledge of this framework: these public
 surfaces exist, and a few behaviours changed. Call forms are in the
@@ -148,3 +148,10 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   `CREATE INDEX` / `COMMENT ON` statements in one string.
 - **`$this->markTestSkipped($reason)`** (v2.22.0) — on
   `Cloude\Testing\TestCase`; the runner reports `Skipped: n`.
+- **Native upsert** (v2.23.0) — `$q->upsert($row, $conflictColumns,
+  $updateColumns = null)` and `Model::upsert($match, $values = [],
+  update: null)`: a single `INSERT … ON CONFLICT DO UPDATE`
+  (`ON DUPLICATE KEY UPDATE` on MySQL). The conflict columns must be a
+  UNIQUE index or the primary key. Prefer it to `updateOrCreate()`
+  when that index exists. Rules in
+  [databases](docs/agents/databases.md#native-upsert).

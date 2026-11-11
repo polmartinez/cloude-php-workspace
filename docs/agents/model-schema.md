@@ -73,6 +73,11 @@ User::updateOrCreate(
     ['email' => 'a@b.com'],                 // lookup keys
     ['name' => 'Ada', 'active' => 1],       // what to set
 );
+
+User::upsert(                               // same call shape, one atomic statement;
+    ['email' => 'a@b.com'],                 // needs a UNIQUE index on these columns
+    ['name' => 'Ada', 'active' => 1],
+);
 ```
 
 Rules an agent can rely on:
@@ -95,6 +100,12 @@ Rules an agent can rely on:
   can both insert. Put a UNIQUE index on the `$match` columns and wrap
   the call in `Transaction::run()`; the loser gets a
   `DuplicateKeyException`.
+- **`upsert($match, $values, update: null)`** is the atomic form: one
+  `INSERT … ON CONFLICT DO UPDATE`. Use it whenever `$match` is covered
+  by a UNIQUE index — declare that index in `$indexes`:
+  `['type' => 'unique', 'columns' => ['plan_id', 'week_no']]`. On a
+  collision only the `$values` columns change; `beforeSave()` columns
+  need `update: ['value', 'updated_at']`.
 - **Testing**: `MockStorage::lastCall('update')` returns
   `[$id, $changedColumns]` — only what changed.
 

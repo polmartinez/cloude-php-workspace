@@ -626,6 +626,75 @@ abstract class Model
         return static::create(array_merge($match, $values));
     }
 
+    /**
+     * Atomic counterpart of {@see updateOrCreate()}: one
+     * `INSERT ... ON CONFLICT DO UPDATE` (`ON DUPLICATE KEY UPDATE` on
+     * MySQL), then the row is read back and returned.
+     *
+     *   ProgramMetricTarget::upsert(
+     *       ['plan_id' => $p, 'week_no' => $w, 'metric_id' => $m],   // columns of a UNIQUE key
+     *       ['target_value' => $v, 'target_unit_id' => $u],
+     *   );
+     *
+     * **`$match` must be the columns of a UNIQUE index or the primary
+     * key** — that is what makes the database treat a second call as
+     * the same row. Without one MySQL inserts a new row on every call;
+     * PostgreSQL and SQLite reject the statement.
+     *
+     * On a collision only the `$values` columns are overwritten. Pass
+     * `$update` to choose others — typically to include a column that
+     * `beforeSave()` fills:
+     *
+     *   Target::upsert($match, ['target_value' => $v], update: ['target_value', 'updated_at']);
+     *
+     * `beforeSave()` runs on the row before it is sent (as for a new
+     * model, so a `created_at` stamp is set and kept on insert, and
+     * left alone on a collision unless listed in `$update`);
+     * `afterSave()` runs on the returned instance. Write-side casts
+     * apply.
+     *
+     * On a storage without native upserts (JSON, array, the test
+     * `MockStorage`) this is a read followed by a write with the same
+     * result, minus the atomicity.
+     *
+     * @param array<string,mixed> $match
+     * @param array<string,mixed> $values
+     * @param list<string>|null   $update
+     */
+    public static function upsert(array $match, array $values = [], ?array $update = null): static
+    {
+        if ($match === []) {
+            throw new \InvalidArgumentException(static::class . '::upsert() needs the unique-key columns in $match');
+        }
+        $update ??= array_keys($values);
+        $storage = static::storage();
+
+        if (!$storage instanceof Storage\PdoStorage) {
+            $rows = $storage->findBy($match, 1);
+            if ($rows === []) {
+                return static::create(array_merge($match, $values));
+            }
+            $instance = static::hydrate($rows[0]);
+            $instance->fill(array_intersect_key($values, array_flip($update)));
+            return $instance->save();
+        }
+
+        $draft = new static(array_merge($match, $values));
+        $draft->beforeSave();
+        $payload = $draft->payload();
+
+        $storage->upsert($payload, array_keys($match), array_values(array_intersect($update, array_keys($payload))));
+
+        // Read back by the key in storage form (what was actually sent).
+        $rows = $storage->findBy(array_intersect_key($payload, $match), 1);
+        if ($rows === []) {
+            throw new \RuntimeException(static::class . '::upsert(): the row could not be read back');
+        }
+        $instance = static::hydrate($rows[0]);
+        $instance->afterSave();
+        return $instance;
+    }
+
     // ── instance API ───────────────────────────────────────────────────────
 
     /**
