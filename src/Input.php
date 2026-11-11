@@ -100,8 +100,10 @@ class Input
      */
     public static function header(string $name, ?string $default = null): ?string
     {
-        $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
-        return $_SERVER[$key] ?? $default;
+        $bare = strtoupper(str_replace('-', '_', $name));
+        // Content-Type and Content-Length reach PHP without the HTTP_ prefix.
+        return $_SERVER['HTTP_' . $bare]
+            ?? (in_array($bare, ['CONTENT_TYPE', 'CONTENT_LENGTH'], true) ? ($_SERVER[$bare] ?? $default) : $default);
     }
 
     /**

@@ -106,7 +106,7 @@ final class QueryGroupByTest extends TestCase
         self::assertCount(4, $rows);
         self::assertSame(['country' => 'DE', 'customer' => 'Dora', 'total' => 80], $rows[0]);
         self::assertSame(['country' => 'ES', 'customer' => 'Ada',  'total' => 300], $rows[1]);
-        self::assertSame(['country' => 'ES', 'customer' => 'Bea',  'total' => 50],  $rows[2]);
+        self::assertSame(['country' => 'ES', 'customer' => 'Bea',  'total' => 50], $rows[2]);
         self::assertSame(['country' => 'FR', 'customer' => 'Carl', 'total' => 400], $rows[3]);
     }
 
@@ -195,7 +195,7 @@ final class QueryGroupByTest extends TestCase
 
         self::assertStringContainsString('GROUP BY `country`', $sql);
         self::assertStringContainsString('HAVING (COUNT(*) > 2)', $sql);
-        self::assertStringContainsString("ORDER BY `n` DESC", $sql);
+        self::assertStringContainsString('ORDER BY `n` DESC', $sql);
     }
 
     public function testWhereCombinesWithGroupByCorrectly(): void

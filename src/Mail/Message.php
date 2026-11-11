@@ -37,8 +37,8 @@ final class Message
 
         $headers = [
             'To'           => self::joinAddresses($email['to']),
-            'From'         => $email['from'],
-            'Subject'      => self::encodeHeader((string) $email['subject']),
+            'From'         => (string) $email['from'],
+            'Subject'      => self::encodeHeader(self::cleanHeaderValue((string) $email['subject'])),
             'MIME-Version' => '1.0',
             'Content-Type' => ($html ? 'text/html' : 'text/plain') . '; charset=UTF-8',
             'Date'         => gmdate('r'),
@@ -59,12 +59,22 @@ final class Message
             $headers[(string) $name] = (string) $value;
         }
 
+        // Header values never carry a line break of their own: a CR or LF
+        // coming from a form field (subject, reply-to, a display name)
+        // would otherwise start a new header — `Bcc:` included — or end
+        // the header block early. Folding below is the only place that
+        // adds line breaks.
         $lines = [];
         foreach ($headers as $name => $value) {
-            $lines[] = $name . ': ' . self::foldLongHeader($value);
+            $name = (string) preg_replace('/[^\x21-\x39\x3b-\x7e]/', '', (string) $name);
+            if ($name === '') {
+                continue;
+            }
+            $lines[] = $name . ': ' . self::foldLongHeader(self::cleanHeaderValue((string) $value));
         }
         $lines[] = '';                                                  // blank line: end of headers
-        $lines[] = (string) $email['body'];
+        // RFC 5322 wants CRLF everywhere; some servers reject bare LF.
+        $lines[] = (string) preg_replace('/\r\n|\r|\n/', "\r\n", (string) $email['body']);
 
         $message = implode("\r\n", $lines);
 
@@ -108,9 +118,20 @@ final class Message
     public static function extractAddress(string $address): string
     {
         if (preg_match('/<([^>]+)>/', $address, $m) === 1) {
-            return trim($m[1]);
+            $address = $m[1];
         }
-        return trim($address);
+        // The result goes into SMTP commands (`RCPT TO:<...>`): no
+        // whitespace, control characters or angle brackets survive.
+        return (string) preg_replace('/[\x00-\x20\x7f<>]/', '', $address);
+    }
+
+    /**
+     * Collapses any CR / LF run (and the whitespace after it) into one
+     * space, so a value can never start a new header line.
+     */
+    public static function cleanHeaderValue(string $value): string
+    {
+        return trim((string) preg_replace('/[\r\n]+[ \t]*/', ' ', $value));
     }
 
     /**

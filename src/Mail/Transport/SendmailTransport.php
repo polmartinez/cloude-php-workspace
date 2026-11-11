@@ -39,13 +39,11 @@ final class SendmailTransport implements Transport
         // We splice it after the existing headers (before the blank
         // line that terminates the header block).
         if (!empty($email['bcc'])) {
-            $bcc = implode(', ', (array) $email['bcc']);
-            $message = preg_replace(
-                '/\r\n\r\n/',
-                "\r\nBcc: $bcc\r\n\r\n",
-                $message,
-                1,
-            );
+            $bcc = Message::cleanHeaderValue(implode(', ', (array) $email['bcc']));
+            $end = strpos($message, "\r\n\r\n");
+            if ($bcc !== '' && $end !== false) {
+                $message = substr_replace($message, "\r\nBcc: $bcc", $end, 0);
+            }
         }
 
         $cmd = $this->path . ' ' . $this->args;

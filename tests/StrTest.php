@@ -86,7 +86,7 @@ final class StrTest extends TestCase
     {
         // Ellipsis itself doesn't fit → degrade gracefully.
         self::assertSame('..', Str::truncate('hello world', 2));
-        self::assertSame('',   Str::truncate('hello world', 0));
+        self::assertSame('', Str::truncate('hello world', 0));
     }
 
     public function testTruncateIsMultibyteSafe(): void

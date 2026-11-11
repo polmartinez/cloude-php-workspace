@@ -153,4 +153,17 @@ final class StorageExceptionTest extends TestCase
         $e->errorInfo = [$sqlState, $driverCode, $msg];
         return $e;
     }
+
+    public function testExecuteBindsNamedPlaceholders(): void
+    {
+        $pdo = new \PDO('sqlite::memory:');
+        $pdo->exec('CREATE TABLE t (id INTEGER, label TEXT)');
+        $pdo->exec("INSERT INTO t VALUES (1, 'a'), (2, 'b')");
+
+        $stmt = StorageException::execute($pdo, 'SELECT label FROM t WHERE id = :id', ['id' => 2]);
+        self::assertSame('b', $stmt->fetchColumn());
+
+        $stmt = StorageException::execute($pdo, 'SELECT label FROM t WHERE id = ?', [1]);
+        self::assertSame('a', $stmt->fetchColumn());
+    }
 }

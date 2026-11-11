@@ -143,18 +143,25 @@ class Router
         }
         $uri = '/' . trim($uri, '/');
 
-        foreach ($this->routes as $route) {
-            if (
-                !in_array('*', $route['methods'], true)
-                && !in_array($method, $route['methods'], true)
-            ) {
-                continue;
-            }
+        // A HEAD request with no route of its own is answered by the
+        // matching GET route (PHP drops the body for HEAD by itself).
+        // Explicit HEAD / any() routes are tried first.
+        $attempts = $method === 'HEAD' ? ['HEAD', 'GET'] : [$method];
+        foreach ($attempts as $i => $try) {
+            foreach ($this->routes as $route) {
+                $any = in_array('*', $route['methods'], true);
+                if ($i > 0 && $any) {
+                    continue;                                   // already tried in the first pass
+                }
+                if (!$any && !in_array($try, $route['methods'], true)) {
+                    continue;
+                }
 
-            $params = $this->match($route['pattern'], $uri);
-            if ($params !== false) {
-                call_user_func($route['handler'], $params);
-                return;
+                $params = $this->match($route['pattern'], $uri);
+                if ($params !== false) {
+                    call_user_func($route['handler'], $params);
+                    return;
+                }
             }
         }
 

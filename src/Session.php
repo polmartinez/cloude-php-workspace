@@ -208,7 +208,7 @@ final class Session
             default:
                 throw new \RuntimeException(
                     "Unsupported session handler '$handler' "
-                    . "(supported: files, redis, memcached)",
+                    . '(supported: files, redis, memcached)',
                 );
         }
     }
@@ -222,7 +222,7 @@ final class Session
     private static function redisSavePath(array $config): string
     {
         $host = (string) ($config['host'] ?? '127.0.0.1');
-        $port = (int)    ($config['port'] ?? 6379);
+        $port = (int) ($config['port'] ?? 6379);
 
         $query = [];
         foreach ([
@@ -273,7 +273,7 @@ final class Session
         $parts = [];
         foreach ($servers as $s) {
             $host = (string) ($s[0] ?? '127.0.0.1');
-            $port = (int)    ($s[1] ?? 11211);
+            $port = (int) ($s[1] ?? 11211);
             $parts[] = "{$host}:{$port}";
         }
         return implode(',', $parts);

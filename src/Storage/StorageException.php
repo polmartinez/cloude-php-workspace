@@ -61,7 +61,7 @@ class StorageException extends \RuntimeException
      * Returns the executed `\PDOStatement` so callers can `fetchAll()` /
      * `fetchColumn()` / read `rowCount()` as usual.
      *
-     * @param list<mixed> $params
+     * @param array<int|string, mixed> $params  Positional list, or name => value
      */
     public static function execute(\PDO $pdo, string $sql, array $params = []): \PDOStatement
     {
@@ -74,9 +74,10 @@ class StorageException extends \RuntimeException
             // affinity (HAVING COUNT(*) >= ?, function results, ...) on
             // SQLite + Postgres. We honor the caller's PHP type so
             // string-typed digits like '0123' stay strings.
+            // List → positional `?`; string keys → named `:placeholders`.
             $i = 1;
-            foreach ($params as $value) {
-                $stmt->bindValue($i++, $value, self::paramType($value));
+            foreach ($params as $key => $value) {
+                $stmt->bindValue(is_string($key) ? $key : $i++, $value, self::paramType($value));
             }
             $stmt->execute();
             return $stmt;

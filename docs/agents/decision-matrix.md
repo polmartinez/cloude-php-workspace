@@ -23,12 +23,12 @@
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Request method | `Input::method()` | Uppercase, defaults to `'GET'` |
+| Request method | `Input::method()` | Uppercase, defaults to `'GET'`. The Router answers a `HEAD` with the matching `GET` route when no `HEAD` route exists |
 | URI path (no query string) | `Input::uri()` | Normalized; double slashes collapsed |
 | Query-string param | `Input::get('q')` / `Input::get('q', 'default')` / `Input::get()` (full `$_GET`) | |
 | POST field | `Input::post('email')` / `Input::post('email', '')` / `Input::post()` (full `$_POST`) | |
 | Raw `$_SERVER` key | `Input::server('REMOTE_ADDR')` / `Input::server('HTTP_X_TENANT', 'public')` / `Input::server()` (full `$_SERVER`) | Case-sensitive — use canonical upper-snake (`HTTP_*`, `REMOTE_ADDR`, `PATH_INFO`, ...). Prefer the typed helpers when one exists |
-| Request header | `Input::header('User-Agent')` / `Input::header('X-Request-Id', 'n/a')` | Translates `User-Agent` → `HTTP_USER_AGENT` under the hood |
+| Request header | `Input::header('User-Agent')` / `Input::header('X-Request-Id', 'n/a')` | Translates `User-Agent` → `HTTP_USER_AGENT` under the hood; `Content-Type` / `Content-Length` are read from their un-prefixed `$_SERVER` keys |
 | Client IP | `Input::ip()` (or `Input::ip(trustProxy: true)` behind a CDN you control) | Reads `REMOTE_ADDR`; with `trustProxy`, the first entry of `X-Forwarded-For` |
 | JSON body | `Input::json()` | Returns `?array` (null on empty/invalid) |
 | Raw body | `Input::body()` | String, never null |

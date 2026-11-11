@@ -92,7 +92,7 @@ final class BootstrapEnvTest extends TestCase
         Bootstrap::setEnv('production');
         Config::configure($this->tmpConfig);
 
-        self::assertFalse(Config::get('app.debug'),  'production should flip debug off');
+        self::assertFalse(Config::get('app.debug'), 'production should flip debug off');
         self::assertSame('production', Config::get('app.tier'));
         self::assertSame('cloude-test', Config::get('app.name'), 'unchanged keys keep base value');
     }

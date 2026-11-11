@@ -201,4 +201,29 @@ final class TransactionTest extends TestCase
 
         self::assertSame(0, $this->rowCount());
     }
+
+    public function testPdoAgreesAboutBeingInATransaction(): void
+    {
+        Transaction::begin($this->connName);
+        self::assertTrue($this->pdo->inTransaction());
+        Transaction::begin($this->connName);        // savepoint
+        Transaction::commit($this->connName);
+        self::assertTrue($this->pdo->inTransaction());
+        Transaction::commit($this->connName);
+        self::assertFalse($this->pdo->inTransaction());
+    }
+
+    public function testCommitAfterTheDatabaseAlreadyEndedTheTransactionIsQuiet(): void
+    {
+        // What a DDL statement does on MySQL: the transaction is over
+        // before commit() runs.
+        Transaction::begin($this->connName);
+        $this->insert('a');
+        $this->pdo->commit();
+
+        Transaction::commit($this->connName);
+
+        self::assertSame(1, $this->rowCount());
+        self::assertSame(0, Transaction::depth($this->connName));
+    }
 }

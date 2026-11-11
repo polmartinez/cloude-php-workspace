@@ -143,4 +143,45 @@ final class MessageTest extends TestCase
         // Bare LF is never used between headers
         self::assertSame(0, substr_count($msg, "\n") - substr_count($msg, "\r\n"));
     }
+
+    /**
+     * A subject or reply-to taken from a form must not be able to add
+     * headers of its own (a `Bcc:` to a list of strangers, typically).
+     */
+    public function testLineBreaksInHeaderValuesCannotAddHeaders(): void
+    {
+        $msg = Message::build([
+            'to'       => 'a@example.com',
+            'from'     => 'noreply@example.com',
+            'subject'  => "Hello\r\nBcc: victim@example.com",
+            'reply_to' => "x@example.com\nX-Injected: 1",
+            'headers'  => ["X-Tag\r\nX-Evil" => "v\r\n\r\nbody starts here"],
+            'body'     => 'hi',
+        ]);
+        [$head, $body] = explode("\r\n\r\n", $msg, 2);
+
+        self::assertSame('hi', $body);
+        self::assertStringContainsString('Subject: Hello Bcc: victim@example.com', $head);
+        self::assertSame(0, preg_match('/^(Bcc|X-Injected|X-Evil):/mi', $head));
+    }
+
+    public function testBodyLineEndingsAreNormalisedToCrlf(): void
+    {
+        $msg = Message::build([
+            'to' => 'a@example.com', 'from' => 'b@example.com', 'subject' => 's',
+            'body' => "one\ntwo\rthree\r\nfour",
+        ]);
+        self::assertStringEndsWith("\r\n\r\none\r\ntwo\r\nthree\r\nfour", $msg);
+    }
+
+    public function testExtractAddressDropsWhitespaceAndControlCharacters(): void
+    {
+        // The address goes into `RCPT TO:<...>`; a line break in it
+        // would be a second SMTP command.
+        self::assertSame('a@example.com', Message::extractAddress(" a@example.com\r\n"));
+        self::assertSame(
+            'a@example.comRCPTTO:evil@example.com',
+            Message::extractAddress("Ada <a@example.com\r\nRCPT TO:evil@example.com>"),
+        );
+    }
 }

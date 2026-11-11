@@ -32,11 +32,12 @@ When asked to build something on top of `cloude/framework`:
    - [`examples/recipes/`](examples/recipes/) — sitemap, JSON-LD, MCP, CLI tasks, repos, model, mail, markdown
 4. **Stay inside the mental model**: no DI container, no magic.
    `Cloude\Model` is a thin Active Record (no relations, no observers,
-   no migrations) — opt-in only. The bundled `Cloude\Db\Query` builder
-   covers SELECT / INSERT / UPDATE / DELETE with WHERE / ORDER BY /
-   LIMIT / OFFSET; joins and subqueries go straight to PDO. If
-   something feels like it needs a "service locator" or a "repository
-   factory", you're probably overcomplicating.
+   no migrations) — opt-in only. The bundled `Cloude\Storage\Query`
+   builder covers SELECT / INSERT / UPDATE / DELETE with WHERE (nested
+   groups included), JOIN, GROUP BY / HAVING, ORDER BY, LIMIT / OFFSET;
+   unions, subqueries and CTEs go straight to PDO. If something feels
+   like it needs a "service locator" or a "repository factory", you're
+   probably overcomplicating.
 5. **Wire by hand** in `app/Routes.php` or `www/index.php`. That's the seam.
 
 ## Project layout (recommended)
@@ -75,7 +76,7 @@ mkdir -p www/assets app views data
 
 ```json
 {
-    "require":  { "cloude/framework": "^0.15" },
+    "require":  { "cloude/framework": "^2.0" },
     "autoload": { "psr-4": { "App\\": "app/" } }
 }
 ```
@@ -320,7 +321,7 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Reference table / column statically | `User::table()` / `User::field('email')` / `User::as('u')->field('email')` | Returns plain dotted strings; pair `User::as('u')` with `$q->from()` / `$q->join()` for typed joins |
 | Alias a column in `select()` (preferred) | `$q->select('id', ['name', 'type_name'])`, `User::alias('name', 'user_name')`, `$u->alias('name', 'who')` | Tuple `[col, alias]` is the recommended form. Legacy `'name AS alias'` string still accepted for back-compat |
 | Catch a SQL failure portably | `catch (\Cloude\Storage\StorageException $e)` (or its subclasses) | Every Query / PdoStorage execution wraps `PDOException`. Subclasses: `TableNotFoundException`, `ColumnNotFoundException`, `DuplicateKeyException`, `IntegrityConstraintException`, `ConnectionException`, `SyntaxErrorException`. `$e->sql / $e->bindings / $e->sqlState` are public readonly |
-| Run N writes inside a transaction | `\Cloude\Storage\Transaction::run(fn() => …)` | Closure auto-commits / rolls back + rethrows. Manual form: `Transaction::begin()` / `commit()` / `rollback()` / `inTransaction()`. Nested calls use SAVEPOINTs |
+| Run N writes inside a transaction | `\Cloude\Storage\Transaction::run(fn() => …)` | Closure auto-commits / rolls back + rethrows. Manual form: `Transaction::begin()` / `commit()` / `rollback()` / `inTransaction()`. Nested calls use SAVEPOINTs; the outer level is PDO's own transaction, so `$pdo->inTransaction()` agrees |
 | Cast Model attributes (typed read/write) | `protected static array $types = ['age' => 'int', 'price' => 'decimal:2', 'tags' => 'json', 'created_at' => 'datetime', 'status' => 'enum:' . Status::class]` | Optional. Applied at hydrate (storage → PHP) and save (PHP → storage). Null always passes through. Catalogue: `int`, `float`, `string`, `bool`, `decimal[:N]`, `json`/`array`, `datetime[:FMT]`, `date[:FMT]`, `enum:FQCN`. See [`src/Model/Cast.php`](src/Model/Cast.php) |
 | Manipulate dates / times | `\Cloude\DateTime::now()->addDays(7)->endOfDay()`, `$d->isPast()`, `$d->diffForHumans()`, `$d->toDateString()` | `Cloude\DateTime` extends `\DateTimeImmutable` — drop-in for any `\DateTimeInterface` consumer. The `datetime` cast hydrates straight into this class so the helpers are available on Model attributes |
 | Freeze time in a test | `$this->freezeTime('2026-05-18 12:00:00')` (inside `Cloude\Testing\TestCase`) or `DateTime::setTestNow($when)` | Released automatically in `tearDown()` so leaks fail the next test instead of polluting the suite |
@@ -329,7 +330,7 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Test base class | `class FooTest extends \Cloude\Testing\TestCase` — provides `useArrayModel()`, `useSqliteModel()`, `useMockModel()`, `captureHttp()`, `assertJsonResponse()`, `assertHttpException()`, `freezeTime()`, `assertModelHas()`. Run with `vendor/bin/cloude-test` |
 | Mock a Model and assert calls | `$s = $this->useMockModel(User::class, $rows); /* run code */; $this->assertModelReceived($s, 'delete', times: 1); $s->lastCall('update')` | `Cloude\Testing\MockStorage` — recording wrapper on `ArrayStorage`. For `Model::query()` (SQL builder) tests, use `useSqliteModel()` — faking the builder is brittle |
 | Multi-env config (dev / prod / anything) | `Config::configure($path, $env)` + `Config::get('db.default.dsn')` | [`examples/recipes/config.php`](examples/recipes/config.php), [`tests/ConfigTest.php`](tests/ConfigTest.php) |
-| Send email (SMTP or sendmail) | `Mailer::forge()->send([...])` (reads `Config::get('email')`; FW defaults at `config/email.php` deep-merged under your `app/config/email.php`) | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`examples/recipes/config/email.php`](examples/recipes/config/email.php), [`src/Mail/`](src/Mail/) |
+| Send email (SMTP or sendmail) | `Mailer::forge()->send([...])` — line breaks in header values (subject, reply-to, …) are neutralised, so form input can't add headers (reads `Config::get('email')`; FW defaults at `config/email.php` deep-merged under your `app/config/email.php`) | [`examples/recipes/mail.php`](examples/recipes/mail.php), [`examples/recipes/config/email.php`](examples/recipes/config/email.php), [`src/Mail/`](src/Mail/) |
 | DKIM-sign outbound mail | Drop a `'dkim'` block in `app/config/email.php` (domain / selector / private_key); every `send()` signs automatically | [`src/Mail/DkimSigner.php`](src/Mail/DkimSigner.php) — relaxed/relaxed canon + RSA-SHA256 |
 | Emit CREATE TABLE SQL | `Schema::createTableSql($table, $columns, $indexes, $foreignKeys, 'mysql')` | [`src/Storage/Schema.php`](src/Storage/Schema.php) — standalone helper. Supports `mysql` + `pgsql`. Not a migration runner — feed the output to phinx or pdo->exec() |
 | Emit indexes / FKs from a model | `User::indexesSql()` / `User::foreignKeysSql()` — return `list<string>` ready for `pdo->exec()` | Declare `protected static array $indexes / $foreignKeys` on the subclass; columns live in your migrations |
@@ -362,7 +363,7 @@ for any of these, **stop and reconsider** — they're absent on purpose:
   directly
 - A built-in HTTP client → use `guzzlehttp/guzzle` directly
 - A template engine → plain PHP via `View::render` is the answer
-- Session / auth helpers → `$_SESSION` + a check before `dispatch()`
+- An auth / ACL layer → `Cloude\Session` holds the user id; the check before `dispatch()` is yours
 - A custom autoloader → Composer PSR-4 is plenty
 - Wrappers around `json_encode` / `header()` → `Response::json` already does it
 - A "Sitemap" / "JSON-LD" / "Breadcrumbs" class → see the recipes; arrays + `Format::*` cover it

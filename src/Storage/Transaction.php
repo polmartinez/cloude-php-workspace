@@ -21,10 +21,13 @@ namespace Cloude\Storage;
  *      and issue `SAVEPOINT sp_N` / `RELEASE` / `ROLLBACK TO` for
  *      inner calls, making `Transaction::run()` safely composable
  *      across nested service / repository methods.
- *   3. **Exception wrapping** — every PDO call goes through
- *      {@see StorageException::execute}, so a failed `BEGIN` / `COMMIT`
- *      / `ROLLBACK` surfaces as a typed `Cloude\Storage\StorageException`
+ *   3. **Exception wrapping** — a failed `BEGIN` / `COMMIT` /
+ *      `ROLLBACK` surfaces as a typed `Cloude\Storage\StorageException`
  *      (or a more specific subclass), not a raw `\PDOException`.
+ *
+ * The outermost level uses PDO's own `beginTransaction()` / `commit()`
+ * / `rollBack()`, so `$pdo->inTransaction()` agrees with
+ * `Transaction::inTransaction()`.
  *
  * ## Three usage shapes
  *
@@ -87,9 +90,9 @@ final class Transaction
         $depth = self::$depth[$connection] ?? 0;
 
         if ($depth === 0) {
-            StorageException::execute($pdo, 'BEGIN');
+            self::guard(static fn () => $pdo->beginTransaction(), 'BEGIN');
         } else {
-            StorageException::execute($pdo, 'SAVEPOINT ' . self::savepointName($depth));
+            self::exec($pdo, 'SAVEPOINT ' . self::savepointName($depth));
         }
         self::$depth[$connection] = $depth + 1;
     }
@@ -105,10 +108,14 @@ final class Transaction
         $pdo = Connection::pdo($connection);
 
         if ($depth === 1) {
-            StorageException::execute($pdo, 'COMMIT');
+            // A DDL statement on MySQL commits implicitly; PDO then has
+            // nothing left to commit and would throw. Treat it as done.
+            if ($pdo->inTransaction()) {
+                self::guard(static fn () => $pdo->commit(), 'COMMIT');
+            }
         } else {
             // Inner commit releases the matching savepoint.
-            StorageException::execute($pdo, 'RELEASE SAVEPOINT ' . self::savepointName($depth - 1));
+            self::exec($pdo, 'RELEASE SAVEPOINT ' . self::savepointName($depth - 1));
         }
         self::$depth[$connection] = $depth - 1;
     }
@@ -126,15 +133,18 @@ final class Transaction
         }
         $pdo = Connection::pdo($connection);
 
-        if ($depth === 1) {
-            StorageException::execute($pdo, 'ROLLBACK');
-        } else {
-            StorageException::execute(
-                $pdo,
-                'ROLLBACK TO SAVEPOINT ' . self::savepointName($depth - 1),
-            );
-        }
+        // The counter drops even when the statement fails: the level is
+        // gone either way, and a stuck counter would turn every later
+        // begin() on this connection into a SAVEPOINT outside a transaction.
         self::$depth[$connection] = $depth - 1;
+
+        if ($depth === 1) {
+            if ($pdo->inTransaction()) {
+                self::guard(static fn () => $pdo->rollBack(), 'ROLLBACK');
+            }
+        } else {
+            self::exec($pdo, 'ROLLBACK TO SAVEPOINT ' . self::savepointName($depth - 1));
+        }
     }
 
     public static function inTransaction(string $connection = 'default'): bool
@@ -168,7 +178,12 @@ final class Transaction
             self::commit($connection);
             return $result;
         } catch (\Throwable $e) {
-            self::rollback($connection);
+            try {
+                self::rollback($connection);
+            } catch (\Throwable) {
+                // The failure that brought us here is the one worth
+                // reporting (a dropped connection fails the rollback too).
+            }
             throw $e;
         }
     }
@@ -185,6 +200,26 @@ final class Transaction
             self::$depth = [];
         } else {
             unset(self::$depth[$connection]);
+        }
+    }
+
+    /**
+     * Savepoint statements go through `PDO::exec()`, not a prepared
+     * statement: MySQL refuses to prepare them when emulated prepares
+     * are off.
+     */
+    private static function exec(\PDO $pdo, string $sql): void
+    {
+        self::guard(static fn () => $pdo->exec($sql), $sql);
+    }
+
+    /** Runs a PDO call, turning a `\PDOException` into a `StorageException`. */
+    private static function guard(callable $call, string $sql): void
+    {
+        try {
+            $call();
+        } catch (\PDOException $e) {
+            throw StorageException::wrap($e, $sql);
         }
     }
 

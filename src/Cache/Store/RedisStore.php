@@ -100,8 +100,8 @@ final class RedisStore implements Store
         }
         $r = new \Redis();
         $host    = (string) ($this->config['host']    ?? '127.0.0.1');
-        $port    = (int)    ($this->config['port']    ?? 6379);
-        $timeout = (float)  ($this->config['timeout'] ?? 2.0);
+        $port    = (int) ($this->config['port']    ?? 6379);
+        $timeout = (float) ($this->config['timeout'] ?? 2.0);
 
         if (!@$r->connect($host, $port, $timeout)) {
             throw new \RuntimeException("Failed to connect to Redis at {$host}:{$port}");

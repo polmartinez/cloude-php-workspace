@@ -88,4 +88,46 @@ final class RouterTest extends TestCase
 
         self::assertTrue($triggered);
     }
+
+    public function testHeadFallsBackToTheGetRoute(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'HEAD';
+        $_SERVER['REQUEST_URI'] = '/foo';
+
+        $hit = null;
+        $router = new Router();
+        $router->post('/foo', function () use (&$hit): void {
+            $hit = 'post';
+        });
+        $router->get('/foo', function () use (&$hit): void {
+            $hit = 'get';
+        });
+
+        ob_start();
+        $router->dispatch();
+        ob_end_clean();
+
+        self::assertSame('get', $hit);
+    }
+
+    public function testExplicitHeadRouteWinsOverGet(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'HEAD';
+        $_SERVER['REQUEST_URI'] = '/foo';
+
+        $hit = null;
+        $router = new Router();
+        $router->get('/foo', function () use (&$hit): void {
+            $hit = 'get';
+        });
+        $router->add('/foo', function () use (&$hit): void {
+            $hit = 'head';
+        }, 'HEAD');
+
+        ob_start();
+        $router->dispatch();
+        ob_end_clean();
+
+        self::assertSame('head', $hit);
+    }
 }

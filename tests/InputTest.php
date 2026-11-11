@@ -110,7 +110,7 @@ final class InputTest extends TestCase
             $_SERVER['REQUEST_URI'] = $bad;
             // Must return SOMETHING starting with '/' and not throw.
             $path = Input::uri();
-            self::assertStringStartsWith('/', $path, "broke on REQUEST_URI=" . var_export($bad, true));
+            self::assertStringStartsWith('/', $path, 'broke on REQUEST_URI=' . var_export($bad, true));
         }
     }
 
@@ -125,5 +125,19 @@ final class InputTest extends TestCase
 
         self::assertSame('Ada', Input::post('name'));
         self::assertSame(['name' => 'Ada'], Input::post());
+    }
+
+    public function testHeaderReadsContentTypeAndLength(): void
+    {
+        // PHP exposes these two without the HTTP_ prefix.
+        unset($_SERVER['HTTP_CONTENT_TYPE'], $_SERVER['HTTP_CONTENT_LENGTH']);
+        $_SERVER['CONTENT_TYPE']   = 'application/json';
+        $_SERVER['CONTENT_LENGTH'] = '42';
+        $_SERVER['HTTP_X_REQUEST_ID'] = 'abc';
+
+        self::assertSame('application/json', Input::header('Content-Type'));
+        self::assertSame('42', Input::header('content-length'));
+        self::assertSame('abc', Input::header('X-Request-Id'));
+        self::assertSame('none', Input::header('X-Missing', 'none'));
     }
 }
