@@ -65,7 +65,7 @@ one of these axioms.
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
 
-## Recent additions (v2.12 → v2.23)
+## Recent additions (v2.12 → v2.24)
 
 For an AI working from older knowledge of this framework: these public
 surfaces exist, and a few behaviours changed. Call forms are in the
@@ -83,6 +83,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 | v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
 | v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
 | v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.24.0 | Every push and pull request runs the suite on PHP 8.3 / 8.4 / 8.5 with `--fail-on-deprecation`, against real PostgreSQL and MySQL, plus a style check | A change is not done until that workflow is green. Deprecations, driver-specific SQL and style diffs fail there even when the local run passes — see [testing → When a CI job is red](docs/agents/testing.md#when-a-ci-job-is-red) |
 | v2.23.2 | Tests must not call `Reflection*::setAccessible()` or `curl_close()` (deprecated in PHP 8.5); the runner reports deprecations in a block after the summary | Read private members with `ReflectionProperty::getValue()` / `ReflectionMethod::invoke()` directly. Treat a `Deprecations (n):` block as something to fix |
 | v2.23.0 | `Model::upsert()` / `Query::upsert()` exist; `updateOrCreate()` is no longer the only "insert or update" | Use `upsert()` when a UNIQUE index or the PK covers the match columns (atomic, one statement); keep `updateOrCreate()` for the rest |
 | v2.22.0 | `new Query($pdo, $table)` / `new PdoStorage($pdo, $table)` pick the identifier quote from the PDO driver | Don't pass a quote character; don't write backticks or `"` in SQL fragments you hand to `selectRaw` / `havingRaw` if the code must run on both MySQL and PostgreSQL |

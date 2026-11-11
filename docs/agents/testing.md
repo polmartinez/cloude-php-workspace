@@ -214,6 +214,37 @@ dev dependencies — a style rule can differ from an older local
 php-cs-fixer; run `composer update` and `composer cs-fix` if only the
 style job fails.
 
+### When a CI job is red
+
+| Failing step | Usual cause | Fix |
+|---|---|---|
+| `Run the test suite`, verdict `FAILED` with a `Deprecations (n):` block and no `F` / `E` | Code calls something deprecated on that PHP version (most often only the 8.5 job) | Replace the call — see [Supported PHP](#supported-php). Reproduce with `php8.5 bin/cloude-test --fail-on-deprecation` |
+| `Run the test suite`, only on 8.3 | Syntax or a function newer than 8.3 | Rewrite for 8.3; reproduce with `docker run --rm -v "$PWD":/app -w /app php:8.3-cli php bin/cloude-test` |
+| `Run the test suite`, in `PgsqlIntegrationTest` / `MysqlIntegrationTest` only | SQL that one server rejects, or a result typed differently by that driver | [`databases.md`](databases.md); reproduce by exporting the `CLOUDE_TEST_*` variables against a local server |
+| `Lint every PHP file` | Parse error, or a compile-time deprecation, in a file no test loads (`examples/`, `config/`) | The step prints the offending lines; fix the file |
+| `Check code style` | Formatting diff, possibly from a newer php-cs-fixer than the local one | `composer update && composer cs-fix`, commit the result |
+| `Install dependencies` on one version | A dev dependency does not support that PHP yet | Constrain or replace the dev dependency; never raise the framework's minimum PHP to get CI green |
+| A service container never becomes healthy | Image or health-check problem, not the code | Re-run the job; if it persists, check the `services:` block |
+
+A red job is never fixed by deleting the test, adding
+`markTestSkipped()` to it, dropping `--fail-on-deprecation`, or
+removing a PHP version from the matrix.
+
+### Changing the workflow
+
+- **New PHP version**: add it to `matrix.php` in `tests.yml`; keep the
+  oldest entry equal to `"php"` in `composer.json` and to the version
+  the `code-style` job uses.
+- **New PHP extension needed by a test**: add it to `extensions:` in
+  the `tests` job, and make the test skip itself when the extension is
+  missing so local runs stay green.
+- **New service-backed test** (Redis, Memcached, …): add the service
+  under `services:`, export its address as `CLOUDE_TEST_<NAME>_*` in
+  `env:`, and gate the test on that variable with `markTestSkipped()`.
+- Credentials in the workflow are for throwaway containers. Never put
+  a real secret in the file — use `${{ secrets.NAME }}`.
+- Keep `permissions: contents: read`; the workflow publishes nothing.
+
 ## Before calling a change done
 
 1. `vendor/bin/cloude-test` — `OK`, and no `Deprecations` block.

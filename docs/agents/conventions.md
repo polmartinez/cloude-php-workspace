@@ -76,6 +76,15 @@ Tables of what to avoid, and how to check a change on each version:
   (`PDO::MYSQL_ATTR_*` → `Pdo\Mysql::ATTR_*` exists only from 8.4, so
   avoid both and pass such options through the DSN or config).
 
+## Keeping CI green
+
+- CI is stricter than a local run: three PHP versions, deprecations
+  fail, both SQL servers are present. Assume a change is unverified
+  until the `tests` workflow passes.
+- Fix the cause of a red job; don't skip the test, relax the flag or
+  shrink the matrix. Table of causes and fixes:
+  [`testing.md`](testing.md#when-a-ci-job-is-red).
+
 ## Anti-patterns
 
 Don't:
