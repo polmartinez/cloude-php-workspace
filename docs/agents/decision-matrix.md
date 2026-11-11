@@ -25,6 +25,7 @@
 |---|---|---|
 | Request method | `Input::method()` | Uppercase, defaults to `'GET'`. The Router answers a `HEAD` with the matching `GET` route when no `HEAD` route exists |
 | URI path (no query string) | `Input::uri()` | Normalized; double slashes collapsed |
+| Route parameters | `$router->get('/libro/{slug}', fn (array $p) => $p['slug'])` | Percent-decoded (`caf%C3%A9` → `café`) since v2.19.0 — don't decode again. Matching runs on the raw path, so an encoded `%2F` stays inside its segment |
 | Query-string param | `Input::get('q')` / `Input::get('q', 'default')` / `Input::get()` (full `$_GET`) | |
 | POST field | `Input::post('email')` / `Input::post('email', '')` / `Input::post()` (full `$_POST`) | |
 | Raw `$_SERVER` key | `Input::server('REMOTE_ADDR')` / `Input::server('HTTP_X_TENANT', 'public')` / `Input::server()` (full `$_SERVER`) | Case-sensitive — use canonical upper-snake (`HTTP_*`, `REMOTE_ADDR`, `PATH_INFO`, ...). Prefer the typed helpers when one exists |

@@ -191,7 +191,7 @@ class Router
 
     /**
      * Matches a URI against a compiled pattern. Returns the named-parameter
-     * array, or false if it does not match.
+     * array (percent-decoded), or false if it does not match.
      *
      * @return array<string,string>|false
      */
@@ -199,7 +199,11 @@ class Router
     {
         $regex = self::compile($pattern);
         if (preg_match($regex, $uri, $matches)) {
-            return array_filter($matches, fn ($k) => !is_int($k), ARRAY_FILTER_USE_KEY);
+            $params = array_filter($matches, fn ($k) => !is_int($k), ARRAY_FILTER_USE_KEY);
+            // Matching runs on the raw path (an encoded `%2F` never splits
+            // a segment); handlers get the decoded value. `rawurldecode`,
+            // not `urldecode`: in a path a `+` is a plus sign, not a space.
+            return array_map(rawurldecode(...), $params);
         }
         return false;
     }

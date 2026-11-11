@@ -130,4 +130,23 @@ final class RouterTest extends TestCase
 
         self::assertSame('head', $hit);
     }
+
+    public function testRouteParametersArePercentDecoded(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/libro/caf%C3%A9%20con%20leche/a%2Fb/c+d';
+
+        $captured = null;
+        $router = new Router();
+        $router->get('/libro/{slug}/{path}/{plus}', function (array $p) use (&$captured): void {
+            $captured = $p;
+        });
+
+        ob_start();
+        $router->dispatch();
+        ob_end_clean();
+
+        self::assertSame('café con leche', $captured['slug']);
+        self::assertSame('a/b', $captured['path'], 'an encoded slash stays inside its segment');
+        self::assertSame('c+d', $captured['plus'], 'a plus in a path is a plus');
+    }
 }
