@@ -42,6 +42,7 @@ final class Runner
 
     private int $passed = 0;
     private int $failed = 0;
+    private int $skipped = 0;
     private int $errors = 0;
 
     /** @var list<array{label:string, message:string, trace:string}> */
@@ -283,6 +284,11 @@ final class Runner
         $instance = new $class();
         try {
             $instance->runSetUp();
+        } catch (SkippedTestException) {
+            $this->skipped++;
+            fwrite(STDOUT, 'S');
+            $this->safeTearDown($instance);
+            return;
         } catch (\Throwable $e) {
             $this->recordError($label . ' (setUp)', $e);
             fwrite(STDOUT, 'E');
@@ -296,6 +302,11 @@ final class Runner
             $instance->{$method}(...$args);
             $expectedException = $instance->getExpectedException();
             $expectedMessage   = $instance->getExpectedExceptionMessage();
+        } catch (SkippedTestException) {
+            $this->skipped++;
+            fwrite(STDOUT, 'S');
+            $this->safeTearDown($instance);
+            return;
         } catch (AssertionFailedException $e) {
             $this->failed++;
             $this->failures[] = [
@@ -427,7 +438,8 @@ final class Runner
             . ', Tests: ' . $total
             . ', Asserts: ' . $asserts
             . ', Failures: ' . $this->failed
-            . ', Errors: ' . $this->errors . "\n";
+            . ', Errors: ' . $this->errors
+            . ($this->skipped > 0 ? ', Skipped: ' . $this->skipped : '') . "\n";
 
         $ok = ($this->failed + $this->errors) === 0;
 

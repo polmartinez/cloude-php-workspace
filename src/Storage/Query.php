@@ -8,9 +8,11 @@ use Cloude\Cache\Cache;
 
 /**
  * Minimal SQL query builder. SELECT / INSERT / UPDATE / DELETE plus
- * WHERE, JOIN, ORDER BY, LIMIT, OFFSET. Defaults to backtick identifier
- * quoting (MySQL / SQLite) — pass `'"'` as the third constructor arg
- * for Postgres (or `Identifier::quoteCharFor($pdo)` to auto-detect).
+ * WHERE, JOIN, ORDER BY, LIMIT, OFFSET. Works on MySQL, SQLite and
+ * PostgreSQL: identifier quoting and the few dialect differences
+ * (`RETURNING` on insert, `LIMIT` on UPDATE / DELETE) follow the PDO
+ * driver. Pass a quote character as the third constructor arg only to
+ * override that.
  *
  * Designed to cover the 80% of queries you write by hand without
  * re-implementing a full SQL grammar. **Does ship:**
@@ -86,8 +88,8 @@ use Cloude\Cache\Cache;
  *   $count = $q->where(...)->update(['active' => 0]);
  *   $count = $q->where(...)->delete();
  *
- * UPDATE/DELETE accept ORDER BY + LIMIT but those are MySQL/SQLite
- * extensions. Postgres throws on execute.
+ * UPDATE/DELETE accept ORDER BY + LIMIT on every driver (PostgreSQL
+ * gets an equivalent `ctid IN (SELECT ...)` form).
  *
  * Debugging:
  *
@@ -100,6 +102,7 @@ final class Query
     private const ALLOWED_OPS = [
         '=', '!=', '<>', '<', '<=', '>', '>=',
         'LIKE', 'NOT LIKE',
+        'ILIKE', 'NOT ILIKE',           // PostgreSQL: case-insensitive LIKE
         'IN', 'NOT IN',
         'BETWEEN', 'NOT BETWEEN',
         'IS NULL', 'IS NOT NULL',
@@ -136,13 +139,24 @@ final class Query
     private ?string $cacheKey = null;
     private ?string $cacheStore = null;
 
+    private string $quoteChar;
+
+    /** PDO driver name (`mysql`, `pgsql`, `sqlite`, …) — picks the dialect. */
+    private string $driver;
+
+    /**
+     * `$quoteChar` left null picks the identifier quote from the PDO
+     * driver: `"` for PostgreSQL, a backtick for MySQL / SQLite.
+     */
     public function __construct(
         private \PDO $pdo,
         string|TableRef $table,
-        private string $quoteChar = '`',
+        ?string $quoteChar = null,
     ) {
         $this->table = $table;
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $this->driver    = (string) $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+        $this->quoteChar = $quoteChar ?? Identifier::quoteCharFor($this->pdo);
     }
 
     public function pdo(): \PDO
@@ -471,7 +485,22 @@ final class Query
         // SELECT in a derived table and count the groups instead — the
         // useful semantics (how many distinct groups matched).
         if ($this->groups !== []) {
-            [$inner, $params] = $this->buildSelect();
+            // With no columns chosen, `SELECT *` under GROUP BY is
+            // rejected by PostgreSQL (and MySQL's ONLY_FULL_GROUP_BY):
+            // the groups are all that matters here, select a constant.
+            $bare = $this->select === ['*'] && $this->selectRaw === [];
+            if ($bare) {
+                $this->select    = [];
+                $this->selectRaw = ['1'];
+            }
+            try {
+                [$inner, $params] = $this->buildSelect();
+            } finally {
+                if ($bare) {
+                    $this->select    = ['*'];
+                    $this->selectRaw = [];
+                }
+            }
             $sql = 'SELECT COUNT(*) FROM (' . $inner . ') AS cloude_grp_count';
             return $this->remember($sql, $params, function () use ($sql, $params): int {
                 $stmt = StorageException::execute($this->pdo, $sql, $params);
@@ -535,9 +564,15 @@ final class Query
     /**
      * INSERT one row. Returns the auto-generated primary key (or null).
      *
+     * MySQL / SQLite report the key through `lastInsertId()`. PostgreSQL
+     * has no such thing per statement, so the INSERT carries a
+     * `RETURNING` clause there: the value of `$returning` when given,
+     * otherwise of the `id` column (null when the table has none).
+     * `$returning` is ignored on the other drivers.
+     *
      * @param array<string,mixed> $data
      */
-    public function insert(array $data): mixed
+    public function insert(array $data, ?string $returning = null): mixed
     {
         if ($data === []) {
             throw new \InvalidArgumentException('insert() requires at least one column');
@@ -546,6 +581,13 @@ final class Query
         $sql = 'INSERT INTO ' . $this->qualifyTable($this->table)
             . ' (' . implode(', ', array_map(fn (string $c) => $this->q($c), $cols)) . ')'
             . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
+
+        if ($this->driver === 'pgsql') {
+            $sql .= ' RETURNING ' . ($returning !== null ? $this->q($returning) : '*');
+            $row = StorageException::execute($this->pdo, $sql, array_values($data))->fetch(\PDO::FETCH_ASSOC);
+            return is_array($row) ? ($row[$returning ?? 'id'] ?? null) : null;
+        }
+
         StorageException::execute($this->pdo, $sql, array_values($data));
 
         $last = $this->pdo->lastInsertId();
@@ -715,13 +757,11 @@ final class Query
             $set[] = $this->q($col) . ' = ?';
             $params[] = $val;
         }
-        [$where, $whereParams] = $this->buildWhere($this->wheres);
+        [$tail, $tailParams] = $this->buildMutationTail();
         $sql = 'UPDATE ' . $this->qualifyTable($this->table)
             . ' SET ' . implode(', ', $set)
-            . $where
-            . $this->buildOrderBy()
-            . $this->buildLimit();
-        return [$sql, array_merge($params, $whereParams)];
+            . $tail;
+        return [$sql, array_merge($params, $tailParams)];
     }
 
     /**
@@ -729,12 +769,32 @@ final class Query
      */
     private function buildDelete(): array
     {
+        [$tail, $params] = $this->buildMutationTail();
+        return ['DELETE FROM ' . $this->qualifyTable($this->table) . $tail, $params];
+    }
+
+    /**
+     * WHERE / ORDER BY / LIMIT for an UPDATE or DELETE.
+     *
+     * MySQL and SQLite take `ORDER BY ... LIMIT n` on the statement
+     * itself. PostgreSQL does not, so there the rows are picked by a
+     * sub-select on the row's physical id:
+     *
+     *   ... WHERE ctid IN (SELECT ctid FROM t WHERE ... ORDER BY ... LIMIT n)
+     *
+     * @return array{0:string, 1:list<mixed>}
+     */
+    private function buildMutationTail(): array
+    {
         [$where, $params] = $this->buildWhere($this->wheres);
-        $sql = 'DELETE FROM ' . $this->qualifyTable($this->table)
-            . $where
-            . $this->buildOrderBy()
-            . $this->buildLimit();
-        return [$sql, $params];
+        $rest = $this->buildOrderBy() . $this->buildLimit();
+
+        if ($this->driver === 'pgsql' && ($this->limit !== null || $this->offset !== null)) {
+            $sql = ' WHERE ctid IN (SELECT ctid FROM ' . $this->qualifyTable($this->table)
+                . $where . $rest . ')';
+            return [$sql, $params];
+        }
+        return [$where . $rest, $params];
     }
 
     /**

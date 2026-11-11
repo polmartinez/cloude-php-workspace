@@ -133,7 +133,7 @@ final class Factory
             Connection::pdo($name),
             $table,
             (string) ($config['primary_key'] ?? 'id'),
-            (string) ($config['quote_char'] ?? '`'),
+            isset($config['quote_char']) ? (string) $config['quote_char'] : null,   // null → from the driver
         );
     }
 

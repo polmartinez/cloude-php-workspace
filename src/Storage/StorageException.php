@@ -75,8 +75,14 @@ class StorageException extends \RuntimeException
             // SQLite + Postgres. We honor the caller's PHP type so
             // string-typed digits like '0123' stay strings.
             // List → positional `?`; string keys → named `:placeholders`.
+            // PostgreSQL takes a typed boolean only for boolean columns
+            // ('t' into a SMALLINT fails); 1 / 0 it accepts for both.
+            $boolAsInt = $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql';
             $i = 1;
             foreach ($params as $key => $value) {
+                if ($boolAsInt && is_bool($value)) {
+                    $value = (int) $value;
+                }
                 $stmt->bindValue(is_string($key) ? $key : $i++, $value, self::paramType($value));
             }
             $stmt->execute();

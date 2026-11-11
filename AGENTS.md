@@ -63,7 +63,7 @@ one of these axioms.
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
 
-## Recent additions (v2.12 → v2.21)
+## Recent additions (v2.12 → v2.22)
 
 For an AI working from older knowledge of this framework: these public
 surfaces exist, and a few behaviours changed. Call forms are in the
@@ -81,6 +81,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 | v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
 | v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
 | v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.22.0 | `new Query($pdo, $table)` / `new PdoStorage($pdo, $table)` pick the identifier quote from the PDO driver | Don't pass a quote character; don't write backticks or `"` in SQL fragments you hand to `selectRaw` / `havingRaw` if the code must run on both MySQL and PostgreSQL |
 | v2.21.0 | Automatic `Query::cache()` keys cover the connection too | Nothing — unless the `Query` was built on a PDO outside `Connection`'s pool: then pass `key:` |
 
 ### New surfaces
@@ -135,3 +136,13 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   typed binding. `$params` is a list for `?` or `name => value` for
   `:name` (v2.18.0).
 - **`Connection::nameOf($pdo)`** (v2.21.0) — pool name of a PDO, or null.
+- **PostgreSQL** (v2.22.0) — a `pgsql:` DSN is all it takes. `Query`,
+  `PdoStorage`, `Model`, `Transaction` and `Schema` adapt to the
+  driver: `"`-quoted identifiers, generated keys through `RETURNING`
+  (`$q->insert($data, returning: 'col')`; default column `id`),
+  `LIMIT` on UPDATE / DELETE, booleans into `BOOLEAN` or integer
+  columns, `ILIKE`. `Schema::createTableSql(..., 'pgsql')` emits
+  identity columns, PostgreSQL type names and trailing
+  `CREATE INDEX` / `COMMENT ON` statements in one string.
+- **`$this->markTestSkipped($reason)`** (v2.22.0) — on
+  `Cloude\Testing\TestCase`; the runner reports `Skipped: n`.

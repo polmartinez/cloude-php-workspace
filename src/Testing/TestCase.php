@@ -124,6 +124,16 @@ abstract class TestCase
         $this->expectedExceptionMessage = $message;
     }
 
+    /**
+     * Stop the test here and report it as skipped — for a test that
+     * needs something this machine does not have (a database server, a
+     * PHP extension). Call it from the test or from `setUp()`.
+     */
+    public function markTestSkipped(string $reason = ''): never
+    {
+        throw new SkippedTestException($reason);
+    }
+
     // ── time freezing ─────────────────────────────────────────────────────
 
     /**

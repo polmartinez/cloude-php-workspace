@@ -37,10 +37,17 @@ final class PdoStorage implements Storage
         private \PDO $pdo,
         private string $table,
         private string $primaryKey = 'id',
-        private string $quoteChar = '`',
+        ?string $quoteChar = null,
     ) {
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $this->driver    = (string) $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+        // Null → from the driver: `"` on PostgreSQL, a backtick elsewhere.
+        $this->quoteChar = $quoteChar ?? Identifier::quoteCharFor($this->pdo);
     }
+
+    private string $quoteChar;
+
+    private string $driver;
 
     /**
      * Escape hatch for raw SQL. Use when neither `findBy()` nor the
@@ -128,6 +135,15 @@ final class PdoStorage implements Storage
         $sql = 'INSERT INTO ' . $this->q($this->table)
             . ' (' . implode(', ', array_map($this->q(...), $cols)) . ')'
             . ' VALUES (' . implode(', ', array_fill(0, count($cols), '?')) . ')';
+
+        // PostgreSQL has no per-statement lastInsertId(): LASTVAL() answers
+        // with the last sequence used in the session — another table's,
+        // or an error. The row itself says what the key is.
+        if ($this->driver === 'pgsql') {
+            $row = \Cloude\Storage\StorageException::execute($this->pdo, $sql . ' RETURNING *', array_values($data))
+                ->fetch(\PDO::FETCH_ASSOC);
+            return $data[$this->primaryKey] ?? (is_array($row) ? ($row[$this->primaryKey] ?? null) : null);
+        }
 
         \Cloude\Storage\StorageException::execute($this->pdo, $sql, array_values($data));
 

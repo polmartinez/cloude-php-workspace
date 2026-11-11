@@ -314,6 +314,7 @@ foreach (User::foreignKeysSql() as $sql) $pdo->exec($sql);
 | Relational data (MySQL / Postgres / SQLite) | `class Foo extends Cloude\Model\Model` + `PdoStorage` | [`examples/recipes/model.php`](examples/recipes/model.php) |
 | Save a loaded model | `$u = User::find(1); $u->name = 'Ada'; $u->save();` | Sends only the changed columns; no change → no query. `$u->isDirty()`, `$u->isDirty('name')`, `$u->dirty()`. See [`docs/agents/model-schema.md`](docs/agents/model-schema.md) |
 | Upsert by lookup keys | `User::updateOrCreate(['email' => $e], ['name' => $n])` | Update the matching row or create `$match + $values`. Not atomic — UNIQUE index + `Transaction::run()` when calls can race |
+| PostgreSQL instead of MySQL | `'dsn' => 'pgsql:host=…;dbname=…'` in the storage config | No other change: quoting, generated keys (`RETURNING`), `LIMIT` on UPDATE / DELETE and booleans follow the driver. DDL: `Schema::createTableSql(…, 'pgsql')`, `User::indexesSql('pgsql')` |
 | Same model, in-memory (tests) | `Cloude\Model\Storage\ArrayStorage` | [`tests/Model/ModelTest.php`](tests/Model/ModelTest.php) |
 | Rich SQL queries (`>`, `<`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`, multi-`ORDER BY`) | `User::query()->where(...)->orderBy(...)->limit(...)->get()` | [`src/Storage/Query.php`](src/Storage/Query.php), [`tests/Storage/QueryTest.php`](tests/Storage/QueryTest.php) |
 | Nested WHERE groups (mix AND/OR with parens) | `$q->where(...)->whereGroup(fn ($g) => $g->where(...)->orWhere(...))->orWhereGroup(...)` | [`src/Storage/Query.php`](src/Storage/Query.php) |
