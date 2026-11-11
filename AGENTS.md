@@ -63,42 +63,75 @@ one of these axioms.
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
 
-## Recent additions (post-v2.11)
+## Recent additions (v2.12 → v2.21)
 
-A reminder for AIs working off slightly stale knowledge that these
-public surfaces exist. Full details in the
-[decision matrix](docs/agents/decision-matrix.md).
+For an AI working from older knowledge of this framework: these public
+surfaces exist, and a few behaviours changed. Call forms are in the
+[decision matrix](docs/agents/decision-matrix.md); model details in
+[model-schema](docs/agents/model-schema.md).
 
-- **`Cloude\Cache\Cache`** (v2.12.0) — static cache façade with four
-  drivers: `array` (in-process), `file` (one file per key), `redis`
-  (`ext-redis`), `memcached` (`ext-memcached`). Configure in
-  `config/cache.php`. Disabled by default (`'default' => false`)
-  until the app opts in. API: `get / put / has / forget / flush /
-  remember`. `Cache::remember('k', $ttl, fn () => $heavy())` is the
-  pattern to reach for.
-- **`Query::cache($ttl, $key?, $store?)`** (v2.12.0) — opt-in caching
-  on every SELECT terminal of `Cloude\Storage\Query`
-  (`get / first / count / value / pluck`). Auto-key from
-  `sha1(connection + sql + bindings)`. See [`examples/recipes/cache.php`](examples/recipes/cache.php).
-- **`Query::groupBy / havingRaw / selectRaw`** (v2.13.0) — GROUP BY,
-  HAVING (raw expression with parameterized bindings), and aggregate
-  SELECT columns. `count()` auto-wraps in a subquery when GROUP BY
-  is set so it stays a scalar (returns number of groups).
-- **`Cloude\Bootstrap::setEnv($env)` / `Bootstrap::env()` /
-  `Bootstrap::$env`** (v2.14.0) — explicit application-environment
-  selection. Drives the per-env config overlay (`config/production/`,
-  `config/staging/`, ...) which deep-merges over the base configs.
-  Call BEFORE `Config::configure()` for ordered loading.
-- **`Cloude\Input::server($key?, $default?)`** (v2.14.1) — escape
-  hatch for raw `$_SERVER` keys not covered by the typed helpers
-  (`method`, `uri`, `header`, `ip`).
-- **`Cloude\Str::sub($text, $start, $len?)` / `Str::len($text)`**
-  (v2.14.2) — multibyte-safe wrappers over `mb_substr` / `mb_strlen`.
-  `Str::truncate()` was also fixed in v2.12.1 to **never exceed the
-  max length** (ellipsis budget comes OUT of `$length`, not on top).
-- **`Model::save()` writes only changed columns** (v2.20.0) — plus
-  `$model->isDirty(?string $attribute)` and `$model->dirty()`. A save
-  with nothing changed makes no storage call. Values are compared in
-  storage form, after the write-side casts.
-- **Router** (v2.18.0 / v2.19.0) — a `HEAD` request falls back to the
-  matching `GET` route; route parameters arrive percent-decoded.
+### Behaviour changes — read these first
+
+| Since | What changed | What to do in code you write |
+|---|---|---|
+| v2.12.1 | `Str::truncate($s, $max)` never returns more than `$max` characters; the ellipsis counts | Pass the real limit; don't subtract 3 yourself |
+| v2.13.0 | Query / storage bindings are typed from the PHP value (`int` → integer, `bool` → boolean, `null` → NULL, anything else string) | Pass numbers as `int`, not `'5'`, when comparing against aggregates (`havingRaw('COUNT(*) > ?', [5])`) |
+| v2.18.0 | A `HEAD` request with no `HEAD` route runs the matching `GET` route | Don't register duplicate `HEAD` routes |
+| v2.18.0 | Line breaks in mail header values (subject, reply-to, addresses, custom headers) are collapsed to a space | Pass form input straight to `Mailer::send()`; no sanitising of your own needed for headers |
+| v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
+| v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
+| v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.21.0 | Automatic `Query::cache()` keys cover the connection too | Nothing — unless the `Query` was built on a PDO outside `Connection`'s pool: then pass `key:` |
+
+### New surfaces
+
+- **`Cloude\Cache\Cache`** (v2.12.0) — static cache façade:
+  `get / put / has / forget / flush / remember`, `Cache::store('name')`.
+  Drivers `array`, `file`, `redis` (`ext-redis`), `memcached`
+  (`ext-memcached`), configured in `config/cache.php` with one
+  top-level key per store plus `default`. **Off by default**
+  (`'default' => false` → every call is a no-op) until the app names a
+  driver. `Cache::remember('k', $ttl, fn () => $heavy())` is the
+  pattern to reach for. Not to be confused with `Cloude\Http\Cache`
+  (response headers).
+- **`Query::cache($ttl, $key?, $store?)`** (v2.12.0) — caches every
+  SELECT terminal (`get / first / count / value / pluck`). Automatic
+  key: `sha1(connection + sql + bindings)`. Pass `key:` when you need
+  to `Cache::forget()` it after a write.
+  See [`examples/recipes/cache.php`](examples/recipes/cache.php).
+- **`Query::groupBy / havingRaw / selectRaw`** (v2.13.0) —
+  `selectRaw('COUNT(*)', 'n')` adds an unquoted expression,
+  `havingRaw('COUNT(*) > ?', [10])` takes bound values, `count()` on a
+  grouped query returns the number of groups.
+- **`Bootstrap::setEnv($env)` / `Bootstrap::env()`** (v2.14.0) — names
+  the environment; `config/<env>/*.php` deep-merges over the base
+  config. Call before `Config::configure()`.
+- **`Input::server($key?, $default?)`** (v2.14.1) — raw `$_SERVER`
+  access. `Input::header('Content-Type')` works since v2.18.0.
+  `Input::uri()` returns `/` for a malformed request URI instead of
+  throwing (v2.17.1).
+- **`Str::sub()` / `Str::len()`** (v2.14.2) — `mb_substr` / `mb_strlen`.
+- **`config/session.php`** (v2.15.0 / v2.16.0) — `cookie_lifetime`,
+  `cookie_samesite`, `cookie_secure`, `cookie_httponly`, `cookie_path`,
+  `cookie_domain`, `gc_maxlifetime`, `name`, `save_path`, and
+  `handler` (`files` | `redis` | `memcached`, each with its own block).
+  `Session::*` picks it up on its lazy start; no code change. Set
+  `gc_maxlifetime` together with `cookie_lifetime`.
+- **`Http\Cache::ok($stimeout = 86400, $timeout = 0)`** — first
+  argument is the CDN lifetime (`s-maxage`), second the browser's
+  (`max-age`).
+- **`Model::updateOrCreate($match, $values = [])`** (v2.17.0) — finds
+  the row matching every `$match` pair and updates it with `$values`,
+  or creates `$match + $values`. Not atomic: back it with a UNIQUE
+  index and `Transaction::run()` when calls can race.
+- **`Markdown::toSafeHtml($md)`** / `Parser::toHtml($md, safe: true)`
+  — for text you did not write (comments, customer notes, model
+  output). `Markdown::toHtml()` lets inline HTML through and is for
+  your own content only. Italic inside bold renders (v2.17.2).
+- **`$model->isDirty(?string $attribute)` / `$model->dirty()`**
+  (v2.20.0) — whether, and what, `save()` would write.
+- **`StorageException::execute($pdo, $sql, $params)`** — the one place
+  to run hand-written SQL with the framework's error wrapping and
+  typed binding. `$params` is a list for `?` or `name => value` for
+  `:name` (v2.18.0).
+- **`Connection::nameOf($pdo)`** (v2.21.0) — pool name of a PDO, or null.

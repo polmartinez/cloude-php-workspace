@@ -289,6 +289,13 @@ $router->dispatch();
 `{name}` segments are extracted into an associative array and passed as the
 first handler argument.
 
+Parameter values are percent-decoded (`/libro/caf%C3%A9` gives
+`$params['slug'] === 'café'`); matching runs on the raw path, so an
+encoded `%2F` stays inside its segment. Don't decode them again.
+
+A `HEAD` request with no `HEAD` route of its own is answered by the
+matching `GET` route.
+
 **Pattern syntax:**
 
 | Form | Meaning |
@@ -328,9 +335,13 @@ Input::get('q');            // $_GET['q'] or null
 Input::post('name');        // $_POST['name'] or null
 Input::json();              // decodes JSON body into an array
 Input::body();              // raw request body
-Input::header('User-Agent');
+Input::header('User-Agent');   // also 'Content-Type' / 'Content-Length'
+Input::server('REMOTE_ADDR');  // any $_SERVER key; Input::server() for all of it
 Input::ip(trustProxy: false);
 ```
+
+`Input::uri()` returns `/` when the request URI is malformed (scanner
+traffic), never an error.
 
 ### `Cloude\View`
 
@@ -719,6 +730,35 @@ coercion; `$indexes` / `$foreignKeys` are constraint metadata. The
 framework doesn't try to be a migration system — only to surface
 what the application already knows about its own data.
 
+### `Cloude\Model\Model` — saving, dirty tracking, upsert
+
+```php
+$u = User::find(1);
+$u->name = 'Ada Lovelace';
+$u->save();               // UPDATE users SET name = ? WHERE id = ?
+$u->save();               // nothing changed → storage is not called
+
+$u->isDirty();            // would save() write anything?
+$u->isDirty('name');
+$u->dirty();              // columns save() would write, in storage form
+
+User::updateOrCreate(
+    ['email' => 'a@b.com'],                // lookup keys
+    ['name' => 'Ada', 'active' => 1],      // values to set
+);
+```
+
+`save()` on a loaded model sends only the columns that differ from the
+row as it was read (or last saved). The comparison happens after the
+write-side casts, so a driver returning `'36'` for an `int` column is
+not a change. Columns set in `beforeSave()` are written like any other
+change; `afterSave()` runs even when nothing was written.
+
+`updateOrCreate()` updates the row matching every `$match` pair, or
+creates one from `$match + $values`. It is a read followed by a write:
+where two calls can race, put a UNIQUE index on the `$match` columns
+and wrap the call in `Transaction::run()`.
+
 ### `Cloude\Model\Model` — `$types` (attribute coercion details)
 
 Declare a `$types` map on the subclass and the framework normalises
@@ -997,6 +1037,9 @@ Failures surface as `Cloude\Storage\StorageException` (or one of its
 specialised subclasses), not raw `\PDOException` — same wrapping the
 Query builder already does.
 
+The outermost level is PDO's own transaction, so `$pdo->inTransaction()`
+agrees with `Transaction::inTransaction()`. Inner levels are SAVEPOINTs.
+
 #### Closure form (recommended)
 
 ```php
@@ -1245,6 +1288,31 @@ Session::start([], cookieParams: [
 "remember me" cookies, login throttling, OAuth / OIDC clients,
 session-backed queue. Build those on top using `Cloude\Model` for
 storage and `Session` for the cookie layer.
+
+
+#### Configuration (`config/session.php`)
+
+Applied when the session starts (including the automatic start on first
+use). The framework ships defaults; `app/config/session.php` overrides
+key by key.
+
+```php
+return [
+    'cookie_lifetime' => 86400 * 30,     // seconds; 0 = until the browser closes
+    'gc_maxlifetime'  => 86400 * 30,     // server-side lifetime — set it with cookie_lifetime
+    'cookie_samesite' => 'Lax',          // also cookie_secure / cookie_httponly / cookie_path / cookie_domain
+    'name'            => 'MYAPP_SID',
+
+    'handler' => 'redis',                // 'files' (default) | 'redis' | 'memcached'
+    'redis'   => ['host' => '127.0.0.1', 'port' => 6379, 'database' => 0, 'password' => null, 'prefix' => 'sess:'],
+    // 'memcached' => ['servers' => ['127.0.0.1', 11211]],          // or a list of [host, port]
+    // 'save_path' => '/var/lib/php/sessions',                      // for 'files'
+];
+```
+
+`redis` needs `ext-redis`, `memcached` needs `ext-memcached`; a missing
+extension fails with a message that says so. Arguments passed to
+`Session::start($options, $cookieParams)` win over the config.
 
 ### `Cloude\Bootstrap`
 

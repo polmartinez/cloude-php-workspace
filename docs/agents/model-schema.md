@@ -55,6 +55,49 @@ class User extends \Cloude\Model\Model
 | `$indexes`     | `indexesSql()`                                    | `list<string>` of `CREATE [UNIQUE] INDEX` statements                                    |
 | `$foreignKeys` | `foreignKeysSql()`                                | `list<string>` of `ALTER TABLE ... ADD CONSTRAINT` statements                            |
 
+## Saving: insert, update, upsert
+
+```php
+$u = User::create(['email' => 'a@b.com', 'name' => 'Ada']);   // INSERT
+
+$u = User::find(1);
+$u->name = 'Ada Lovelace';
+$u->save();                 // UPDATE users SET name = ? WHERE id = ?
+$u->save();                 // nothing changed → no storage call
+
+$u->isDirty();              // would save() write anything?
+$u->isDirty('name');        // …this column?
+$u->dirty();                // ['name' => 'Ada Lovelace'] — columns save() would write
+
+User::updateOrCreate(
+    ['email' => 'a@b.com'],                 // lookup keys
+    ['name' => 'Ada', 'active' => 1],       // what to set
+);
+```
+
+Rules an agent can rely on:
+
+- **Update = changed columns only.** A loaded model remembers the row
+  as it was read (or last saved). `save()` compares in storage form —
+  after `Cast::write` — so `'36'` from the driver against an `int` 36,
+  or an equal array / `DateTime` assigned again, is not a change.
+- **No change, no query.** `beforeSave()` and `afterSave()` still run.
+  A column set inside `beforeSave()` (an `updated_at` stamp) is a
+  change like any other and gets written.
+- **The primary key is never written** by an update.
+- **`dirty()` is in storage form** (a `json` column shows the encoded
+  string). For a model not yet saved it returns the whole payload and
+  `isDirty()` is true.
+- **`refresh()`** re-reads the row and forgets unsaved changes.
+- **`updateOrCreate`**: `$values = []` means "return it, or create it
+  from `$match`". On the create path `$values` wins over `$match` for a
+  shared key. It is a read followed by a write — two concurrent calls
+  can both insert. Put a UNIQUE index on the `$match` columns and wrap
+  the call in `Transaction::run()`; the loser gets a
+  `DuplicateKeyException`.
+- **Testing**: `MockStorage::lastCall('update')` returns
+  `[$id, $changedColumns]` — only what changed.
+
 ## Recommended: auto-managed `created_at` / `updated_at`
 
 The framework intentionally ships no `$timestamps` built-in for this
