@@ -111,6 +111,8 @@
 
 ## Cache
 
+Full guide: [`cache.md`](cache.md).
+
 | You want to… | Use | Notes |
 |---|---|---|
 | Enable caching | Set `'default' => 'redis'` (or `'file'` / `'memcached'` / `'array'`) in `app/config/cache.php` | FW ships `default => false`, so every `Cache::*` call is a no-op `NullStore` until the app opts in. Named stores still work via `Cache::store('name')` even with `default => false` |
@@ -122,6 +124,7 @@
 | Reach a non-default store directly | `Cache::store('memcached')->set('foo', 1, 60)` | Same API as the façade — Store interface is 5 methods |
 | Inject a store (tests) | `Cache::set('default', new ArrayStore())` | The literal `'default'` resolves to whatever store the config names as default — swap once, works for every `Cache::*` call and every cached query |
 | Drivers | `array` (in-process, tests), `file` (one file per key under a dir), `redis` (ext-redis), `memcached` (ext-memcached) | Declare driver + driver-specific options per store in `config/cache.php` |
+| Survive a cache outage | `try { $v = Cache::remember(…, $load); } catch (\RuntimeException \| \RedisException) { $v = $load(); }` | A configured store that cannot be reached throws; it never falls back silently. Redis connection / auth / database errors are `RuntimeException("Failed to connect to Redis at host:port…")`, raised on the first call (connections are lazy) |
 
 ## Sessions / mail / MCP
 

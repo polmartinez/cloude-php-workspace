@@ -1659,6 +1659,40 @@ if (Cache::conditionalGet(filemtime($path))) {
 Default `$timeout = 0` lets the browser hit the CDN on every request
 and get an instant 304 via `conditionalGet()` when nothing's changed.
 
+### `Cloude\Cache\Cache` — values and query results
+
+Not the HTTP-header helper above: this one stores values.
+
+```php
+use Cloude\Cache\Cache;
+
+Cache::put('key', $value, 600);                    // seconds; 0 = no expiry
+Cache::get('key', $default);
+Cache::has('key');  Cache::forget('key');  Cache::flush();
+
+$rows = Cache::remember('top-articles', 300, fn () => Article::query()->limit(10)->get());
+
+User::query()->where('active', 1)->cache(300)->get();                      // cached SELECT
+User::query()->where('active', 1)->cache(300, key: 'users:active')->get();  // …with a key to forget
+
+Cache::store('fast')->set('k', $v, 30);            // a named store
+```
+
+Configured in `config/cache.php`: `default` names the store in use and
+every other top-level key is a store (`array`, `file`, `redis`,
+`memcached`). **The shipped default is `false`** — caching is off, the
+calls above are no-ops and queries run live — until
+`app/config/cache.php` sets, say, `'default' => 'redis'`.
+
+`redis` needs `ext-redis`, `memcached` needs `ext-memcached`. A store
+that is configured but cannot be reached throws (`RuntimeException`,
+"Failed to connect to Redis at host:port" for Redis); nothing falls
+back silently. `flush()` on Redis and Memcached removes only this
+app's `prefix`. In tests: `Cache::set('default', new ArrayStore())`.
+
+Drivers, guarantees and failure modes in detail:
+[`docs/agents/cache.md`](docs/agents/cache.md).
+
 ### `Cloude\Http\AssetUrl`
 
 ```php

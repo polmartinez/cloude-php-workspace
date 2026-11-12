@@ -50,6 +50,18 @@
   overwritten on a collision when named — `update: ['value',
   'updated_at']`.
 
+## Caching
+
+- Call `Cache::remember()` / `->cache($ttl)` unconditionally; with
+  caching off they just run the work. No "if cache enabled" branches.
+- Write with `Cache::put()`. `Cache::set()` registers a store object.
+- Give a cached query a `key:` whenever something must be able to
+  invalidate it, and `Cache::forget()` that key in `afterSave()`.
+- Keys are yours to namespace (`users:active`, `plan:12:targets`); the
+  store adds the app-wide `prefix`.
+- A store that is configured but unreachable throws — decide per call
+  site whether that is fatal. Details: [`cache.md`](cache.md).
+
 ## Database portability
 
 - Choose the database in `config/storage.php` (the DSN). Never pass a
