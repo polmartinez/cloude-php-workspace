@@ -402,6 +402,7 @@ CLOUDE_TEST_PGSQL_DSN='pgsql:host=127.0.0.1;dbname=cloude_test' \
   CLOUDE_TEST_PGSQL_USER=postgres CLOUDE_TEST_PGSQL_PASS=secret \
   composer test                            # also run the PostgreSQL integration tests (skipped without the DSN)
                                            # same for MySQL: CLOUDE_TEST_MYSQL_DSN / _USER / _PASS
+                                           # and Redis: CLOUDE_TEST_REDIS_HOST (+ _PORT), needs ext-redis
 /usr/local/opt/php@8.5/bin/php -d error_reporting=-1 vendor/bin/cloude-test
                                            # any other PHP binary: minimum is 8.3, must stay notice-free on 8.5
 composer cs-check                          # php-cs-fixer dry-run
@@ -415,8 +416,8 @@ guide, helper and assertion lists:
 [`docs/agents/testing.md`](docs/agents/testing.md).
 
 CI (`.github/workflows/tests.yml`) runs the suite on PHP 8.3, 8.4 and
-8.5 with `--fail-on-deprecation` and real PostgreSQL / MySQL services,
-plus `composer cs-check`.
+8.5 with `--fail-on-deprecation` and real PostgreSQL / MySQL / Redis
+services (a skipped test fails the job there), plus `composer cs-check`.
 
 Tests live under `tests/`. Use namespace `Cloude\Tests\` (or your own
 `App\Tests\` in consumer projects — just map it in `composer.json`).

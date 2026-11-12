@@ -103,14 +103,26 @@ final class RedisStore implements Store
         $port    = (int) ($this->config['port']    ?? 6379);
         $timeout = (float) ($this->config['timeout'] ?? 2.0);
 
-        if (!@$r->connect($host, $port, $timeout)) {
+        // phpredis reports a refused or timed-out connection by throwing,
+        // an older one by returning false: both end in the same error,
+        // which names the server instead of saying "Connection refused".
+        try {
+            $ok = @$r->connect($host, $port, $timeout);
+            if ($ok && !empty($this->config['password'])) {
+                $ok = (bool) $r->auth((string) $this->config['password']);
+            }
+            if ($ok && isset($this->config['database'])) {
+                $ok = (bool) $r->select((int) $this->config['database']);
+            }
+        } catch (\RedisException $e) {
+            throw new \RuntimeException(
+                "Failed to connect to Redis at {$host}:{$port}: " . $e->getMessage(),
+                0,
+                $e,
+            );
+        }
+        if (!$ok) {
             throw new \RuntimeException("Failed to connect to Redis at {$host}:{$port}");
-        }
-        if (!empty($this->config['password'])) {
-            $r->auth((string) $this->config['password']);
-        }
-        if (isset($this->config['database'])) {
-            $r->select((int) $this->config['database']);
         }
         $r->setOption(\Redis::OPT_SCAN, \Redis::SCAN_RETRY);
 

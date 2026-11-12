@@ -191,8 +191,19 @@ The framework's own integration tests follow that pattern:
 |---|---|
 | `tests/Storage/PgsqlIntegrationTest.php` | `CLOUDE_TEST_PGSQL_DSN`, `CLOUDE_TEST_PGSQL_USER`, `CLOUDE_TEST_PGSQL_PASS` |
 | `tests/Storage/MysqlIntegrationTest.php` | `CLOUDE_TEST_MYSQL_DSN`, `CLOUDE_TEST_MYSQL_USER`, `CLOUDE_TEST_MYSQL_PASS` |
+| `tests/Cache/RedisIntegrationTest.php` — `RedisStore`, the `Cache` façade on Redis, the `redis` session handler | `CLOUDE_TEST_REDIS_HOST` (+ optional `CLOUDE_TEST_REDIS_PORT`, default 6379) **and** `ext-redis` loaded |
 
-They create and drop only tables prefixed `cloude_it_`. What each
+The database tests create and drop only tables prefixed `cloude_it_`.
+The Redis tests write under a random `cloude_it_<hex>:` key prefix and
+delete what they wrote — they never run `FLUSHDB`, and need a server
+without a password. To run them locally without installing ext-redis:
+
+```bash
+docker network create t && docker run -d --rm --name r --network t redis:7
+docker run --rm --network t -v "$PWD":/app -w /app -e CLOUDE_TEST_REDIS_HOST=r php:8.5-cli \
+  sh -c 'pecl install redis >/dev/null && docker-php-ext-enable redis && php bin/cloude-test tests/Cache'
+```
+ What each
 database does differently is in [`databases.md`](databases.md).
 
 ## Continuous integration
@@ -202,7 +213,7 @@ pull request:
 
 | Job | What it does |
 |---|---|
-| `PHP 8.3`, `PHP 8.4`, `PHP 8.5` | `composer install`, `php -l` on every file, then `php bin/cloude-test --fail-on-deprecation` with `error_reporting=-1`. PostgreSQL 16 and MySQL 8.4 run as service containers and the `CLOUDE_TEST_PGSQL_*` / `CLOUDE_TEST_MYSQL_*` variables are set, so the integration tests run — nothing is skipped |
+| `PHP 8.3`, `PHP 8.4`, `PHP 8.5` | `composer install`, `php -l` on every file, then `php bin/cloude-test --fail-on-deprecation` with `error_reporting=-1`. PostgreSQL 16, MySQL 8.4 and Redis 7 run as service containers, `ext-redis` is installed and the `CLOUDE_TEST_PGSQL_*` / `CLOUDE_TEST_MYSQL_*` / `CLOUDE_TEST_REDIS_*` variables are set, so every integration test runs. **A skipped test fails the job** — in CI a skip means a service or extension went missing |
 | `Code style` | `composer cs-check` on PHP 8.3 |
 
 What that means for a change: a deprecation notice on any of the three
@@ -224,6 +235,8 @@ style job fails.
 | `Lint every PHP file` | Parse error, or a compile-time deprecation, in a file no test loads (`examples/`, `config/`) | The step prints the offending lines; fix the file |
 | `Check code style` | Formatting diff, possibly from a newer php-cs-fixer than the local one | `composer update && composer cs-fix`, commit the result |
 | `Install dependencies` on one version | A dev dependency does not support that PHP yet | Constrain or replace the dev dependency; never raise the framework's minimum PHP to get CI green |
+| `Run the test suite`, "Tests were skipped in CI" | A test called `markTestSkipped()`: its service is not in `services:`, its variable not in `env:`, or its extension not in `extensions:` | Add what is missing to `tests.yml` (see below); don't remove the check |
+| `Run the test suite`, in `RedisIntegrationTest` only | Behaviour of the real server or of phpredis (it throws `RedisException` where older versions returned `false`) | Reproduce with the Docker command above |
 | A service container never becomes healthy | Image or health-check problem, not the code | Re-run the job; if it persists, check the `services:` block |
 
 A red job is never fixed by deleting the test, adding
@@ -238,7 +251,7 @@ removing a PHP version from the matrix.
 - **New PHP extension needed by a test**: add it to `extensions:` in
   the `tests` job, and make the test skip itself when the extension is
   missing so local runs stay green.
-- **New service-backed test** (Redis, Memcached, …): add the service
+- **New service-backed test** (Memcached, …; Redis is the worked example): add the service
   under `services:`, export its address as `CLOUDE_TEST_<NAME>_*` in
   `env:`, and gate the test on that variable with `markTestSkipped()`.
 - Credentials in the workflow are for throwaway containers. Never put

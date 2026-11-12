@@ -2152,8 +2152,9 @@ not printed mid-run: the runner collects them and lists each one once
 fail the run — check that list when moving to a newer PHP.
 
 `--fail-on-deprecation` turns that list into a failure (exit 1). The
-`tests` workflow uses it on PHP 8.3, 8.4 and 8.5, with PostgreSQL and
-MySQL service containers so the integration tests run too.
+`tests` workflow uses it on PHP 8.3, 8.4 and 8.5, with PostgreSQL,
+MySQL and Redis service containers so the integration tests run too
+(there, a skipped test fails the job).
 
 **Skipping.** A test that needs something the machine may not have (a
 database server, a PHP extension) calls `$this->markTestSkipped('why')`
@@ -2163,7 +2164,8 @@ from the test or from `setUp()`. The runner prints `S`, adds a
 **Database integration tests.** `tests/Storage/PgsqlIntegrationTest.php`
 runs only when `CLOUDE_TEST_PGSQL_DSN` (plus `CLOUDE_TEST_PGSQL_USER` /
 `CLOUDE_TEST_PGSQL_PASS`) is set; `tests/Storage/MysqlIntegrationTest.php`
-likewise with `CLOUDE_TEST_MYSQL_*`. Both are skipped otherwise.
+likewise with `CLOUDE_TEST_MYSQL_*`; `tests/Cache/RedisIntegrationTest.php`
+with `CLOUDE_TEST_REDIS_HOST` and `ext-redis`. All are skipped otherwise.
 
 
 #### Assertions

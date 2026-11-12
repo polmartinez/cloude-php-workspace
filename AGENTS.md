@@ -168,3 +168,10 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   matrix with PostgreSQL 16 and MySQL 8.4 services, plus a code-style
   job. The runner gained `--fail-on-deprecation`. See
   [testing](docs/agents/testing.md#continuous-integration).
+- **Redis in CI** (v2.25.0) — `tests/Cache/RedisIntegrationTest.php`
+  covers `RedisStore`, `Cache` on Redis and the `redis` session
+  handler against a real server (`CLOUDE_TEST_REDIS_HOST`, `ext-redis`).
+  `RedisStore` now throws its own `RuntimeException("Failed to connect
+  to Redis at host:port…")` for a refused connection, a rejected
+  password or a bad database — never a raw `RedisException`. In CI a
+  skipped test fails the job.

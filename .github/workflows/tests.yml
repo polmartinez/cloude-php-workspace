@@ -22,9 +22,18 @@ jobs:
       matrix:
         php: ['8.3', '8.4', '8.5']
 
-    # Throwaway databases for the integration tests. The credentials
+    # Throwaway servers for the integration tests. The credentials
     # exist only inside the job.
     services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
       postgres:
         image: postgres:16
         env:
@@ -57,6 +66,8 @@ jobs:
       CLOUDE_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=cloude_test
       CLOUDE_TEST_MYSQL_USER: root
       CLOUDE_TEST_MYSQL_PASS: cloude
+      CLOUDE_TEST_REDIS_HOST: 127.0.0.1
+      CLOUDE_TEST_REDIS_PORT: 6379
 
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +76,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mbstring, intl, pdo_sqlite, pdo_pgsql, pdo_mysql
+          extensions: mbstring, intl, pdo_sqlite, pdo_pgsql, pdo_mysql, redis
           ini-values: error_reporting=-1, display_errors=On
           coverage: none
           tools: composer:v2
@@ -78,10 +89,18 @@ jobs:
           find src config bin examples tests -type f \( -name '*.php' -o -name 'cloude-test' \) -print0 \
             | xargs -0 -n1 php -l > /tmp/lint.log 2>&1 || { grep -v '^No syntax errors' /tmp/lint.log; exit 1; }
 
-      # No skips expected here: both database servers are up, so the
-      # integration tests run. A deprecation notice fails the job.
+      # Every server the integration tests need is up and ext-redis is
+      # installed, so nothing may be skipped: a skip here means a test
+      # silently stopped covering PostgreSQL, MySQL or Redis. A
+      # deprecation notice fails the job too.
       - name: Run the test suite
-        run: php bin/cloude-test --fail-on-deprecation
+        shell: bash
+        run: |
+          php bin/cloude-test --fail-on-deprecation | tee /tmp/tests.log
+          if grep -q 'Skipped:' /tmp/tests.log; then
+            echo "::error::Tests were skipped in CI — a service or extension is missing."
+            exit 1
+          fi
 
   code-style:
     name: Code style
