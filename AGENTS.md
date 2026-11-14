@@ -66,7 +66,7 @@ one of these axioms.
    doesn't ship one — and that's deliberate. Write the small bit of
    plain PHP and move on.
 
-## Recent additions (v2.12 → v2.25)
+## Recent additions (v2.12 → v2.26)
 
 For an AI working from older knowledge of this framework: these public
 surfaces exist, and a few behaviours changed. Call forms are in the
@@ -84,6 +84,7 @@ surfaces exist, and a few behaviours changed. Call forms are in the
 | v2.18.0 | `Transaction` uses PDO's own transaction at the outer level | `$pdo->inTransaction()` is reliable; never call `$pdo->beginTransaction()` yourself inside `Transaction::run()` |
 | v2.19.0 | Route parameters arrive percent-decoded (`/libro/caf%C3%A9` → `$p['slug'] === 'café'`) | Never call `urldecode()` / `rawurldecode()` on a route parameter |
 | v2.20.0 | `$model->save()` on a loaded model sends only the columns that changed; with no change it makes no storage call | Don't rely on `save()` re-sending untouched columns. In tests, expect only changed columns in `MockStorage::lastCall('update')` |
+| v2.26.0 | `Model::connectionName()`, `Model::transaction($fn)`, `Model::resetStorage()` | For a model whose `$connection` is not `'default'`, wrap its writes in `Event::transaction()` — `Transaction::run()` without a name does not cover it |
 | v2.25.0 | `RedisStore` raises `RuntimeException("Failed to connect to Redis at host:port…")` for a refused connection, rejected password or bad database, instead of a raw `RedisException`; in CI a skipped test fails the job | Catch `\RuntimeException` around cache calls that must survive an outage ([cache → Failures](docs/agents/cache.md#failures)). A new service-backed test needs its service, variable and extension added to `tests.yml` |
 | v2.24.0 | Every push and pull request runs the suite on PHP 8.3 / 8.4 / 8.5 with `--fail-on-deprecation`, against real PostgreSQL and MySQL, plus a style check | A change is not done until that workflow is green. Deprecations, driver-specific SQL and style diffs fail there even when the local run passes — see [testing → When a CI job is red](docs/agents/testing.md#when-a-ci-job-is-red) |
 | v2.23.2 | Tests must not call `Reflection*::setAccessible()` or `curl_close()` (deprecated in PHP 8.5); the runner reports deprecations in a block after the summary | Read private members with `ReflectionProperty::getValue()` / `ReflectionMethod::invoke()` directly. Treat a `Deprecations (n):` block as something to fix |
@@ -177,3 +178,8 @@ surfaces exist, and a few behaviours changed. Call forms are in the
   to Redis at host:port…")` for a refused connection, a rejected
   password or a bad database — never a raw `RedisException`. In CI a
   skipped test fails the job.
+- **Per-model connections** (v2.26.0) — `$connection` on a model was
+  already a `storage.php` key (default `'default'`); new are
+  `Model::connectionName()`, `Model::transaction(callable)` on that
+  connection, and `Model::resetStorage()`. Rules in
+  [databases](docs/agents/databases.md#several-connections).

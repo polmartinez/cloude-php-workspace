@@ -987,6 +987,26 @@ echo $q->where('age', '>', 18)->compile();
 / `HAVING`, aggregations beyond `count()`. Drop to PDO via
 `$q->pdo()` (or `Connection::pdo('default')`) and write the SQL.
 
+#### Several connections
+
+```php
+// app/config/storage.php: 'default' => [...], 'analytics' => [...]
+
+class Event extends Model
+{
+    protected static string $table = 'events';
+    protected static string|array $connection = 'analytics';   // not declared → 'default'
+}
+
+Event::connectionName();                 // 'analytics'
+Event::transaction(fn () => …);          // BEGIN / COMMIT on 'analytics'
+Event::resetStorage();                   // re-resolve from $connection on next use
+```
+
+Models on one name share a PDO and a transaction; `Transaction::run()`
+without a name covers `'default'` only. There is no transaction or
+JOIN across two connections.
+
 #### PostgreSQL
 
 Point the connection at a `pgsql:` DSN; `Query`, `PdoStorage` and

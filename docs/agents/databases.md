@@ -26,6 +26,52 @@ Do **not** set `quote_char`, pass a quote character to `new Query()` /
 `new PdoStorage()`, or branch on the driver name. Those exist only as
 overrides.
 
+## Several connections
+
+Each model names its connection; the name is a key in `storage.php`.
+Not declared means `'default'`, so existing models keep working.
+
+```php
+// app/config/storage.php
+return [
+    'default'   => ['driver' => 'pdo', 'dsn' => 'mysql:host=db;dbname=app',        'user' => 'app', 'pass' => …],
+    'analytics' => ['driver' => 'pdo', 'dsn' => 'pgsql:host=warehouse;dbname=events', 'user' => 'ro',  'pass' => …],
+];
+
+class User  extends Model { protected static string $table = 'users'; }                // 'default'
+class Event extends Model { protected static string $table = 'events';
+                            protected static string|array $connection = 'analytics'; }
+```
+
+| Need | Call |
+|---|---|
+| Which connection a model uses | `Event::connectionName()` → `'analytics'` (null for file / array storage) |
+| Transaction on that connection | `Event::transaction(fn () => …)` — same as `Transaction::run($fn, 'analytics')` |
+| The PDO itself | `Connection::pdo('analytics')` or `Event::storage()->pdo()` |
+| Raw SQL on it | `StorageException::execute(Connection::pdo('analytics'), $sql, $params)` |
+| Point a model elsewhere at runtime (tests, tenants) | `Event::configure(new PdoStorage(Connection::pdo('replica'), 'events'))`; undo with `Event::resetStorage()` |
+
+Rules:
+
+- **One PDO per name.** Models on the same name share it, and so share
+  a transaction. Models on different names never do.
+- **`Transaction::run($fn)` without a name covers `'default'` only.**
+  Writes through a model on another connection inside it are committed
+  on their own. Use `Model::transaction()` for that model's connection.
+- **No cross-connection transaction or JOIN.** A JOIN is one SQL
+  statement on one server; read from each connection and combine in
+  PHP.
+- Each connection may be a different server (MySQL here, PostgreSQL
+  there); the builder adapts per connection.
+- The connection is resolved on the model's first use and cached per
+  class. `Model::resetStorage()` (one class) or `Model::resetStorage()`
+  called on `Model` itself (every class) forgets it — needed after
+  changing config at runtime, and between tests that reconfigure.
+- A name missing from `storage.php` fails on first use with
+  `"Could not auto-resolve storage for App\Event (connection 'analytics', …)"`.
+- `Query::cache()` keys include the connection name, so the same SQL on
+  two connections never shares a cache entry.
+
 ## What the framework handles for you
 
 | Concern | MySQL / SQLite | PostgreSQL | You write |

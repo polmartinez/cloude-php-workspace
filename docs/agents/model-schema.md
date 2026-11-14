@@ -44,6 +44,10 @@ class User extends \Cloude\Model\Model
 }
 ```
 
+`$connection` (not shown above) picks the database: a key of
+`storage.php`, `'default'` when not declared. See
+[`databases.md` → Several connections](databases.md#several-connections).
+
 ## What each declaration does
 
 | Property       | Used by                                          | Effect                                                                                  |

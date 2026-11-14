@@ -187,6 +187,15 @@ abstract class Model
      * PDO connections must use form (a) — they share the named pool in
      * `Cloude\Storage\Connection`. Inline form (b) is for file-based
      * drivers (`json`, `json_collection`, `array`).
+     *
+     * Not declared → `'default'`. Models on different names read and
+     * write different databases; two models on the same name share one
+     * PDO (and therefore one transaction):
+     *
+     *   class User  extends Model { }                                        // 'default'
+     *   class Event extends Model { protected static string|array $connection = 'analytics'; }
+     *
+     *   Event::transaction(fn () => …);     // BEGIN / COMMIT on 'analytics'
      */
     protected static string|array $connection = 'default';
 
@@ -396,7 +405,63 @@ abstract class Model
     }
 
     /**
-     * Returns a fresh `Cloude\Db\Query` builder bound to this model's
+     * Name of the pooled connection this model uses, or null when it is
+     * not a named PDO connection (inline file storage, an ArrayStorage
+     * in a test, a PDO built by hand).
+     *
+     * Read from the storage actually in use, so a `configure()` that
+     * swapped in another pooled PDO is reflected.
+     */
+    public static function connectionName(): ?string
+    {
+        $storage = static::storage();
+        if ($storage instanceof Storage\PdoStorage) {
+            return \Cloude\Storage\Connection::nameOf($storage->pdo());
+        }
+        return null;
+    }
+
+    /**
+     * `Transaction::run($fn)` on this model's connection — the call to
+     * use when the model is not on `'default'`. Throws `LogicException`
+     * when the model has no named PDO connection to run it on.
+     *
+     *   Event::transaction(function () {
+     *       Event::create([...]);
+     *       EventTotal::upsert([...], [...]);    // same connection → same transaction
+     *   });
+     *
+     * Models on two different connections cannot share one transaction:
+     * there is no distributed commit.
+     */
+    public static function transaction(callable $fn): mixed
+    {
+        $name = static::connectionName();
+        if ($name === null) {
+            throw new \LogicException(
+                static::class . '::transaction() needs a named PDO connection (see Model::$connection)',
+            );
+        }
+        return \Cloude\Storage\Transaction::run($fn, $name);
+    }
+
+    /**
+     * Forget the storage resolved (or configured) for this class, so the
+     * next call builds it again from `$connection`. For tests, and for
+     * long-running workers after the connection config changed. Called
+     * on `Model` itself it forgets every class.
+     */
+    public static function resetStorage(): void
+    {
+        if (static::class === self::class) {
+            self::$storages = [];
+            return;
+        }
+        unset(self::$storages[static::class]);
+    }
+
+    /**
+     * Returns a fresh `Cloude\Storage\Query` builder bound to this model's
      * table. Convenience shortcut for `static::storage()->query()` —
      * only works when the configured storage is `PdoStorage`.
      *
