@@ -49,6 +49,7 @@ one of these axioms.
 | [Decision matrix](docs/agents/decision-matrix.md) | "I want to do X → use Y" — the full lookup table grouped by topic (HTTP, Config, Model/Storage, Sessions, Mail, Testing, …) | Whenever you're picking which helper to use. Random-access |
 | [The Model IS the schema](docs/agents/model-schema.md) | `$table` / `$primaryKey` / `$properties` / `$types` / `$indexes` / `$foreignKeys` — what each declaration does, what's runtime vs. metadata-only | Defining or modifying a `Cloude\Model` subclass |
 | [Databases](docs/agents/databases.md) | MySQL / SQLite / PostgreSQL: what the framework adapts per driver, what you must keep portable, pgsql DDL, testing against a real server | Writing queries, raw SQL fragments, DDL or DB tests; switching database |
+| [Upgrading](docs/agents/upgrading.md) | Per version: what behaves differently, what to search for in an app and what to change it to. Full history in [`CHANGELOG.md`](CHANGELOG.md) | Updating an app's `cloude/framework` version; working from knowledge of an older version; before relying on remembered behaviour |
 | [Cache](docs/agents/cache.md) | `Cloude\Cache\Cache`: off by default, config shape, the calls, caching queries and invalidating them, what each driver guarantees, how failures surface, testing | Adding or touching any caching; configuring Redis / Memcached; handling a cache outage |
 | [Testing and PHP versions](docs/agents/testing.md) | Supported PHP (8.3 minimum, clean on 8.5) and what new code must avoid; running the suite, reading `F` / `E` / `S` / `Deprecations`; `TestCase` helpers and the full assertion list; shared-process pitfalls; tests that need a server | Writing or running any test; before declaring a change done; using a PHP feature you are not sure 8.3 has |
 | [Idioms, anti-patterns, scope](docs/agents/conventions.md) | "How Cloude code is shaped" — patterns to reach for, patterns to avoid, what the framework deliberately won't grow | Before reinventing something; when stuck |
@@ -67,6 +68,11 @@ one of these axioms.
    plain PHP and move on.
 
 ## Recent additions (v2.12 → v2.26)
+
+> Upgrading an app across these versions: follow
+> [`docs/agents/upgrading.md`](docs/agents/upgrading.md) — it turns
+> each change below into search-and-replace steps. Every release is in
+> [`CHANGELOG.md`](CHANGELOG.md).
 
 For an AI working from older knowledge of this framework: these public
 surfaces exist, and a few behaviours changed. Call forms are in the

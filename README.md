@@ -4,6 +4,8 @@ A minimalist PHP micro-framework. No magic, no service container. Persistence is
 
 [![tests](https://github.com/polmartinez/cloude-php-workspace/actions/workflows/tests.yml/badge.svg)](https://github.com/polmartinez/cloude-php-workspace/actions/workflows/tests.yml)
 
+Releases and what changed in each: [`CHANGELOG.md`](CHANGELOG.md). Upgrade steps: [`docs/agents/upgrading.md`](docs/agents/upgrading.md).
+
 - **PHP 8.3+** — minimum 8.3; the suite runs clean, with no deprecation notices, on 8.3, 8.4 and 8.5
 - **PSR-4** autoloading, namespace `Cloude\`
 - **PSR-12 / PER-CS 2.0** coding style

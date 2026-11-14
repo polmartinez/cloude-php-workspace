@@ -21,6 +21,8 @@ When asked to build something on top of `cloude/framework`:
 
 1. **Read [`AGENTS.md`](AGENTS.md) first.** Every helper, with the call
    form. Don't re-invent `Response::json`, `JsonFile::write`, `Str::slug`, …
+   If the app pins an older `cloude/framework`, or you're upgrading it,
+   read [`docs/agents/upgrading.md`](docs/agents/upgrading.md) too.
 2. **Pick the right pattern.** [`PATTERNS.md`](PATTERNS.md) is the
    one-page decision guide — Transaction Script for ≤10 routes, MVC +
    Repository for CRUD apps, DDD only when the domain has invariants
@@ -449,6 +451,10 @@ git commit -am "feat: ..."
 git tag -a v0.X.0 -m "v0.X.0 — short description"
 git push origin main v0.X.0
 ```
+
+Before tagging, record behaviour changes in [`CHANGELOG.md`](CHANGELOG.md)
+and, when app code may need to change, in
+[`docs/agents/upgrading.md`](docs/agents/upgrading.md).
 
 Conventional commit prefixes used in this repo: `feat:`, `fix:`,
 `docs:`, `breaking:`. Packagist webhooks pick up new tags automatically
