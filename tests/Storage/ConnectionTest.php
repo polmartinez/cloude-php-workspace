@@ -121,4 +121,30 @@ final class ConnectionTest extends TestCase
         // Reset back so other tests aren't affected.
         Connection::setConfigName('storage');
     }
+
+    public function testOptionsArePassedToPdoAndKeepTheDefaultsUnlessOverridden(): void
+    {
+        $dir = sys_get_temp_dir() . '/cloude-conn-opts-' . bin2hex(random_bytes(4));
+        mkdir($dir, 0700, true);
+        file_put_contents($dir . '/storage.php', '<?php return ' . var_export([
+            'opts' => [
+                'driver'  => 'pdo',
+                'dsn'     => 'sqlite::memory:',
+                'options' => [\PDO::ATTR_CASE => \PDO::CASE_UPPER, \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_NUM],
+            ],
+        ], true) . ';');
+        \Cloude\Config::reset();
+        \Cloude\Config::configure($dir);
+        try {
+            $pdo = Connection::pdo('opts');
+            self::assertSame(\PDO::CASE_UPPER, $pdo->getAttribute(\PDO::ATTR_CASE), 'extra option applied');
+            self::assertSame(\PDO::FETCH_NUM, $pdo->getAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE), 'option overrides the default');
+            self::assertSame(\PDO::ERRMODE_EXCEPTION, $pdo->getAttribute(\PDO::ATTR_ERRMODE), 'untouched default kept');
+        } finally {
+            Connection::reset('opts');
+            \Cloude\Config::reset();
+            @unlink($dir . '/storage.php');
+            @rmdir($dir);
+        }
+    }
 }

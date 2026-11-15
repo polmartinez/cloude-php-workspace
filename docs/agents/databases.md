@@ -22,6 +22,17 @@ return [
 ];
 ```
 
+`options` (optional) is handed to `new \PDO()` as driver attributes —
+`[\PDO::ATTR_TIMEOUT => 5, \PDO::ATTR_PERSISTENT => true, …]`. The
+framework adds `ATTR_ERRMODE => ERRMODE_EXCEPTION` and
+`ATTR_DEFAULT_FETCH_MODE => FETCH_ASSOC` only when you don't set them.
+Keep the error mode on exceptions: the typed `StorageException`s depend
+on it. MySQL-specific attributes: `\PDO::MYSQL_ATTR_*` is deprecated
+on PHP 8.5 and `\Pdo\Mysql::ATTR_*` does not exist before 8.4, so for
+an app that runs on both, put the charset in the DSN
+(`;charset=utf8mb4`) and session settings in an `exec()` after
+connecting rather than in `options`.
+
 Do **not** set `quote_char`, pass a quote character to `new Query()` /
 `new PdoStorage()`, or branch on the driver name. Those exist only as
 overrides.
