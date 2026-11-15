@@ -12,9 +12,11 @@ Legend: **Changed** = existing code may behave differently ·
 **Added** = new API, nothing to change · **Fixed** = bug fix ·
 **Removed** = API gone.
 
+## 2.26.2
+- Docs + test: `options` in a `storage.php` connection is passed to `new \PDO()` as attributes (already the behaviour; now tested and documented).
+
 ## 2.26.1
 - Docs: `CHANGELOG.md` and `docs/agents/upgrading.md`.
-- Docs + test: `options` in a `storage.php` connection is passed to `new \PDO()` as attributes (already the behaviour; now tested and documented).
 
 ## 2.26.0
 - **Added** `Model::connectionName()`, `Model::transaction(callable)`, `Model::resetStorage()` for models on a connection other than `'default'`.
